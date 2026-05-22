@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" viewBox="0 0 14 14">
+    <defs>
+        <filter id="ezwdooqacc" width="142.9%" height="142.9%" x="-21.4%" y="-21.4%" filterUnits="objectBoundingBox">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1"/>
+        </filter>
+        <filter id="cn24c85e7g" width="133.3%" height="166.7%" x="-16.7%" y="-33.3%" filterUnits="objectBoundingBox">
+            <feGaussianBlur in="SourceAlpha" result="shadowBlurInner1" stdDeviation=".5"/>
+            <feOffset dx="1" dy="1" in="shadowBlurInner1" result="shadowOffsetInner1"/>
+            <feComposite in="shadowOffsetInner1" in2="SourceAlpha" k2="-1" k3="1" operator="arithmetic" result="shadowInnerInner1"/>
+            <feColorMatrix in="shadowInnerInner1" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.2 0"/>
+        </filter>
+        <radialGradient id="pzjlk2i5fb" cx="71.833%" cy="30.497%" r="72.525%" fx="71.833%" fy="30.497%" gradientTransform="rotate(137.662 .712 .288) scale(1 .88977)">
+            <stop offset="0%" stop-color="#FFD83E"/>
+            <stop offset="100%" stop-color="#FFB400"/>
+        </radialGradient>
+        <linearGradient id="va38rcarqe" x1="14.827%" x2="100%" y1="63.776%" y2="24.992%">
+            <stop offset="0%" stop-color="#D3072D"/>
+            <stop offset="100%" stop-color="#E14457"/>
+        </linearGradient>
+        <circle id="odef6qglva" cx="7" cy="7" r="7"/>
+        <path id="blcj6dtmlf" d="M4.315 7.003c-.194-.013-.358.161-.305.413C4.327 8.896 5.544 10 7 10c1.457 0 2.673-1.104 2.99-2.584.054-.252-.113-.442-.305-.413-1.14.173-1.72.221-2.685.221-.966 0-1.638-.157-2.685-.221"/>
+    </defs>
+    <g fill="none" fill-rule="evenodd">
+        <g>
+            <g>
+                <g>
+                    <g transform="translate(-128 -79) translate(128 79)">
+                        <mask id="6odbr4pdsd" fill="#fff">
+                            <use xlink:href="#odef6qglva"/>
+                        </mask>
+                        <use fill="url(#pzjlk2i5fb)" xlink:href="#odef6qglva"/>
+                        <circle cx="8" cy="6" r="7" fill="#FFDC4F" filter="url(#ezwdooqacc)" mask="url(#6odbr4pdsd)"/>
+                    </g>
+                    <path fill="url(#va38rcarqe)" d="M4.94 3c-.187 0-.404.118-.709.388C3.927 3.118 3.71 3 3.523 3c-.35-.008-.679.168-.867.465-.188.296-.207.669-.052.984.15.299 1.163 1.217 1.47 1.49.09.081.225.081.315 0 .307-.273 1.322-1.191 1.47-1.492.154-.315.133-.687-.055-.982-.187-.296-.515-.472-.865-.465zM10.44 3c-.187 0-.404.118-.709.388C9.427 3.118 9.21 3 9.023 3c-.35-.008-.679.168-.867.465-.188.296-.207.669-.052.984.15.299 1.163 1.217 1.47 1.49.09.081.225.081.315 0 .307-.273 1.322-1.191 1.47-1.492.154-.315.133-.687-.055-.982-.187-.296-.515-.472-.865-.465z" transform="translate(-128 -79) translate(128 79)"/>
+                    <g transform="translate(-128 -79) translate(128 79)">
+                        <use fill="#F15A24" xlink:href="#blcj6dtmlf"/>
+                        <use fill="#000" filter="url(#cn24c85e7g)" xlink:href="#blcj6dtmlf"/>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

@@ -105,6 +105,22 @@ return [
         ),
     ],
 
+    'log' => env('APP_LOG', 'daily'),
+    'log_max_files' => 30,
+
+    'log_level' => env('APP_LOG_LEVEL', 'debug'),
+    'logs' => [
+        'default' => env("APP_LOG_TYPE", 'local'), // local | cloud_watch
+        'cloud_watch' => [
+            'key' => env("AWC_KEY"),
+            'secret' => env('AWC_SECRET'),
+            'region' => env('AWC_REGION'),
+            'token' => env('AWC_TOKEN'), // token is optional
+            'group_name' => env('AWC_GROUP_NAME', "default"),
+            'retention_days' => env('AWC_RETENTION_DAYS', 365),
+        ]
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Maintenance Mode Driver

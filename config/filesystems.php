@@ -41,7 +41,7 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            'url' => rtrim(env('APP_URL', 'http://localhost'), '/') . '/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
@@ -60,6 +60,37 @@ return [
             'report' => false,
         ],
 
+        'logs' => [
+            'driver' => 'local',
+            'root' => storage_path('logs'),
+            'throw' => false,
+        ],
+
+        'data' => [
+            'driver' => 'local',
+            'root' => storage_path('app/data'),
+            'throw' => false,
+        ],
+
+        'image' => [
+            'driver' => env('IMAGE_DISK_DRIVER', 'local'),
+            'root' => storage_path('app/public'),
+            'url' => env('APP_URL') . '/storage',
+            'visibility' => 'public',
+            'throw' => false,
+            // 'key' => env('AWS_ACCESS_KEY_ID'),
+            // 'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            // 'region' => env('AWS_DEFAULT_REGION'),
+            // 'bucket' => env('AWS_BUCKET'),
+            // 'url' => env('AWS_URL'), // Link CloudFront hoặc S3 Public URL
+            // 'endpoint' => env('AWS_ENDPOINT'),
+            // 'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+        ],
+
+        'tmp' => [
+            'driver' => 'local',
+            'root' => storage_path('app/tmp'),
+        ],
     ],
 
     /*

@@ -1,0 +1,10 @@
+<svg id="form_ingredient_level_color_harmful" data-name="form/ingredient/level color/harmful" xmlns="http://www.w3.org/2000/svg" width="24.171" height="24.171" viewBox="0 0 24.171 24.171">
+  <g id="form_ingredient_level_color_harmful-2" data-name="form/ingredient/level color/harmful">
+    <path id="Path" d="M6.21,0q.119,0,.235.011Q6.637,0,6.831,0A6.831,6.831,0,1,1,0,6.831q0-.194.011-.386Q0,6.329,0,6.21V2.484A2.484,2.484,0,0,1,2.484,0Z" transform="translate(5.78 5.78)" fill="#d8d8d8"/>
+    <g id="Oval" fill="none" stroke="#d0021b" stroke-miterlimit="10" stroke-width="4">
+      <circle cx="12.086" cy="12.086" r="12.086" stroke="none"/>
+      <circle cx="12.086" cy="12.086" r="10.086" fill="none"/>
+    </g>
+    <rect id="Rectangle" width="2.102" height="23.12" transform="translate(19.517 3.168) rotate(45)" fill="#d0021b"/>
+  </g>
+</svg>

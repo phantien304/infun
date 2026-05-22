@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" viewBox="0 0 14 14">
+    <defs>
+        <radialGradient id="lp9ed01gzb" cx="71.833%" cy="30.497%" r="72.525%" fx="71.833%" fy="30.497%" gradientTransform="rotate(137.662 .712 .288) scale(1 .88977)">
+            <stop offset="0%" stop-color="#FFD83E"/>
+            <stop offset="100%" stop-color="#FFB400"/>
+        </radialGradient>
+        <filter id="fkq880ddhc" width="142.9%" height="142.9%" x="-21.4%" y="-21.4%" filterUnits="objectBoundingBox">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1"/>
+        </filter>
+        <circle id="0v9znpd3na" cx="7" cy="7" r="7"/>
+    </defs>
+    <g fill="none" fill-rule="evenodd">
+        <g>
+            <g>
+                <g>
+                    <g transform="translate(-128 -148) translate(128 148)">
+                        <mask id="0qyoloavzd" fill="#fff">
+                            <use xlink:href="#0v9znpd3na"/>
+                        </mask>
+                        <use fill="url(#lp9ed01gzb)" xlink:href="#0v9znpd3na"/>
+                        <circle cx="8" cy="6" r="7" fill="#FFDC4F" filter="url(#fkq880ddhc)" mask="url(#0qyoloavzd)"/>
+                    </g>
+                    <path fill="#4A4A4A" fill-rule="nonzero" d="M5.1 5.1c.22 0 .4.18.4.4 0 .641-.543 1.15-1.2 1.15-.657 0-1.2-.509-1.2-1.15 0-.22.18-.4.4-.4.193 0 .355.137.392.32l.008.08c0 .187.174.35.4.35.198 0 .356-.125.392-.281L4.7 5.5c0-.22.18-.4.4-.4zM10.6 5.1c.22 0 .4.18.4.4 0 .663-.537 1.2-1.2 1.2-.663 0-1.2-.537-1.2-1.2 0-.22.18-.4.4-.4.193 0 .355.137.392.32l.008.08c0 .22.18.4.4.4.193 0 .355-.137.392-.32l.008-.08c0-.22.18-.4.4-.4z" transform="translate(-128 -148) translate(128 148)"/>
+                    <path fill="#F15A24" fill-rule="nonzero" d="M6.925 7.9c.821 0 1.634.317 2.23.87.184.172.194.461.023.647-.086.092-.207.144-.334.144-.116 0-.226-.043-.31-.121-.428-.399-1.015-.628-1.609-.628-.57 0-1.143.215-1.567.59-.183.16-.481.143-.643-.04-.08-.09-.122-.209-.114-.33.007-.122.062-.233.153-.314.599-.528 1.369-.818 2.171-.818z" transform="translate(-128 -148) translate(128 148)"/>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

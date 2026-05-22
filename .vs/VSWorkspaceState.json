@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\app",
+    "\\app\\Events",
+    "\\app\\Http",
+    "\\app\\Http\\Controllers",
+    "\\app\\Models",
+    "\\app\\Models\\Entities",
+    "\\config",
+    "\\config\\module\\web",
+    "\\vendor"
+  ],
+  "SelectedNode": "\\app\\Common\\Common.php",
+  "PreviewInSolutionExplorer": false
+}

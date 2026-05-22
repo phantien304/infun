@@ -1,0 +1,23 @@
+
+.manufacturer .brands {
+    background: #fff;
+    margin-bottom: 25px;
+
+    ul li {
+        width: 114px;
+        height: 88px;
+        border: 1px solid #dbdbdb;
+        border-radius: 10px;
+    }
+
+    ul li:first-child {
+        border-left: 1px solid #DBDBDB;
+    }
+
+    ul li a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+    }
+}

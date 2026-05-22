@@ -1,0 +1,41 @@
+<?php
+
+namespace App\Models\Entities;
+
+
+use App\Models\Base\Base;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class UserGroup extends Base
+{
+    use SoftDeletes;
+    protected $table = 'user_group';
+    protected $primaryKeyAutoIncrement = 'id';
+    public $timestamps = true;
+    protected static $_destroyRelations = ['productRewards', 'taxRateToUserGroups'];
+
+    public function descriptions()
+    {
+        return $this->hasMany(UserGroupDescription::class, 'user_group_id', 'id');
+    }
+
+    public function rewards()
+    {
+        return $this->hasMany(ProductReward::class, 'user_group_id', 'id');
+    }
+
+    public function specials()
+    {
+        return $this->hasMany(ProductSpecial::class, 'user_group_id', 'id');
+    }
+
+    public function discounts()
+    {
+        return $this->hasMany(ProductDiscount::class, 'user_group_id', 'id');
+    }
+
+    public function taxRateToUserGroups()
+    {
+        return $this->hasMany(TaxRateToUserGroup::class, 'user_group_id', 'id');
+    }
+}

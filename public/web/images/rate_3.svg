@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" viewBox="0 0 14 14">
+    <defs>
+        <radialGradient id="fop0pcbx0b" cx="71.833%" cy="30.497%" r="72.525%" fx="71.833%" fy="30.497%" gradientTransform="rotate(137.662 .712 .288) scale(1 .88977)">
+            <stop offset="0%" stop-color="#FFD83E"/>
+            <stop offset="100%" stop-color="#FFB400"/>
+        </radialGradient>
+        <filter id="8erhoa2o5c" width="142.9%" height="142.9%" x="-21.4%" y="-21.4%" filterUnits="objectBoundingBox">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1"/>
+        </filter>
+        <circle id="r2kqhj3v7a" cx="7" cy="7" r="7"/>
+    </defs>
+    <g fill="none" fill-rule="evenodd">
+        <g>
+            <g>
+                <g transform="translate(-128 -125) translate(128 125)">
+                    <g>
+                        <mask id="abv4l5ya2d" fill="#fff">
+                            <use xlink:href="#r2kqhj3v7a"/>
+                        </mask>
+                        <use fill="url(#fop0pcbx0b)" xlink:href="#r2kqhj3v7a"/>
+                        <circle cx="8" cy="6" r="7" fill="#FFDC4F" filter="url(#8erhoa2o5c)" mask="url(#abv4l5ya2d)"/>
+                    </g>
+                    <circle cx="4.25" cy="5.75" r="1" fill="#4A4A4A"/>
+                    <circle cx="9.75" cy="5.75" r="1" fill="#4A4A4A"/>
+                    <rect width="6" height="1" x="4" y="8" fill="#F15A24" rx=".5"/>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

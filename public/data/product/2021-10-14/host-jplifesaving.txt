@@ -1,0 +1,39 @@
+Fix The mpm module (prefork.c) is not supported by mod_http2:
+- https://www.youtube.com/watch?v=zT2iCk7-HLs
++ sudo su
++ cd /etc/httpd/conf.modules.d/
++ ls
++ vim 00-mpm.conf
++ httpd -V | grep MPM
++ vim httpd.conf
++ sudo service httpd restart
++ sudo service mysqld restart
+
+sudo cat /etc/httpd/logs/error_log
+sudo find
+sudo service httpd restart
+sudo vim /etc/httpd/conf/httpd.conf
+apachectl configtest
+apachectl -S
+mysql_secure_installation: Các tùy chọn là Y - trừ Disallow root login remotely: N
+pass root: parajplifesaving!
+
+<VirtualHost *:8081>
+        DocumentRoot "/var/www/html/jplifesaving/public"
+        ServerName beachsafe.jla-lifesaving.or.jp
+        ServerAlias beachsafe.jla-lifesaving.or.jp
+        ServerAdmin admin@paraline.com.vn
+        ErrorLog logs/jplifesaving_error_log
+    <Directory "/var/www/html/jplifesaving/public">
+        DirectoryIndex index.php
+        AllowOverride All
+        Require all granted
+        Options Indexes FollowSymLinks
+    </Directory>
+</VirtualHost>
+
+
+<VirtualHost *:81:80>
+    ServerName sub1.example.com
+    DocumentRoot  "/var/www/vhosts/sub1.example.com"
+</VirtualHost>

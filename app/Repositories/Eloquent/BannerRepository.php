@@ -20,8 +20,8 @@ class BannerRepository extends QueryableRepository implements BannerRepositoryIn
             ->where('position', $position)
             ->with([
                 'description',
-                'values' => fn($q) => $q->orderBy('sort_order'),
-                'values.valueDescription',
+                'bannerValues' => fn($q) => $q->orderBy('sort_order'),
+                'bannerValues.description',
             ])
             ->orderBy('sort_order')
             ->limit($limit)

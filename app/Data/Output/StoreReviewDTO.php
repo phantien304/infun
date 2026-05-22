@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Data;
+namespace App\Data\Output;
 
 use App\Models\Entities\StoreReview;
 use Illuminate\Support\Str;
 use Spatie\LaravelData\Data;
 
-class StoreReviewData extends Data
+class StoreReviewDTO extends Data
 {
     public function __construct(
         public int $id,

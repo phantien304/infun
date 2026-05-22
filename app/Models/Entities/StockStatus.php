@@ -9,7 +9,6 @@ class StockStatus extends Base
 {
     use SoftDeletes;
     protected $table = 'stock_status';
-    protected $primaryKeyAutoIncrement = 'id';
-    public $incrementing = true;
+    protected $primaryKeyAutoIncrement = ['id', 'language_code'];
     public $timestamps = true;
 }

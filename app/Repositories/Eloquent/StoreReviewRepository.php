@@ -5,6 +5,7 @@ namespace App\Repositories\Eloquent;
 use App\Models\Entities\StoreReview;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
+use Override;
 
 class StoreReviewRepository extends QueryableRepository implements StoreReviewRepositoryInterface
 {
@@ -14,28 +15,25 @@ class StoreReviewRepository extends QueryableRepository implements StoreReviewRe
     }
     public function getById(int $id)
     {
-        return $this->model->with('description')->find($id);
-    }
-    public function getStoreReviews()
-    {
         return $this->model
-            ->orderBy('id', 'DESC')
+            ->with($this->withRelations())
+            ->find($id);
+    }
+    public function getStoreReviewsFeatured(int $limit = 20)
+    {
+        return $this->resetModel()
+            ->with($this->withRelations())
             ->where('featured', 1)
-            ->limit(20)
+            ->orderBy('id', 'DESC')
+            ->limit($limit)
             ->get();
     }
 
-    public function getListForWeb(array $params = [], bool $paginate = true)
+    protected function withRelations(): array
     {
-        $query = $this->model->with([
+        return [
             'description',
             'user'
-        ]);
-
-        if ($paginate) {
-            return $query->orderBy('id', 'DESC')->paginate($params['per_page'] ?? 10)->appends($params);
-        }
-
-        return $query->orderBy('id', 'DESC')->get();
+        ];
     }
 }

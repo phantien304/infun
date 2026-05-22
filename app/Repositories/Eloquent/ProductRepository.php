@@ -25,32 +25,33 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     }
     public function getProductSpecials(array $productIds)
     {
-        return $this->model->whereIn('id', $productIds)->get();
+        return $this->resetModel()->whereIn('id', $productIds)->get();
     }
 
-    public function getProductFeature()
+    public function getProductFeature(int $limit = 6)
     {
-        return $this->resetModel()
+        return $this->buildClientProductQuery()
             ->where('badge', 'feature')
-            ->dateAvailable()
-            ->with($this->buildWithRelationProduct())
-            ->orderBy('id', 'DESC')
-            ->take(6)
+            ->take($limit)
             ->get();
     }
 
     public function getProductLatest(int $limit = 6)
     {
-        return $this->rememberCache(
+        return $this->rememberCacheTagged(
+            [getCoreConfig('cache.product_root'), getCoreConfig('cache.product_latest')],
             $this->buildLatestCacheKey($limit),
-            fn() => $this->resetModel()
-                ->dateAvailable()
-                ->with($this->buildWithRelationProduct())
-                ->orderBy('id', 'DESC')
-                ->take($limit)
-                ->get(),
+            fn() => $this->buildClientProductQuery()->take($limit)->get(),
             getCoreConfig('time.cache')
         );
+    }
+
+    protected function buildClientProductQuery()
+    {
+        return $this->resetModel()
+            ->dateAvailable()
+            ->with($this->buildWithRelationProduct())
+            ->orderBy('id', 'DESC');
     }
 
     protected function buildLatestCacheKey(int $limit): string
@@ -68,12 +69,9 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return [
             'description',
             'manufacturer',
-            'categories.category.description',
-            'specials' => function ($q) {
-                $q->dateStartToEnd()
-                    ->where('user_group_id', getUserGroupId())
-                    ->orderBy('priority');
-            },
+            'stockStatus',
+            'productCategories.category.description',
+            'productSpecial',
         ];
     }
 }

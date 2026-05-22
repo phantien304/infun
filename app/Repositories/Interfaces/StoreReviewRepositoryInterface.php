@@ -6,5 +6,5 @@ use App\Repositories\Base\BaseRepositoryInterface;
 
 interface StoreReviewRepositoryInterface extends BaseRepositoryInterface
 {
-    public function getStoreReviews();
+    public function getStoreReviewsFeatured(int $limit = 20);
 }

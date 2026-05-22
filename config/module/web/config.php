@@ -71,6 +71,7 @@ return [
     'product' => [
         'text_instock' => 'Còn hàng',
         'text_outstock' => 'Hết hàng',
+        'text_contact' => 'Liên hệ',
         'badge' => [
             'new' => 'Mới',
             'hot' => 'Bán chạy',

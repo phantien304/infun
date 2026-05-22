@@ -15,9 +15,6 @@
                 <h5 class="section-title style-1 mb-30 wow fadeIn animated">Danh mục</h5>
                 <ul>
                     @foreach ($blogCategories as $item)
-                        @if (!isset($item->title))
-                            @continue;
-                        @endif
                         <li>
                             <a href="{{ $item->url }}">
                                 {!! $item->title !!}
@@ -32,9 +29,6 @@
                 <h5 class="section-title style-1 mb-30 wow fadeIn animated">Tags</h5>
                 <ul class="tags-list">
                     @foreach ($blogTags as $item)
-                        @if (!isset($item->description))
-                            @continue;
-                        @endif
                         <li class="hover-up">
                             <a href="{{ $item->url }}" title="{!! $item->title !!}"
                                 style="background: {{ $item->background }}" class="text-light">
@@ -45,46 +39,36 @@
                 </ul>
             </div>
         @endif
-        {{--
         <div class="sidebar-widget product-sidebar  mb-30 p-30 bg-grey border-radius-10">
             <h5 class="section-title style-1 mb-30 wow fadeIn animated">Sản phẩm mới</h5>
             @foreach ($products as $product)
-                @if (!isset($product->productDescription))
-                    @continue;
-                @endif
-                @if (count($product->productSpecials))
-                    @php
-                        $productSpecial = $product->productSpecials->sortByDesc('priority')->first();
-                        $discount = round((($product->price - $productSpecial->price) / $product->price) * 100);
-                    @endphp
-                @endif
                 <div class="single-post clearfix">
                     <div class="image">
-                        <img src="{!! $product->getImageClient() !!}" alt="{!! $product->productDescription->name !!}">
+                        <img src="{!! $product->thumbnail !!}" alt="{!! $product->name !!}">
                     </div>
                     <div class="content pt-10">
                         <h6>
-                            <a href="{!! $product->productDescription->getUrlClient() !!}" title="{!! $product->productDescription->name !!}">
-                                {!! $product->productDescription->name !!}
+                            <a href="{!! $product->url !!}" title="{!! $product->name !!}">
+                                {!! $product->name !!}
                             </a>
                         </h6>
-                        @if (count($product->productSpecials))
+                        @if (isset($product->productSpecial))
                             <div class="mb-0 mt-5">
-                                <span class="price fs-6">{!! $productSpecial->getPrice() !!} </span>
+                                <span class="price fs-6">{!! $productSpecial->pricePromotionLabel !!} </span>
                                 <span class="text-decoration-line-through old-price">
-                                    <small>{!! $product->getPrice() !!}</small>
+                                    <small>{!! $product->priceLabel !!}</small>
                                 </span>
                             </div>
                         @else
-                            <p class="price mb-0 mt-5">{!! $product->getPrice() !!}</p>
+                            <p class="price mb-0 mt-5">{!! $product->priceLabel !!}</p>
                         @endif
                         <div class="product-rate">
-                            <img src="/client/images/stars-{!! intval(round($product->rating)) !!}.png"
-                                alt="{!! $product->total_rating !!} đánh giá" />
+                            <img src="/web/images/stars-{!! intval(round($product->rating)) !!}.png"
+                                alt="{!! $product->totalRating !!} đánh giá" />
                         </div>
                     </div>
                 </div>
             @endforeach
-        </div> --}}
+        </div>
     </div>
 </div>

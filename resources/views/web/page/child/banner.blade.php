@@ -4,7 +4,7 @@
             <div class="container-fluid">
                 <div class="home-slide-cover mt-30">
                     <div class="hero-slider-1 style-4 dot-style-1 dot-style-1-position-1">
-                        @foreach ($banner->values as $index => $item)
+                        @foreach ($banner->bannerValues as $index => $item)
                             @php $opacity = $index == 0 ? 1 : 0;@endphp
                             <div class="single-hero-slider single-animation-wrap"
                                 style="background-color:#f4a884;opacity:{{ $opacity }}">

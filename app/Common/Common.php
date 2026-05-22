@@ -1,6 +1,7 @@
 <?php
 
 use App\Helpers\Facades\ChannelLog;
+use App\Helpers\Facades\CustomStorage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +45,18 @@ function getCoreConfig($key, $default = null, $flip = false)
         return array_flip($result);
     }
     return $result;
+}
+function resolveSlug(?string $slug, ?string $title): string
+{
+    return filled($slug) ? $slug : \Illuminate\Support\Str::slug((string) $title);
+}
+function buildUrl(?string $slug, ?string $moduleKey, ?int $id): string
+{
+    return url('/' . $slug . '-' . $moduleKey . $id);
+}
+function thumbnail(string $image, int $width = 400, int $height = 400, string $module = 'web'): string
+{
+    return CustomStorage::getStorage('public')->resizeImage($image, $width, $height, $module);
 }
 function setting($key, $default = null)
 {

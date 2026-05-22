@@ -21,11 +21,13 @@ code cũ và code mới, đừng nhầm lẫn hai bên (xem mục "Cũ vs Mới"
 
 - Cache **chỉ sống ở tầng Repository**, qua trait `App\Repositories\Concerns\CacheableRepository`.
   KHÔNG đặt logic cache trong controller/service.
-- API trait: `rememberCache($key, $resolver, $ttl = null, $perLocale = true)` và
-  `forgetCache($key, $perLocale = true)`.
-- Trait dùng `Cache::remember()` thuần — **không dùng tags** → chạy với mọi driver
-  (file, database, redis). Đổi lại: invalidate phải qua `forgetCache` theo key,
-  không flush được theo nhóm tag.
+- API trait:
+  - `rememberCache($key, $resolver, $ttl = null, $perLocale = true)` /
+    `forgetCache($key, $perLocale = true)` — cache thường, chạy với mọi driver.
+  - `rememberCacheTagged($tags, $key, $resolver, $ttl = null, $perLocale = true)` /
+    `forgetCacheTagged($tags)` — cache theo tag. Driver hỗ trợ tag (redis, memcached)
+    cache theo tag để flush được cả nhóm; driver khác (file, database) tự fallback
+    về `rememberCache` thường.
 - `perLocale = true` tự nối `app()->getLocale()` vào cuối key. Nếu key còn phụ thuộc
   user group / user type / limit thì tự đưa vào key trước khi gọi.
 
@@ -43,8 +45,15 @@ làm mẫu.
 
 ## Helper toàn cục thường dùng
 
+Khai báo trong `app/Common/Common.php`:
+
 `getCoreConfig()`, `getModuleConfig()`, `getConfigDb()`, `getUserGroupId()`,
 `getUserType()`, `getUserLoginId()`.
+
+`resolveSlug(?string $slug, ?string $title): string` — trả slug đang có; nếu rỗng
+(null hoặc chuỗi trắng) thì tự sinh từ title bằng `Str::slug()`. Dùng `filled()` nên
+bắt được cả chuỗi rỗng, khác toán tử `??`. Dùng chung cho DTO/model khi build URL
+từ title (xem `BlogDTO`, `BlogCategoryDTO`, `BlogTagDTO`).
 
 ## Mẫu tham chiếu: `getProductLatest`
 

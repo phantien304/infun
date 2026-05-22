@@ -2,9 +2,9 @@
 
 namespace App\Helpers;
 
-use Image;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Intervention\Image\ImageManager;
 use Symfony\Component\HttpFoundation\File\Exception\UploadException;
 
 /**
@@ -73,28 +73,26 @@ class MyStorage
         return urldecode($url);
     }
 
-    public function resizeImage($path, $width = 50, $height = 50, $module = 'web')
+    public function resizeImage(?string $path, $width = 50, $height = 50, $module = 'web')
     {
-        if (!$path) {
-            return '';
-        }
-        if (str_contains($path, 'http')) {
-            return $path;
-        }
+        if (!$path) return '';
+        if (str_contains($path, 'http')) return $path;
 
         $path = str_replace('\\', '/', ltrim($path, '/'));
         $disk = Storage::disk($this->getStorageType());
+        $fromPublic = false;
 
         if (!$disk->exists($path)) {
-            $path = getModuleConfig('no_img', $module);
-        }
-
-        if (!$path) {
-            return '';
+            $noImg = getModuleConfig('no_img', $module);
+            if (!$noImg || !is_file(public_path($noImg))) {
+                return $noImg ? asset($noImg) : '';
+            }
+            $path = $noImg;
+            $fromPublic = true;
         }
 
         if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'svg') {
-            return $this->url($path);
+            return $fromPublic ? asset($path) : $this->url($path);
         }
 
         $cachePath = trim(setting('folder_cache'), '/')
@@ -110,15 +108,13 @@ class MyStorage
         }
 
         try {
-            $image = Image::make($disk->get($path));
-            $image->fit($width, $height, function ($c) {
-                $c->aspectRatio();
-                $c->upsize();
-            });
-            $disk->put($cachePath, (string) $image->encode());
-        } catch (\Exception $e) {
+            $source = $fromPublic ? file_get_contents(public_path($path)) : $disk->get($path);
+            $image = ImageManager::gd()->read($source);
+            $image->coverDown($width, $height);
+            $disk->put($cachePath, (string) $image->encodeByPath($cachePath));
+        } catch (\Throwable $e) {
             logError($e->getMessage());
-            return $this->url($path);
+            return $fromPublic ? asset($path) : $this->url($path);
         }
 
         return $this->url($cachePath);

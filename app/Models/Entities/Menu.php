@@ -11,9 +11,9 @@ class Menu extends Base
     protected $table = 'menu';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static array $destroyRelations = ['values'];
+    protected static array $destroyRelations = ['menuValues'];
 
-    public function values()
+    public function menuValues()
     {
         return $this->hasMany(MenuValue::class, 'menu_id', 'id');
     }

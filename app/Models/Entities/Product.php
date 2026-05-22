@@ -58,7 +58,11 @@ class Product extends Base implements Auditable
 
     public function productSpecial()
     {
-        return $this->belongsTo(ProductSpecial::class, 'id', 'product_id');
+        return $this->hasOne(ProductSpecial::class, 'product_id', 'id')->ofMany(
+            ['priority' => 'max'],
+            fn($q) => $q->dateStartToEnd()
+                ->where('user_group_id', getUserGroupId())
+        );
     }
 
     public function productRelated()
@@ -98,7 +102,7 @@ class Product extends Base implements Auditable
 
     public function stockStatus()
     {
-        return $this->belongsTo(StockStatus::class, 'stock_status_id', 'id');
+        return $this->hasOne(StockStatus::class, 'id', 'stock_status_id')->forLocale();
     }
 
     public function weightClass()

@@ -17,7 +17,7 @@ class MenuRepository extends QueryableRepository implements MenuRepositoryInterf
         return $this->model
             ->where('position', $position)
             ->with([
-                'values.description'
+                'menuValues.description'
             ])
             ->get();
     }

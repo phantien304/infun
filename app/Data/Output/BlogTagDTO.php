@@ -25,6 +25,7 @@ class BlogTagDTO extends Data
     {
         $desc = $blogTag->description;
         $title       = (string) ($desc->title ?? '');
+        $slug        = resolveSlug($desc->slug ?? null, $title);
         $description = (string) ($desc->description ?? '');
 
         return new self(
@@ -32,19 +33,12 @@ class BlogTagDTO extends Data
             title: $title,
             background: $blogTag->background,
             excerpt: Str::limit(strip_tags($description), 160),
-            url: self::buildUrl($slug, (int) $blogTag->id),
+            url: buildUrl($slug, getModuleConfig('url.blog'), (int) $blogTag->id),
             publishedDate: $blogTag->created_at?->format('d/m/Y') ?? '',
             modifiedDate: $blogTag->updated_at?->format('d/m/Y') ?? '',
             content: Lazy::create(fn() => (string) ($desc->content ?? '')),
             metaTitle: $desc->meta_title ?? '',
             metaDescription: $desc->meta_description ?? '',
         );
-    }
-
-    private static function buildUrl(string $slug, int $id): string
-    {
-        $path = $slug . '-' . getModuleConfig('url.blog') . $id;
-
-        return url('/' . $path);
     }
 }

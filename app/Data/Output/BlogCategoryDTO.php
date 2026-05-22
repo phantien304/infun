@@ -3,7 +3,6 @@
 namespace App\Data\Output;
 
 use App\Models\Entities\BlogCategory;
-use Illuminate\Support\Str;
 use Spatie\LaravelData\Data;
 
 class BlogCategoryDTO extends Data
@@ -19,20 +18,13 @@ class BlogCategoryDTO extends Data
         $desc = $category->description;
 
         $title = (string) ($desc->title ?? '');
-        $slug  = (string) ($desc->slug ?? Str::slug($title));
+        $slug  = resolveSlug($desc->slug ?? null, $title);
 
         return new self(
             id: (int) $category->id,
             title: $title,
             slug: $slug,
-            url: self::buildUrl($slug, (int) $category->id),
+            url: buildUrl($slug, getModuleConfig('url.blog_category'), (int) $category->id),
         );
-    }
-
-    private static function buildUrl(string $slug, int $id): string
-    {
-        $path = $slug . '-' . getModuleConfig('url.blog_category') . $id;
-
-        return url('/' . $path);
     }
 }

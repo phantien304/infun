@@ -7,7 +7,6 @@ use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\FilterRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Cache;
 
 class FilterRepository extends QueryableRepository implements FilterRepositoryInterface
 {
@@ -27,7 +26,7 @@ class FilterRepository extends QueryableRepository implements FilterRepositoryIn
     {
         return [
             'description',
-            'values.description'
+            'filterValues.description'
         ];
     }
 }

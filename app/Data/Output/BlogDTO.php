@@ -15,7 +15,7 @@ class BlogDTO extends Data
         public int $viewed,
         public bool $featured,
         public string $title,
-        public string $slug,
+        public ?string $slug,
         public string $excerpt,
         public string $url,
         public ?string $image,
@@ -32,7 +32,7 @@ class BlogDTO extends Data
     {
         $desc = $blog->description;
         $title       = (string) ($desc->title ?? '');
-        $slug        = (string) ($desc->slug ?? Str::slug($title));
+        $slug        = resolveSlug($desc->slug ?? null, $title);
         $description = (string) ($desc->description ?? '');
 
         return new self(
@@ -42,7 +42,7 @@ class BlogDTO extends Data
             title: $title,
             slug: $slug,
             excerpt: Str::limit(strip_tags($description), 160),
-            url: self::buildUrl($slug, (int) $blog->id),
+            url: buildUrl($slug, getModuleConfig('url.blog'), (int) $blog->id),
             image: $blog->image,
             publishedDate: $blog->created_at?->format('d/m/Y') ?? '',
             modifiedDate: $blog->updated_at?->format('d/m/Y') ?? '',
@@ -57,13 +57,6 @@ class BlogDTO extends Data
             metaTitle: $desc->meta_title ?? '',
             metaDescription: $desc->meta_description ?? '',
         );
-    }
-
-    private static function buildUrl(string $slug, int $id): string
-    {
-        $path = $slug . '-' . getModuleConfig('url.blog') . $id;
-
-        return url('/' . $path);
     }
 
     public function thumbnail(int $width, int $height, string $module = 'web'): string

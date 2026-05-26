@@ -50,9 +50,10 @@ function resolveSlug(?string $slug, ?string $title): string
 {
     return filled($slug) ? $slug : \Illuminate\Support\Str::slug((string) $title);
 }
-function buildUrl(?string $slug, ?string $moduleKey, ?int $id): string
+function buildUrl(?string $slug, ?string $moduleKey, ?int $id, ?string $prefix = ''): string
 {
-    return url('/' . $slug . '-' . $moduleKey . $id);
+    $url = '/' . $slug . '-' . $moduleKey . $id;
+    return filled($prefix) ? url('/' . $prefix . '/' . $url) : url($url);
 }
 function thumbnail(string $image, int $width = 400, int $height = 400, string $module = 'web'): string
 {

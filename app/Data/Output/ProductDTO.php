@@ -2,6 +2,7 @@
 
 namespace App\Data\Output;
 
+use App\Data\Concerns\HasThumbnail;
 use App\Models\Entities\Product;
 use Illuminate\Support\Str;
 use Spatie\LaravelData\Data;
@@ -9,13 +10,15 @@ use Spatie\LaravelData\Lazy;
 
 class ProductDTO extends Data
 {
+    use HasThumbnail;
+
     public function __construct(
         public int $id,
         public string $model,
+        public ?string $sku,
         public ?int $quantity,
-        public ?int $badge,
+        public ?string $badge,
         public ?string $image,
-        public ?string $thumbnail,
         public ?string $video,
         public ?int $shipping,
         public ?string $linkSale,
@@ -35,7 +38,6 @@ class ProductDTO extends Data
         public ?int $isAddCart,
         public ?int $isCustom,
         public ?int $isReview,
-
         public string $name,
         public string $description,
         public ?string $slug,
@@ -52,7 +54,9 @@ class ProductDTO extends Data
         public Lazy|string $tag,
         public Lazy|string $metaTitle,
         public Lazy|string $metaDescription,
-    ) {}
+    ) {
+    }
+
     public static function fromModel(Product $product): self
     {
         $desc = $product->description;
@@ -66,16 +70,16 @@ class ProductDTO extends Data
         return new self(
             id: $product->id,
             model: $product->model,
+            sku: $product->sku,
             quantity: $product->quantity,
             badge: $product->badge,
             image: $product->image,
-            thumbnail: thumbnail($product->image, 350, 400),
             video: $product->video,
             shipping: $product->shipping,
             linkSale: $product->link_sale,
             price: $product->price,
             points: $product->points,
-            dateAvailable: $product->date_available?->format('d/m/Y'),
+            dateAvailable: $product?->date_available,
             weight: $product->weight,
             length: $product->length,
             width: $product->width,
@@ -98,15 +102,13 @@ class ProductDTO extends Data
             url: buildUrl($slug, getModuleConfig('url.product'), (int) $product->id),
             publishedDate: $product->created_at?->format('d/m/Y') ?? '',
             modifiedDate: $product->updated_at?->format('d/m/Y') ?? '',
-
             category: isset($category) ? CategoryDTO::fromModel($category) : null,
             manufacturer: isset($manufacturer) ? ManufacturerDTO::fromModel($manufacturer) : null,
             productSpecial: isset($productSpecial) ? ProductSpecialDTO::fromModel($productSpecial, (float) $product->price) : null,
-
-            content: Lazy::create(fn() => (string) ($desc->content ?? '')),
-            tag: Lazy::create(fn() => (string) ($desc->tag ?? '')),
-            metaTitle: Lazy::create(fn() => (string) ($desc->meta_title ?? '')),
-            metaDescription: Lazy::create(fn() => (string) ($desc->meta_description ?? '')),
+            content: Lazy::create(fn () => (string) ($desc->content ?? '')),
+            tag: Lazy::create(fn () => (string) ($desc->tag ?? '')),
+            metaTitle: Lazy::create(fn () => (string) ($desc->meta_title ?? '')),
+            metaDescription: Lazy::create(fn () => (string) ($desc->meta_description ?? '')),
         );
     }
 

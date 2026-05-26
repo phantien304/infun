@@ -4,36 +4,67 @@ namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\StoreReview;
 use App\Repositories\Base\QueryableRepository;
+use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
-use Override;
+use Spatie\QueryBuilder\AllowedSort;
 
 class StoreReviewRepository extends QueryableRepository implements StoreReviewRepositoryInterface
 {
+    use CacheableRepository;
+
     public function model(): string
     {
         return StoreReview::class;
     }
-    public function getById(int $id)
+
+    protected function defaultSort(): string
     {
-        return $this->model
-            ->with($this->withRelations())
-            ->find($id);
+        return '-store_review.created_at';
     }
-    public function getStoreReviewsFeatured(int $limit = 20)
+
+    protected function allowedSorts(): array
     {
-        return $this->resetModel()
-            ->with($this->withRelations())
-            ->where('featured', 1)
-            ->orderBy('id', 'DESC')
-            ->limit($limit)
-            ->get();
+        return [
+            AllowedSort::field('created_at', 'store_review.created_at'),
+            AllowedSort::field('name', 'store_review.name'),
+        ];
+    }
+
+    protected function sortMenu(): array
+    {
+        return ['-created_at', 'created_at', 'name', '-name'];
     }
 
     protected function withRelations(): array
     {
         return [
             'description',
-            'user'
+            'user',
         ];
+    }
+
+    public function getDetail(int $id)
+    {
+        return $this->resetModel()
+            ->with($this->withRelations())
+            ->find($id);
+    }
+
+    public function getStoreReviewsFeatured(int $limit = 20)
+    {
+        return $this->rememberCache(
+            $this->featuredCacheKey($limit),
+            fn () => $this->resetModel()
+                ->with($this->withRelations())
+                ->where('featured', 1)
+                ->orderBy('id', 'DESC')
+                ->limit($limit)
+                ->get()
+        );
+    }
+
+    protected function featuredCacheKey(int $limit): string
+    {
+        return 'store_reviews_featured_' . $limit;
     }
 }

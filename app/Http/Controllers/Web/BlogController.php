@@ -6,6 +6,7 @@ use App\Data\Output\BlogCategoryDTO;
 use App\Data\Output\BlogDTO;
 use App\Data\Output\BlogTagDTO;
 use App\Data\Output\ProductDTO;
+use App\Data\Output\StoreReviewDTO;
 use App\Http\Controllers\Controller;
 use App\Repositories\Interfaces\BlogCategoryRepositoryInterface;
 use App\Repositories\Interfaces\BlogRepositoryInterface;
@@ -16,31 +17,38 @@ use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
 class BlogController extends Controller
 {
     public function __construct(
-        protected BlogRepositoryInterface $blogRepo,
-        protected BlogCategoryRepositoryInterface $blogCategoryRepo,
-        protected BlogTagRepositoryInterface $blogTagRepo,
         protected StoreReviewRepositoryInterface $storeReviewRepo,
+        protected BlogCategoryRepositoryInterface $blogCategoryRepo,
+        protected BlogRepositoryInterface $blogRepo,
+        protected BlogTagRepositoryInterface $blogTagRepo,
         protected ProductRepositoryInterface $productRepository
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
-            ['text' => trans('messages.breadcrumbs.list_blog'), 'href' => route('blog.getList'), 'separator' => false],
+            ['text' => trans('messages.breadcrumbs.list_blog'), 'href' => routeArea('blog.getList'), 'separator' => false],
         ];
     }
     public function index($id = '')
     {
         $entity = $this->blogRepo->getDetail($id);
-        if (empty($entity) || !isset($entity->blogDescription)) {
+        if (empty($entity) || empty($entity->description)) {
             return $this->toUrl('error.404');
         }
-        $this->updateViewed($entity);
-
-        $this->setBreadcrumb(['text' => $entity->blogDescription->title, 'href' => $entity->blogDescription->getUrlClient(), 'separator' => false]);
-
-        $this->processMetaSeo('buildForSeoByData', $entity->blogDescription->getMetaTitle(), $entity->blogDescription->getMetaDescription());
+        $entity->increment('viewed');
+        $blogDTO = BlogDTO::from($entity)->include('content', 'tag');
+        $this->setBreadcrumb([
+            'text' => $blogDTO->title,
+            'href' => $blogDTO->url,
+            'separator' => false,
+        ]);
+        $this->processMetaSeo(
+            'buildForSeoByData',
+            $blogDTO->metaTitle ?: $blogDTO->title,
+            $blogDTO->metaDescription ?: $blogDTO->description
+        );
 
         return $this->render('web.blog.index', [
-            'entity' => $entity
+            'entity' => $blogDTO,
         ]);
     }
     public function getList()
@@ -50,9 +58,10 @@ class BlogController extends Controller
         $this->processRequest();
 
         $entities = $this->blogRepo->list();
-
         return $this->render('web.blog.list', [
-            'entities' => BlogDTO::collect($entities)
+            'entities' => BlogDTO::collect($entities),
+            'sortMenu'    => $this->blogRepo->getSortMenu(),
+            'perPageMenu' => $this->blogRepo->getPerPageMenu(),
         ]);
     }
     protected function buildDataCommon()
@@ -61,7 +70,7 @@ class BlogController extends Controller
             'blogCategories' => BlogCategoryDTO::collect($this->blogCategoryRepo->listAllCached()),
             'blogTags' => BlogTagDTO::collect($this->blogTagRepo->listAllCached()),
             'products' => ProductDTO::collect($this->getProductLatest()),
-            'storeReviews' => $this->storeReviewRepo->getStoreReviewsFeatured(),
+            'storeReviews' => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsFeatured()),
         ]);
     }
     protected function processRequest()

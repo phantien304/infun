@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Data\Output\BlogCategoryDTO;
+use App\Data\Output\BlogTagDTO;
+use App\Data\Output\ProductDTO;
+use App\Data\Output\StoreReviewDTO;
 use App\Http\Controllers\Controller;
+use App\Repositories\Interfaces\BlogCategoryRepositoryInterface;
 use App\Repositories\Interfaces\BlogTagRepositoryInterface;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
 use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
@@ -11,6 +16,7 @@ class StoreReviewController extends Controller
 {
     public function __construct(
         protected StoreReviewRepositoryInterface $storeReviewRepo,
+        protected BlogCategoryRepositoryInterface $blogCategoryRepo,
         protected BlogTagRepositoryInterface $blogTagRepo,
         protected ProductRepositoryInterface $productRepo
     ) {
@@ -22,22 +28,25 @@ class StoreReviewController extends Controller
 
     public function index($id = '')
     {
-        $entity = $this->storeReviewRepo->getById($id);
+        $entity = $this->storeReviewRepo->getDetail($id);
         if (empty($entity) || !isset($entity->description)) {
             return $this->toUrl('error.404');
         }
-        $this->updateViewed($entity);
-
-        $this->setBreadcrumb(['text' => $entity->name, 'href' => $entity->getUrlClient(), 'separator' => false]);
-
+        $entity->increment('viewed');
+        $storeReviewDTO = StoreReviewDTO::from($entity)->include('content');
+        $this->setBreadcrumb([
+            'text' => $storeReviewDTO->title,
+            'href' => $storeReviewDTO->url,
+            'separator' => false,
+        ]);
         $this->processMetaSeo(
             'buildForSeoByData',
-            $entity->description->getMetaTitle(),
-            $entity->description->getMetaDescription()
+            $storeReviewDTO->metaTitle ?: $storeReviewDTO->title,
+            $storeReviewDTO->metaDescription
         );
 
-        return $this->render('client.infunstudio.storeReview.index', [
-            'entity' => $entity
+        return $this->render('web.storeReview.index', [
+            'entity' => $storeReviewDTO
         ]);
     }
 
@@ -47,20 +56,22 @@ class StoreReviewController extends Controller
 
         $this->processRequest();
 
-        $entities = $this->storeReviewRepo->getListForWeb($this->getParams());
+        $entities = StoreReviewDTO::collect($this->storeReviewRepo->list());
 
         return $this->render('web.storeReview.list', [
-            'entities' => $entities
+            'entities'    => $entities,
+            'sortMenu'    => $this->storeReviewRepo->getSortMenu(),
+            'perPageMenu' => $this->storeReviewRepo->getPerPageMenu(),
         ]);
     }
 
-    protected function _buildDataCommon()
+    protected function buildDataCommon()
     {
         $this->setViewData([
-            'blogCategories' => $this->getBlogCategories(),
-            'blogTags' => $this->getBlogTags(),
-            'products' => $this->getProductLatest(),
-            'storeReviews' => $this->getStoreReviews(),
+            'blogCategories' => BlogCategoryDTO::collect($this->blogCategoryRepo->listAllCached()),
+            'blogTags' => BlogTagDTO::collect($this->blogTagRepo->listAllCached()),
+            'products' => ProductDTO::collect($this->getProductLatest()),
+            'storeReviews' => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsFeatured()),
         ]);
     }
 

@@ -8,6 +8,7 @@ return [
     'relevance_default' => 0.2,
     'max_row' => ['page' => 18, 'related' => 3],
     'no_img' => 'cms/images/assets/no-image.jpg',
+    'img_default' => 'data/banner/2021-12-17/infun-thiet-ke-dau-theo-yeu-cau.jpg',
     'url' => [
         'forgot_password' => '/account/change-password?token=',
         'verify_email' => 'verify-email?token=',

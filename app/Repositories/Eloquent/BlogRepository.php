@@ -15,14 +15,13 @@ class BlogRepository extends QueryableRepository implements BlogRepositoryInterf
     {
         return Blog::class;
     }
+
     protected function allowedFilters(): array
     {
         return [
             AllowedFilter::partial('title', 'blog_description.title'),
-
             AllowedFilter::exact('category_id', 'blog.category_id'),
             AllowedFilter::exact('featured', 'blog.featured'),
-
             AllowedFilter::callback('search', function (Builder $query, $value) {
                 $query->where(function (Builder $q) use ($value) {
                     $q->where('blog_description.title', 'like', "%{$value}%")
@@ -31,6 +30,7 @@ class BlogRepository extends QueryableRepository implements BlogRepositoryInterf
             }),
         ];
     }
+
     protected function allowedSorts(): array
     {
         return [
@@ -39,10 +39,22 @@ class BlogRepository extends QueryableRepository implements BlogRepositoryInterf
             AllowedSort::field('title', 'blog_description.title'),
         ];
     }
+
     protected function defaultSort(): string
     {
         return '-blog.created_at';
     }
+
+    protected function sortMenu(): array
+    {
+        return ['-created_at', 'created_at', 'title', '-title'];
+    }
+
+    protected function allowedIncludes(): array
+    {
+        return ['blogCategory', 'user'];
+    }
+
     protected function withRelations(): array
     {
         return [
@@ -51,18 +63,31 @@ class BlogRepository extends QueryableRepository implements BlogRepositoryInterf
             'user:id,full_name',
         ];
     }
-    protected function allowedIncludes(): array
+
+    protected function baseQuery(): Builder
     {
-        return ['blogCategory', 'user'];
+        $query = $this->model->newQuery();
+        $query->select('blog.*')
+            ->leftJoin('blog_description', function ($join) {
+                $join->on('blog_description.blog_id', '=', 'blog.id')
+                    ->where('blog_description.language_code', app()->getLocale());
+            });
+        return $query;
     }
-    public function getBlogLatest($limit = 4)
+
+    public function getBlogLatest(int $limit = 4)
     {
-        return $this->model
-            ->with([
-                'description'
-            ])
+        return $this->resetModel()
+            ->with(['description'])
             ->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get();
+    }
+
+    public function getDetail($id): ?Blog
+    {
+        return $this->resetModel()
+            ->with($this->withRelations())
+            ->find($id);
     }
 }

@@ -1,9 +1,9 @@
 @php
-    $image = $createdAt = $updatedAt = $createdAt = '';
+    $image = $publishedDate = $modifiedDate = $publishedDate = '';
     if (count($entities)) {
-        $image = $entities[0]->getImageClient(800, 354);
-        $createdAt = $entities[0]->created_at;
-        $updatedAt = $entities[0]->updated_at;
+        $image = $entities[0]->thumbnail(800, 354);
+        $publishedDate = $entities[0]->publishedDate;
+        $modifiedDate = $entities[0]->modifiedDate;
     }
 @endphp
 @extends('web.layouts.main')
@@ -20,9 +20,9 @@
     <meta content="{!! $titleSeo !!}" itemprop="headline" property="og:title" />
     <meta content="{!! $descriptionSeo !!}" itemprop="description" property="og:description" />
     <!-- END META FOR FACEBOOK -->
-    <meta content="{!! $createdAt !!}" itemprop="datePublished" name="pubdate" />
-    <meta content="{!! $updatedAt !!}" itemprop="dateModified" name="lastmod" />
-    <meta content="{!! $createdAt !!}" itemprop="dateCreated" />
+    <meta content="{!! $publishedDate !!}" itemprop="datePublished" name="pubdate" />
+    <meta content="{!! $modifiedDate !!}" itemprop="dateModified" name="lastmod" />
+    <meta content="{!! $publishedDate !!}" itemprop="dateCreated" />
     @include('web.share.structure._meta_common')
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary" />
@@ -50,18 +50,18 @@
                         "@@type": "NewsArticle",
                         "mainEntityOfPage": {
                             "@@type": "WebPage",
-                            "@@id": "{{ $item->getUrlClient() }}"
+                            "@@id": "{{ $item->url }}"
                         },
-                        "headline": {!! json_encode($item->getMetaTitle(), JSON_UNESCAPED_UNICODE) !!},
-                        "description": {!! json_encode($item->getMetaDescription(), JSON_UNESCAPED_UNICODE) !!},
+                        "headline": {!! json_encode($item->metaTitle, JSON_UNESCAPED_UNICODE) !!},
+                        "description": {!! json_encode($item->metaDescription, JSON_UNESCAPED_UNICODE) !!},
                         "image": {
                             "@@type": "ImageObject",
-                            "url": "{{ $item->getImageClient(900, 540) }}",
+                            "url": "{{ $item->thumbnail(900, 540) }}",
                             "width": 900,
                             "height": 540
                         },
-                        "datePublished": "{{ $item->created_at }}",
-                        "dateModified": "{{ $item->updated_at }}",
+                        "datePublished": "{{ $item->publishedDate }}",
+                        "dateModified": "{{ $item->modifiedDate }}",
                         "author": {
                             "@@type": "Organization",
                             "name": {!! json_encode(getConfigDb('config_name'), JSON_UNESCAPED_UNICODE) !!}
@@ -115,9 +115,7 @@
                 </div>
                 <div class="pagination-area mt-15 mb-sm-5 mb-lg-0">
                     <nav aria-label="Phân trang">
-                        {!! $entities->links('web.share.structure._paging', [
-                            'removeKey' => ['category_id_eq', 'per_page'],
-                        ]) !!}
+                        {!! $entities->links('web.share.structure._paging') !!}
                     </nav>
                 </div>
             </div>

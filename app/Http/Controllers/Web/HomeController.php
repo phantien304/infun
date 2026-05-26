@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Data\Output\BlogDTO;
+use App\Data\Output\ProductDTO;
+use App\Data\Output\StoreReviewDTO;
 use App\Http\Controllers\Controller;
 use App\Repositories\Interfaces\BannerRepositoryInterface;
 use App\Repositories\Interfaces\BlogRepositoryInterface;
@@ -24,9 +27,9 @@ class HomeController extends Controller
             $this->processMetaSeo('buildForSeoBySetting', 'seo_title_home', 'seo_description_home');
             return $this->render('web.page.home', [
                 'banners' => $this->bannerRepo->getBannerByPage('home', 'top'),
-                'blogs' => $this->blogRepo->getBlogLatest(4),
-                'storeReviews' => $this->storeReviewRepo->getStoreReviews(),
-                'features' => $this->productRepo->getProductFeature(),
+                'blogs' => BlogDTO::collect($this->blogRepo->getBlogLatest(4)),
+                'storeReviews' => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsFeatured()),
+                'features' => ProductDTO::collect($this->productRepo->getProductFeature()),
             ]);
         }
         list($controllerClass, $id) = $this->getControllerBySlug($slug);

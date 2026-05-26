@@ -23,12 +23,7 @@
     <meta name="twitter:creator" content="{{ getConfigDb('config_name') }}" />
     <!-- End Twitter Card -->
     <script type="application/ld+json">
-        {!! json_encode([
-        '@context' => 'http://schema.org',
-        '@type'    => 'WebSite',
-        'name'     => getConfigDb('config_name'),
-        'url'      => getConfigDb('config_domain')
-    ]) !!}
+        {"@@context":"http://schema.org","@@type":"WebSite","name":"{{ getConfigDb('config_name') }}","url":"{{ getConfigDb('config_domain') }}"}
     </script>
 @endsection
 @include('web.page.child.banner')

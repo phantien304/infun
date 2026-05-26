@@ -24,7 +24,7 @@ class DetectArea
             app('mystorage')->setCurrentArea($area);
             app('channellog')->setCurrentArea($area);
 
-            $request->merge(['area' => $area]);
+            $request->attributes->set('area', $area);
         }
 
         return $next($request);

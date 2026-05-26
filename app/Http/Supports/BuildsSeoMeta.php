@@ -4,7 +4,7 @@ namespace App\Http\Supports;
 
 trait BuildsSeoMeta
 {
-    protected function processMetaSeo(string|callable $func, string $title, string $description)
+    protected function processMetaSeo(string|callable $func, string $title, ?string $description)
     {
         list($titleSeo, $descriptionSeo, $linkCanonical) = is_callable($func)
             ? $func($title, $description)
@@ -15,25 +15,25 @@ trait BuildsSeoMeta
             'linkCanonical' => $linkCanonical,
         ]);
     }
-    protected function buildForSeoBySetting(string $keyTitle, string $keyDescription): array
+    protected function buildForSeoBySetting(string $keyTitle, ?string $keyDescription): array
     {
         return $this->appendPageInfo(
             getConfigDb($keyTitle),
             getConfigDb($keyDescription)
         );
     }
-    protected function buildForSeoByConfig(string $keyTitle, string $keyDescription): array
+    protected function buildForSeoByConfig(string $keyTitle, ?string $keyDescription): array
     {
         return $this->appendPageInfo(
             trans('messages.seo.' . $keyTitle),
             trans('messages.seo.' . $keyDescription)
         );
     }
-    protected function buildForSeoByData(string $title, string $description): array
+    protected function buildForSeoByData(string $title, ?string $description): array
     {
         return $this->appendPageInfo($title, $description);
     }
-    private function appendPageInfo(string $title, string $description): array
+    private function appendPageInfo(string $title, ?string $description): array
     {
         $page = (int) data_get($this->getParams(), 'page', 1);
         $link = $this->getCanonicalLink();

@@ -44,7 +44,7 @@
             @foreach ($products as $product)
                 <div class="single-post clearfix">
                     <div class="image">
-                        <img src="{!! $product->thumbnail !!}" alt="{!! $product->name !!}">
+                        <img src="{!! $product->thumbnail(80, 80) !!}" alt="{!! $product->name !!}">
                     </div>
                     <div class="content pt-10">
                         <h6>
@@ -52,11 +52,11 @@
                                 {!! $product->name !!}
                             </a>
                         </h6>
-                        @if (isset($product->productSpecial))
+                        @if (filled($product->productSpecial))
                             <div class="mb-0 mt-5">
-                                <span class="price fs-6">{!! $productSpecial->pricePromotionLabel !!} </span>
+                                <span class="price fs-6">{!! $product->productSpecial->pricePromotionLabel !!} </span>
                                 <span class="text-decoration-line-through old-price">
-                                    <small>{!! $product->priceLabel !!}</small>
+                                    <small>{!! $product->productSpecial->priceRegularLabel !!}</small>
                                 </span>
                             </div>
                         @else

@@ -6,6 +6,7 @@ use App\Models\Entities\Product;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProductRepository extends QueryableRepository implements ProductRepositoryInterface
 {
@@ -15,14 +16,22 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     {
         return Product::class;
     }
+
     protected function allowedFilters(): array
     {
         return ['id', 'name'];
     }
+
     protected function allowedSorts(): array
     {
         return ['id', 'created_at'];
     }
+
+    protected function beforeBuild(Builder $query): Builder
+    {
+        return $this->clientScope($query);
+    }
+
     public function getProductSpecials(array $productIds)
     {
         return $this->resetModel()->whereIn('id', $productIds)->get();
@@ -30,7 +39,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     public function getProductFeature(int $limit = 6)
     {
-        return $this->buildClientProductQuery()
+        return $this->clientQuery()
             ->where('badge', 'feature')
             ->take($limit)
             ->get();
@@ -40,31 +49,25 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     {
         return $this->rememberCacheTagged(
             [getCoreConfig('cache.product_root'), getCoreConfig('cache.product_latest')],
-            $this->buildLatestCacheKey($limit),
-            fn() => $this->buildClientProductQuery()->take($limit)->get(),
+            $this->latestCacheKey($limit),
+            fn () => $this->clientQuery()->take($limit)->get(),
             getCoreConfig('time.cache')
         );
     }
 
-    protected function buildClientProductQuery()
+    protected function clientQuery(): Builder
     {
-        return $this->resetModel()
-            ->dateAvailable()
-            ->with($this->buildWithRelationProduct())
+        return $this->clientScope($this->baseQuery())
+            ->with($this->clientRelations())
             ->orderBy('id', 'DESC');
     }
 
-    protected function buildLatestCacheKey(int $limit): string
+    protected function clientScope(Builder $query): Builder
     {
-        return implode('_', [
-            getCoreConfig('cache.product_latest'),
-            getUserGroupId(),
-            getUserType(),
-            $limit,
-        ]) . '_';
+        return $query->dateAvailable();
     }
 
-    protected function buildWithRelationProduct()
+    protected function clientRelations(): array
     {
         return [
             'description',
@@ -73,5 +76,10 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             'productCategories.category.description',
             'productSpecial',
         ];
+    }
+
+    protected function latestCacheKey(int $limit): string
+    {
+        return implode('_', [getCoreConfig('cache.product_latest'), getUserGroupId(), getUserType(), $limit]) . '_';
     }
 }

@@ -6,16 +6,13 @@
             $list = [];
             $key = 0;
             foreach ($features as $i => $product) {
-                if (!isset($product->productDescription)) {
-                    continue;
-                }
                 $list[$key] = '<div class="card-1">
                             <figure class="image">
-                                <a href="' . $product->productDescription->getUrlClient() . '"
-                                title="' . $product->productDescription->name . '" class="d-flex">
-                                    <img src="' . $product->getImageClient(635, 420) . '"
-                                         alt="' . $product->productDescription->name . '">
-                                    <h3 class="title p-2 font-xl">' . $product->productDescription->name . '</h3>
+                                <a href="' . $product->url . '"
+                                title="' . $product->name . '" class="d-flex">
+                                    <img src="' . $product->thumbnail(635, 420) . '"
+                                         alt="' . $product->name . '">
+                                    <h3 class="title p-2 font-xl">' . $product->name . '</h3>
                                 </a>
                             </figure>
                         </div>';

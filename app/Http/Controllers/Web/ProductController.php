@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Data\Output\ProductDTO;
 use App\Http\Controllers\Controller;
 use App\Http\Supports\Pagination;
 use App\Model\Entities\Ingredient;
@@ -9,35 +10,23 @@ use App\Model\Entities\Option;
 use App\Model\Entities\Product;
 use App\Model\Entities\ProductOption;
 use App\Model\Entities\ProductRelated;
-use App\Model\Entities\Review;
 use App\Model\Entities\StoreReview;
 use App\Model\Entities\UserWishlist;
-use App\Repositories\Client\InfunStudio\BlogRepository;
-use App\Repositories\Client\InfunStudio\ProductRepository;
-use App\Repositories\Client\InfunStudio\ProductSpecialRepository;
-use App\Repositories\Client\InfunStudio\ReviewRepository;
+use App\Repositories\Interfaces\BlogRepositoryInterface;
+use App\Repositories\Interfaces\ProductSpecialRepositoryInterface;
+use App\Repositories\Interfaces\ReviewRepositoryInterface;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
-
     public function __construct(
-        ProductRepository $productRepository,
-        BlogRepository $blogRepository,
-        ProductSpecialRepository $productSpecialRepository,
-        ReviewRepository $reviewRepository
+        protected BlogRepositoryInterface $blogRepository,
+        protected ProductSpecialRepositoryInterface $productSpecialRepository,
+        protected ReviewRepositoryInterface $reviewRepository
     ) {
-        parent::__construct();
-        $this->setRepository($productRepository);
-        $this->registerRepository(
-            $blogRepository,
-            $productSpecialRepository,
-            $reviewRepository
-        );
-        $this->_keyCache = app()->getLocale() . '_' . getUserGroupId() . '_' . getUserType();
-        $this->_breadcrumbs = [
+        $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
             ['text' => trans('messages.breadcrumbs.list_product'), 'href' => route('product.getList'), 'separator' => false],
         ];
@@ -79,11 +68,11 @@ class ProductController extends Controller
 
     public function getList()
     {
-        $this->_processMetaSeo('_buildForSeoBySetting', 'seo_title_products', 'seo_description_products');
+        $this->processMetaSeo('buildForSeoBySetting', 'seo_title_products', 'seo_description_products');
 
-        $entities = $this->getRepository()->getListForFrontend($this->getParams());
+        $entities = ProductDTO::collect($this->productRepo->list());
 
-        return $this->render('client.infunstudio.product.list', [
+        return $this->render('web.product.list', [
             'entities' => $entities,
             'products' => $this->getProductLatest(),
         ]);

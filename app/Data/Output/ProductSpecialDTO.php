@@ -33,8 +33,8 @@ class ProductSpecialDTO extends Data
             priceRegularLabel: self::formatPrice($priceRegular),
             pricePromotionLabel: self::formatPrice($pricePromotion),
             discountPercent: self::discountPercent($priceRegular, $pricePromotion),
-            dateStart: $productSpecial->date_start?->format('d/m/Y'),
-            dateEnd: $productSpecial->date_end?->format('d/m/Y')
+            dateStart: $productSpecial->date_start?->format('Y-m-d H:i:s'),
+            dateEnd: $productSpecial->date_end?->format('Y-m-d H:i:s')
         );
     }
 

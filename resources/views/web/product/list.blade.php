@@ -1,14 +1,3 @@
-@php
-    $category = request()->get('category_id_eq') ?? '';
-    $sortField = request()->get('sort_field') ?? '';
-    $sortType = request()->get('sort_type') ?? '';
-    $start = $entities->total() > 0 ? ($entities->currentPage() - 1) * $entities->perPage() + 1 : 0;
-    if ($entities->currentPage() == $entities->lastPage()) {
-        $last = $entities->total();
-    } else {
-        $last = $entities->currentPage() * $entities->perPage();
-    }
-@endphp
 @extends('web.layouts.main')
 @section('meta')
     <!-- META FOR FACEBOOK -->
@@ -55,9 +44,8 @@
                     @include('web.product.structure._sort_by')
                 </div>
                 <div class="row product-grid">
-                    @php $reqFilter = data_get(request()->get('product_filter', []), 'filter_value_id_in', []); @endphp
                     @foreach ($entities as $product)
-                        @include('web.product.structure._product', ['reqFilter' => $reqFilter])
+                        @include('web.product.structure._product')
                     @endforeach
                 </div>
                 <div class="pagination-area mt-20 mb-20">

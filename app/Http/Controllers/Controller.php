@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Data\Output\CategoryDTO;
+use App\Data\Output\FilterDTO;
+use App\Data\Output\ManufacturerDTO;
+use App\Data\Output\ZoneDTO;
 use App\Events\BaseEvent;
 use App\Http\Supports\BuildsSeoMeta;
 use App\Http\Supports\MenusClient;
@@ -22,6 +26,7 @@ abstract class Controller
     protected $breadcrumbs = [];
     protected $viewData = [];
     private array $resolved = [];
+
     protected function lazyMap(): array
     {
         return [
@@ -34,6 +39,7 @@ abstract class Controller
             'productRepo'      => ProductRepositoryInterface::class,
         ];
     }
+
     public function __get(string $name): mixed
     {
         $map = $this->lazyMap();
@@ -45,10 +51,12 @@ abstract class Controller
         }
         return $this->resolved[$name] ??= Container::getInstance()->make($map[$name]);
     }
+
     public function __isset(string $name): bool
     {
         return isset($this->lazyMap()[$name]);
     }
+
     public function getControllerBySlug($slug)
     {
         if (empty($slug)) {
@@ -76,6 +84,7 @@ abstract class Controller
         $controllerClass = "App\Http\Controllers\Web\\" . $controllerName;
         return [$controllerClass, $id];
     }
+
     protected function toUrl(string $url, $params = [])
     {
         $data = ['url' => $url, 'params' => $params];
@@ -92,11 +101,13 @@ abstract class Controller
         $this->fireEvent('after_redirect', $r);
         return $r;
     }
+
     public function forward($controller, $action, $params = [])
     {
         $instance = app()->make($controller);
         return app()->call([$instance, $action], $params);
     }
+
     public function render($view = null, array $data = [], array $mergeData = [])
     {
         $breadcrumbs = $this->getBreadcrumb();
@@ -109,33 +120,39 @@ abstract class Controller
                 "name" => $breadcrumb['text']
             ];
         }
-
         $this->setViewData([
             'breadcrumbs' => $breadcrumbs,
             'breadcrumbSchema' => $breadcrumbSchema,
-            'categories' => $this->categoryRepo->listAllCached(),
-            'manufacturers' => $this->manufacturerRepo->listAllCached(),
-            'filters' => $this->filterRepo->listAllCached(),
-            'zones' => $this->zoneRepo->listAllCached(),
+            'categories' => CategoryDTO::collect($this->categoryRepo->listAllCached()),
+            'manufacturers' => ManufacturerDTO::collect($this->manufacturerRepo->listAllCached()),
+            'filters' => FilterDTO::collect($this->filterRepo->listAllCached()),
+            'zones' => ZoneDTO::collect($this->zoneRepo->listAllCached()),
             'menus' => $this->getMenus()
         ]);
         $this->buildDataCommon();
         $data = array_merge($data, $this->getViewData());
         return view($view, $data, $mergeData);
     }
-    protected function buildDataCommon() {}
+
+    protected function buildDataCommon()
+    {
+    }
+
     protected function getProductLatest(int $limit = 6)
     {
         return $this->productRepo->getProductLatest($limit);
     }
+
     public function getBreadcrumb()
     {
         return $this->breadcrumbs;
     }
+
     public function setBreadcrumb(array $breadcrumbs = [])
     {
         array_push($this->breadcrumbs, $breadcrumbs);
     }
+
     public function getViewData($key = null)
     {
         if ($key) {
@@ -143,11 +160,13 @@ abstract class Controller
         }
         return $this->viewData;
     }
+
     public function setViewData(array $viewData)
     {
         $this->viewData = array_merge($this->getViewData(), $viewData);
         return $this;
     }
+
     public function getParams()
     {
         return request()->all();

@@ -70,40 +70,34 @@ class ProductController extends Controller
     {
         $this->processMetaSeo('buildForSeoBySetting', 'seo_title_products', 'seo_description_products');
 
-        $entities = ProductDTO::collect($this->productRepo->list());
+        $entities = $this->productRepo->list();
+        $entities->setCollection(
+            $entities->getCollection()->map(fn ($m) => ProductDTO::from($m))
+        );
 
         return $this->render('web.product.list', [
-            'entities' => $entities,
-            'products' => $this->getProductLatest(),
+            'entities'    => $entities,
+            'products'    => ProductDTO::collect($this->getProductLatest()),
+            'sortMenu'    => $this->productRepo->getSortMenu(),
+            'perPageMenu' => $this->productRepo->getPerPageMenu(),
         ]);
     }
 
     public function special()
     {
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.special'), 'href' => route('product.special'), 'separator' => false]);
-        $this->_processMetaSeo('_buildForSeoByConfig', 'product.special.title', 'product.special.description');
+        $this->processMetaSeo('buildForSeoByConfig', 'product.special.title', 'product.special.description');
 
-        $entities = $this->fetchRepository(ProductSpecialRepository::class)->getListForFrontend($this->getParams());
+        $entities = $this->productRepo->getListSpecial();
+        $entities->setCollection(
+            $entities->getCollection()->map(fn ($m) => ProductDTO::from($m))
+        );
 
-        $relation = [];
-        if (request()->has('product_filter')) {
-            $reqFilter = array_get(request()->get('product_filter', []), 'filter_value_id_in', []);
-            $relation = [
-                'productFilters' => function ($q) use ($reqFilter) {
-                    $q->whereIn('filter_value_id', $reqFilter);
-                },
-                'productFilters.filterValue.filterValueDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                }
-            ];
-        }
-
-        $productSpecials = $this->_buildDataProductSpecials($entities->pluck('product_id')->toArray(), $relation);
-
-        return $this->render('client.infunstudio.product.special', [
-            'productSpecials' => $productSpecials,
-            'entities' => $entities,
-            'products' => $this->getProductLatest(),
+        return $this->render('web.product.special', [
+            'entities'    => $entities,
+            'products'    => ProductDTO::collect($this->getProductLatest()),
+            'sortMenu'    => $this->productRepo->getSortMenu(),
+            'perPageMenu' => $this->productRepo->getPerPageMenu(),
         ]);
     }
 

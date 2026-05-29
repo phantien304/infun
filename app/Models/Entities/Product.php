@@ -3,6 +3,8 @@
 namespace App\Models\Entities;
 
 use App\Models\Base\Base;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -60,7 +62,7 @@ class Product extends Base implements Auditable
     {
         return $this->hasOne(ProductSpecial::class, 'product_id', 'id')->ofMany(
             ['priority' => 'max'],
-            fn($q) => $q->dateStartToEnd()
+            fn ($q) => $q->dateStartToEnd()
                 ->where('user_group_id', getUserGroupId())
         );
     }
@@ -138,5 +140,64 @@ class Product extends Base implements Auditable
     public function couponProducts()
     {
         return $this->hasMany(CouponProduct::class, 'product_id', 'id');
+    }
+
+    public function scopeHasActiveSpecial(Builder $query): Builder
+    {
+        $now = Carbon::now();
+
+        return $query->whereHas('productSpecials', function ($q) use ($now) {
+            $q->where('user_group_id', getUserGroupId())
+                ->where(fn ($qq) => $qq->whereNull('date_start')->orWhere('date_start', '<=', $now))
+                ->where(fn ($qq) => $qq->whereNull('date_end')->orWhere('date_end', '>', $now));
+        });
+    }
+
+    public function scopeEffectivePriceBetween(Builder $query, ?int $min, ?int $max): Builder
+    {
+        if ($min === null && $max === null) {
+            return $query;
+        }
+
+        [$effective, $bindings] = self::effectivePriceExpression();
+
+        if ($min !== null && $max !== null) {
+            return $query->whereRaw("{$effective} BETWEEN ? AND ?", [...$bindings, $min, $max]);
+        }
+        if ($min !== null) {
+            return $query->whereRaw("{$effective} >= ?", [...$bindings, $min]);
+        }
+        return $query->whereRaw("{$effective} <= ?", [...$bindings, $max]);
+    }
+
+    public function scopeOrderByEffectivePrice(Builder $query, string $dir = 'asc'): Builder
+    {
+        $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
+
+        [$effective, $bindings] = self::effectivePriceExpression();
+
+        return $query->orderByRaw("{$effective} $dir", $bindings);
+    }
+
+    protected static function effectivePriceExpression(): array
+    {
+        $sql = '
+            COALESCE(
+                (
+                    SELECT ps.price FROM product_special ps
+                    WHERE ps.product_id    = product.id
+                      AND ps.user_group_id = ?
+                      AND (ps.date_start IS NULL OR ps.date_start <= ?)
+                      AND (ps.date_end   IS NULL OR ps.date_end   >= ?)
+                    ORDER BY ps.priority DESC
+                    LIMIT 1
+                ),
+                product.price
+            )
+        ';
+
+        $now = Carbon::now();
+
+        return [$sql, [getUserGroupId(), $now, $now]];
     }
 }

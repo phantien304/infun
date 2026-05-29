@@ -11,7 +11,7 @@ class Zone extends Base
     protected $table = 'zone';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['districts'];
+    protected static array $destroyRelations = ['districts'];
 
     public function country()
     {

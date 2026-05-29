@@ -4,7 +4,9 @@ namespace App\Data\Output;
 
 use App\Data\Concerns\HasThumbnail;
 use App\Models\Entities\Product;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Lazy;
 
@@ -47,9 +49,10 @@ class ProductDTO extends Data
         public string $url,
         public string $publishedDate,
         public string $modifiedDate,
-        public ?CategoryDTO $category,
+        public Collection $categories,
         public ?ManufacturerDTO $manufacturer,
         public ?ProductSpecialDTO $productSpecial,
+        public array $matchedFilterNames,
         public Lazy|string $content,
         public Lazy|string $tag,
         public Lazy|string $metaTitle,
@@ -60,12 +63,17 @@ class ProductDTO extends Data
     public static function fromModel(Product $product): self
     {
         $desc = $product->description;
-        $category = $product->productCategories->first()?->category;
         $manufacturer = $product->manufacturer;
         $productSpecial = $product->productSpecial;
-        $name       = (string) ($desc->name ?? '');
-        $slug        = resolveSlug($desc->slug ?? null, $name);
+        $name = (string) ($desc->name ?? '');
+        $slug = resolveSlug($desc->slug ?? null, $name);
         $description = (string) ($desc->description ?? '');
+        $categories = $product->productCategories
+            ->map(fn ($pc) => $pc->category)
+            ->filter()
+            ->map(fn ($c) => CategoryDTO::fromModel($c))
+            ->values();
+        $matchedFilterNames = self::resolveMatchedFilterNames($product);
 
         return new self(
             id: $product->id,
@@ -102,14 +110,31 @@ class ProductDTO extends Data
             url: buildUrl($slug, getModuleConfig('url.product'), (int) $product->id),
             publishedDate: $product->created_at?->format('d/m/Y') ?? '',
             modifiedDate: $product->updated_at?->format('d/m/Y') ?? '',
-            category: isset($category) ? CategoryDTO::fromModel($category) : null,
+            categories: $categories,
             manufacturer: isset($manufacturer) ? ManufacturerDTO::fromModel($manufacturer) : null,
             productSpecial: isset($productSpecial) ? ProductSpecialDTO::fromModel($productSpecial, (float) $product->price) : null,
+            matchedFilterNames: $matchedFilterNames,
             content: Lazy::create(fn () => (string) ($desc->content ?? '')),
             tag: Lazy::create(fn () => (string) ($desc->tag ?? '')),
             metaTitle: Lazy::create(fn () => (string) ($desc->meta_title ?? '')),
             metaDescription: Lazy::create(fn () => (string) ($desc->meta_description ?? '')),
         );
+    }
+
+    private static function resolveMatchedFilterNames(Product $product): array
+    {
+        $selected = (array) request()->input('filter.filter_value_id', []);
+        if (empty($selected) || !$product->relationLoaded('productFilters')) {
+            return [];
+        }
+
+        return $product->productFilters
+            ->filter(fn ($pf) => in_array($pf->filter_value_id, $selected))
+            ->map(fn ($pf) => $pf->filterValue?->description?->name)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private static function formatPrice(float $price): string

@@ -58,26 +58,30 @@ abstract class QueryableRepository extends BaseRepository
         return $query;
     }
 
-    public function list(?Request $request = null, ?int $perPage = null): LengthAwarePaginator
+    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): LengthAwarePaginator
     {
         $request ??= request();
 
         $perPage ??= (int) $request->get('per_page', $this->defaultPerPage);
         $perPage = max(1, min($perPage, $this->maxPerPage));
 
-        return $this->buildQuery($request)
+        return $this->buildQuery($request, $modifyBase)
             ->paginate($perPage)
             ->appends($request->query());
     }
 
-    public function listAll(?Request $request = null): Collection
+    public function listAll(?Request $request = null, ?\Closure $modifyBase = null): Collection
     {
-        return $this->buildQuery($request ?? request())->get();
+        return $this->buildQuery($request ?? request(), $modifyBase)->get();
     }
 
-    protected function buildQuery(Request $request): QueryBuilder
+    protected function buildQuery(Request $request, ?\Closure $modifyBase = null): QueryBuilder
     {
         $base = $this->beforeBuild($this->baseQuery());
+
+        if ($modifyBase !== null) {
+            $modifyBase($base);
+        }
 
         $query = QueryBuilder::for($base, $request)
             ->allowedFilters($this->allowedFilters())

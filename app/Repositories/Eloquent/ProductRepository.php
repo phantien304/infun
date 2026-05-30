@@ -3,12 +3,14 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\Product;
+use App\Models\Entities\ProductRelated;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\AllowedSort;
 
@@ -126,6 +128,57 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $this->resetModel()->whereIn('id', $productIds)->get();
     }
 
+    /**
+     * Lấy 1 product cho trang chi tiết — đầy đủ relation cần cho view,
+     * cache theo user_group + user_type (giá hiệu lực phụ thuộc nhóm).
+     */
+    public function getProductDetail(int $id): ?Product
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return $this->rememberCacheTagged(
+            [getCoreConfig('cache.product_root'), getCoreConfig('cache.products').$id],
+            $this->detailCacheKey($id),
+            fn () => $this->resetModel()
+                ->with($this->detailRelations())
+                ->find($id),
+            getCoreConfig('time.cache')
+        );
+    }
+
+    /**
+     * Atomic increment view counter. Bỏ qua model events + cache (cột viewed
+     * nằm trong $auditExclude, đổi thường xuyên không cần ghi cache).
+     */
+    public function incrementViewed(int $id): void
+    {
+        try {
+            DB::table('product')->where('id', $id)->update([
+                'viewed' => DB::raw('viewed + 1'),
+            ]);
+        } catch (\Throwable $e) {
+            logError($e->getMessage());
+        }
+    }
+
+    /**
+     * Related products của 1 product cụ thể — admin sắp xếp ở bảng
+     * product_related, giữ nguyên thứ tự.
+     */
+    public function getProductRelatedByProductId(int $id, int $limit = 4)
+    {
+        $relatedIds = ProductRelated::query()
+            ->where('product_id', $id)
+            ->where('related_id', '!=', $id)
+            ->take($limit)
+            ->pluck('related_id')
+            ->all();
+
+        return $this->getProductRelated($relatedIds);
+    }
+
     public function getListSpecial(?Request $request = null): LengthAwarePaginator
     {
         return $this->list($request, null, fn (Builder $q) => $q->hasActiveSpecial());
@@ -212,6 +265,28 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             'productCategories.category.description',
             'productSpecial',
         ];
+    }
+
+    /**
+     * Eager-load đầy đủ cho trang chi tiết — gallery, option tree,
+     * weight class, special đại diện (priority cao nhất).
+     */
+    protected function detailRelations(): array
+    {
+        return array_merge($this->clientRelations(), [
+            'productImages',
+            'productSpecials',
+            'weightClass.description',
+            'productOptions.option.description',
+            'productOptions.option.optionValues.description',
+            'productOptions.productOptionValues.optionValue.description',
+            'productOptions.productOptionValues.productOptionValues2.optionValue.description',
+        ]);
+    }
+
+    protected function detailCacheKey(int $id): string
+    {
+        return implode('_', [getCoreConfig('cache.products').$id, 'detail', getUserGroupId(), getUserType()]).'_';
     }
 
     protected function latestCacheKey(int $limit): string

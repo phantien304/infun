@@ -63,8 +63,27 @@ class StoreReviewRepository extends QueryableRepository implements StoreReviewRe
         );
     }
 
+    public function getStoreReviewsByProduct(int $productId, int $limit = 16)
+    {
+        return $this->rememberCacheTagged(
+            [getCoreConfig('cache.store_reviews')],
+            $this->productCacheKey($productId, $limit),
+            fn () => $this->resetModel()
+                ->with($this->withRelations())
+                ->where('product_id', $productId)
+                ->orderBy('id', 'DESC')
+                ->limit($limit)
+                ->get()
+        );
+    }
+
     protected function featuredCacheKey(int $limit): string
     {
         return 'store_reviews_featured_' . $limit;
+    }
+
+    protected function productCacheKey(int $productId, int $limit): string
+    {
+        return implode('_', ['store_reviews_product', $productId, $limit]) . '_';
     }
 }

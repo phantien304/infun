@@ -198,9 +198,9 @@ code cũ và code mới, đừng nhầm lẫn hai bên (xem mục "Cũ vs Mới"
 | Cache | `Cache::tags()` + redis cứng | `CacheableRepository` |
 | Query string | `*_eq`, `sort_field`/`sort_type` | Spatie: `filter[...]`, `sort=` |
 
-`ProductController` đang dùng pattern hỗn hợp: `getList()` đã chuyển sang DTO + Spatie,
-các method khác (`index`, `special`) còn theo style cũ. Khi migrate tiếp các method còn
-lại, dùng `getList()` làm mẫu thứ 2 sau `getProductLatest`.
+`ProductController` đang dùng pattern hỗn hợp: `getList()` và `special()` đã chuyển
+sang DTO + Spatie, `index` còn theo style cũ. Khi migrate `index`, dùng `getList()` /
+`special()` làm mẫu.
 
 ## Helper toàn cục thường dùng
 
@@ -239,6 +239,65 @@ Relation `Product::description()` đã tự áp `->forLocale()`, không cần l�
 `getProductRelated($ids)` minh hoạ pattern giữ thứ tự ids (admin sắp ở bảng
 `product_related`) bằng `orderByRaw('FIELD(product.id, ...)')` + cache key dùng
 mảng đã sort.
+
+## Mẫu tham chiếu: trang khuyến mãi (`ProductController::special`)
+
+Trang khuyến mãi = trang list Product + **1 ràng buộc**: product phải có
+`ProductSpecial` active. Không tạo repo riêng; tái dùng pipeline list.
+
+- `Product::scopeHasActiveSpecial()` — `whereHas('productSpecials', fn ($q) =>
+  $q->where('user_group_id', getUserGroupId())->dateStartToEnd())`. Bắt buộc tái dùng
+  `dateStartToEnd()` thay vì viết lại điều kiện ngày — `productSpecial()` relation
+  (eager-loaded vào DTO) cũng dùng scope này; nếu lệch toán tử so sánh (vd `<=` vs
+  `<` cho `date_start`), product lọt vào danh sách khuyến mãi nhưng relation trả
+  null → giá hiển thị sai (giá gốc thay vì giá KM).
+- `QueryableRepository::list(?Request $r = null, ?int $perPage = null, ?\Closure
+  $modifyBase = null)` — closure thứ 3 (optional) append scope vào base query SAU
+  `beforeBuild()` mà không cần duplicate `buildQuery`. Backward-compatible với mọi
+  caller cũ.
+- `ProductRepository::getListSpecial()` = `$this->list($r, null, fn ($q) =>
+  $q->hasActiveSpecial())`. 1 dòng, tận dụng nguyên filter/sort/cache/eager-load
+  của `list()`.
+- `ProductRepository::getProductSpecialLatest(int $limit)` — mirror
+  `getProductLatest()` cho homepage, append `hasActiveSpecial()` trước `orderBy
+  sort_order/created_at DESC`. Cache theo `getUserGroupId() + getUserType()`.
+- Controller `special()` ~10 dòng, dùng lại view `web.product.special.blade.php`
+  (chỉ khác title/breadcrumb so với `web.product.list`, tái dùng nguyên partial
+  `_sort_by`, `_product`, `_paging`, `_side_bar`, `_schema_product_list`).
+
+`App\Repositories\Eloquent\ProductSpecialRepository` + Interface giờ KHÔNG còn nằm
+trên đường đi của trang khuyến mãi / homepage. Giữ lại tạm cho backward compat
+(`ProductController::__construct` còn inject), sẽ gỡ khi chắc không còn caller.
+
+## Drift đã biết quanh "active special" (cần thống nhất)
+
+3 nguồn so sánh ngày trên `product_special` không đồng bộ:
+
+| Nguồn | `date_start` | `date_end` |
+|---|---|---|
+| `HasAdvancedScopes::scopeDateStartToEnd` | `<` strict | `>` strict |
+| `Product::effectivePriceExpression` (raw SQL trong scope giá hiệu lực) | `<=` | `>=` |
+| Legacy `_buildQueryForProductSpecials` (đang phế) | `<=` | `>` |
+
+`scopeHasActiveSpecial` đang khớp `dateStartToEnd` (đảm bảo relation + scope filter
+nhất quán). Nhưng vẫn còn drift với `effectivePriceExpression`: ở biên `date_end ==
+now()`, scope filter loại product nhưng nếu user vẫn vào được trang chi tiết thì
+COALESCE giá hiệu lực vẫn lấy giá KM. Cần chọn 1 cặp toán tử và sync cả 3 nơi.
+
+## Việc còn nợ trong `ProductRepository`
+
+- `getProductSpecials(array $productIds)` — tên gây hiểu lầm, thực ra là `Product`
+  lookup theo IDs. Không cache, không gắn relations. Đổi tên `getByIds()` hoặc gỡ
+  nếu không còn caller.
+- `getProductFeature(int $limit)` — chưa cache, trong khi `getProductLatest` /
+  `getProductRelated` đều cache qua `rememberCacheTagged`. Drift hành vi.
+
+## Pint (`pint.json`)
+
+Preset Laravel + bổ sung rule khoảng trắng quanh `,` trong array:
+`whitespace_after_comma_in_array` (single space), `no_whitespace_before_comma_in_array`,
+`no_trailing_comma_in_singleline`, `trim_array_spaces`. Mục đích: chuẩn hoá các
+trường hợp `[ a,b ,c ,]` về `[a, b, c]`.
 
 ## Seed dữ liệu test
 

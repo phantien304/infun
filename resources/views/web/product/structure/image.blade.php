@@ -6,7 +6,7 @@
                 @foreach($images as $img)
                     <figure class="border-radius-10">
                         <img src="{{ resizeImage($img['image'], 1000, 1000, 'client') }}"
-                             alt="{{ $entity->productDescription->name }}">
+                             alt="{{ $product->name }}">
                     </figure>
                 @endforeach
             </div>
@@ -14,7 +14,7 @@
                 @foreach($images as $img)
                     <div>
                         <img src="{{ resizeImage($img['image'], 147, 147, 'client') }}"
-                             alt="{{ $entity->productDescription->name }}">
+                             alt="{{ $product->name }}">
                     </div>
                 @endforeach
             </div>

@@ -36,7 +36,6 @@ class ProductDTO extends Data
         public ?float $rating,
         public ?int $totalRating,
         public ?int $viewed,
-        public ?string $linkSaleCustom,
         public ?int $isAddCart,
         public ?int $isCustom,
         public ?int $isReview,
@@ -53,6 +52,10 @@ class ProductDTO extends Data
         public ?ManufacturerDTO $manufacturer,
         public ?ProductSpecialDTO $productSpecial,
         public array $matchedFilterNames,
+        public int $ratingRounded,
+        public string $weightUnit,
+        public array $gallery,
+        public array $linkSaleCustom,
         public Lazy|string $content,
         public Lazy|string $tag,
         public Lazy|string $metaTitle,
@@ -74,6 +77,11 @@ class ProductDTO extends Data
             ->map(fn ($c) => CategoryDTO::fromModel($c))
             ->values();
         $matchedFilterNames = self::resolveMatchedFilterNames($product);
+        $gallery = self::resolveGallery($product);
+        $weightUnit = $product->relationLoaded('weightClass')
+            ? (string) ($product->weightClass?->description?->unit ?? 'gram')
+            : 'gram';
+        $linkSaleCustom = self::decodeJsonArray($product->link_sale_custom);
 
         return new self(
             id: $product->id,
@@ -97,7 +105,6 @@ class ProductDTO extends Data
             rating: $product->rating,
             totalRating: $product->total_rating,
             viewed: $product->viewed,
-            linkSaleCustom: $product->link_sale_custom,
             isAddCart: $product->is_add_cart,
             isCustom: $product->is_custom,
             isReview: $product->is_review,
@@ -114,11 +121,45 @@ class ProductDTO extends Data
             manufacturer: isset($manufacturer) ? ManufacturerDTO::fromModel($manufacturer) : null,
             productSpecial: isset($productSpecial) ? ProductSpecialDTO::fromModel($productSpecial, (float) $product->price) : null,
             matchedFilterNames: $matchedFilterNames,
+            ratingRounded: (int) round((float) $product->rating),
+            weightUnit: $weightUnit,
+            gallery: $gallery,
+            linkSaleCustom: $linkSaleCustom,
             content: Lazy::create(fn () => (string) ($desc->content ?? '')),
             tag: Lazy::create(fn () => (string) ($desc->tag ?? '')),
             metaTitle: Lazy::create(fn () => (string) ($desc->meta_title ?? '')),
             metaDescription: Lazy::create(fn () => (string) ($desc->meta_description ?? '')),
         );
+    }
+
+    /**
+     * Gallery cho trang chi tiết: ảnh chính + ảnh phụ. Chỉ build khi
+     * productImages đã được eager-load (tránh N+1 ở list page).
+     */
+    private static function resolveGallery(Product $product): array
+    {
+        $gallery = [
+            ['key' => 'p'.$product->id, 'image' => (string) $product->image],
+        ];
+        if (! $product->relationLoaded('productImages')) {
+            return $gallery;
+        }
+        foreach ($product->productImages as $img) {
+            $gallery[] = [
+                'key' => 'pImg'.$img->id,
+                'image' => (string) $img->image,
+            ];
+        }
+        return $gallery;
+    }
+
+    private static function decodeJsonArray(?string $raw): array
+    {
+        if (! filled($raw)) {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     private static function resolveMatchedFilterNames(Product $product): array

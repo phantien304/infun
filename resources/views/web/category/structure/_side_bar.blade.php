@@ -9,7 +9,6 @@
     $currentCategoryId = request()->input('filter.category_id');
     $reqManufacturer = (array) request()->input('filter.manufacturer_id', []);
     $reqFilter = (array) request()->input('filter.filter_value_id', []);
-    // in_stock dạng mảng vì name="filter[in_stock][]" — cho phép check cả 2 (= "Tất cả")
     $inStock = array_map('strval', (array) request()->input('filter.in_stock', []));
 @endphp
 
@@ -67,7 +66,7 @@
                 </div>
             </div>
 
-            @if (!(isset($hideManufacture) && $hideManufacture) && count($manufacturers))
+            @if (count($manufacturers))
                 <div class="list-group manufacturer">
                     <div class="list-group-item mb-10 mt-10">
                         <label class="fw-900">Hãng sản xuất</label>

@@ -43,7 +43,7 @@ trait HasAdvancedScopes
         return $query
             ->where(
                 fn(Builder $q) => $q
-                    ->where("{$table}.date_start", '<', $now)
+                    ->where("{$table}.date_start", '<=', $now)
                     ->orWhereNull("{$table}.date_start")
             )
             ->where(

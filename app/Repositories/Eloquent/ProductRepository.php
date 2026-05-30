@@ -53,13 +53,13 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 $values->first() === '1'
                     ? $q->where('product.quantity', '>', 0)
                     : $q->where(fn ($qq) => $qq->where('product.quantity', '<=', 0)
-                                                ->orWhereNull('product.quantity'));
+                        ->orWhereNull('product.quantity'));
             }),
 
             AllowedFilter::callback('search', function (Builder $q, $value) {
                 $q->where(function (Builder $qq) use ($value) {
                     $qq->where('product_description.name', 'like', "%{$value}%")
-                       ->orWhere('product_description.description', 'like', "%{$value}%");
+                        ->orWhere('product_description.description', 'like', "%{$value}%");
                 });
             }),
         ];
@@ -68,8 +68,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     protected function allowedSorts(): array
     {
         return [
-            AllowedSort::callback('price', fn (Builder $q, bool $descending) =>
-                $q->orderByEffectivePrice($descending ? 'desc' : 'asc')),
+            AllowedSort::callback('price', fn (Builder $q, bool $descending) => $q->orderByEffectivePrice($descending ? 'desc' : 'asc')),
             AllowedSort::field('created_at', 'product.created_at'),
             AllowedSort::field('viewed', 'product.viewed'),
             AllowedSort::field('rating', 'product.rating'),
@@ -87,25 +86,13 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return ['-created_at', 'created_at', 'price', '-price', 'name', '-name', '-viewed'];
     }
 
-    protected function withRelations(): array
-    {
-        $relations = $this->clientRelations();
-        $selected = (array) request()->input('filter.filter_value_id', []);
-        if (!empty($selected)) {
-            $relations[] = ['productFilters' => fn ($q) => $q->whereIn('filter_value_id', $selected)];
-            $relations[] = 'productFilters.filterValue.description';
-        }
-
-        return $relations;
-    }
-
     protected function baseQuery(): Builder
     {
         return $this->model->newQuery()
             ->select('product.*')
             ->leftJoin('product_description', function ($join) {
                 $join->on('product_description.product_id', '=', 'product.id')
-                     ->where('product_description.language_code', app()->getLocale());
+                    ->where('product_description.language_code', app()->getLocale());
             });
     }
 
@@ -122,7 +109,19 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $query;
     }
 
-    public function getProductSpecials(array $productIds)
+    protected function withRelations(): array
+    {
+        $relations = $this->clientRelations();
+        $selected = (array) request()->input('filter.filter_value_id', []);
+        if (! empty($selected)) {
+            $relations[] = ['productFilters' => fn ($q) => $q->whereIn('filter_value_id', $selected)];
+            $relations[] = 'productFilters.filterValue.description';
+        }
+
+        return $relations;
+    }
+
+    public function getByIds(array $productIds)
     {
         return $this->resetModel()->whereIn('id', $productIds)->get();
     }
@@ -179,19 +178,14 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
         $sorted = $productIds;
         sort($sorted);
-        $key = implode('_', [
-            getCoreConfig('cache.product_related'),
-            getUserGroupId(),
-            getUserType(),
-            md5(implode(',', $sorted)),
-        ]) . '_';
+        $key = implode('_', [getCoreConfig('cache.product_related'), getUserGroupId(), getUserType(), md5(implode(',', $sorted))]).'_';
 
         return $this->rememberCacheTagged(
             [getCoreConfig('cache.product_root')],
             $key,
             fn () => $this->clientQuery()
                 ->whereIn('product.id', $productIds)
-                ->orderByRaw('FIELD(product.id, ' . implode(',', $productIds) . ')')
+                ->orderByRaw('FIELD(product.id, '.implode(',', $productIds).')')
                 ->get(),
             getCoreConfig('time.cache')
         );
@@ -222,12 +216,12 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     protected function latestCacheKey(int $limit): string
     {
-        return implode('_', [getCoreConfig('cache.product_latest'), getUserGroupId(), getUserType(), $limit]) . '_';
+        return implode('_', [getCoreConfig('cache.product_latest'), getUserGroupId(), getUserType(), $limit]).'_';
     }
 
     protected function specialLatestCacheKey(int $limit): string
     {
-        return implode('_', ['product_special_latest', getUserGroupId(), getUserType(), $limit]) . '_';
+        return implode('_', ['product_special_latest', getUserGroupId(), getUserType(), $limit]).'_';
     }
 
     private static function normalizePrice(?string $value): ?int
@@ -236,6 +230,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             return null;
         }
         $digits = preg_replace('/[^\d]/', '', (string) $value);
+
         return $digits === '' ? null : (int) $digits;
     }
 }

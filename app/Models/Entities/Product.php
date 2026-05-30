@@ -144,12 +144,8 @@ class Product extends Base implements Auditable
 
     public function scopeHasActiveSpecial(Builder $query): Builder
     {
-        $now = Carbon::now();
-
-        return $query->whereHas('productSpecials', function ($q) use ($now) {
-            $q->where('user_group_id', getUserGroupId())
-                ->where(fn ($qq) => $qq->whereNull('date_start')->orWhere('date_start', '<=', $now))
-                ->where(fn ($qq) => $qq->whereNull('date_end')->orWhere('date_end', '>', $now));
+        return $query->whereHas('productSpecials', function ($q) {
+            $q->where('user_group_id', getUserGroupId())->dateStartToEnd();
         });
     }
 

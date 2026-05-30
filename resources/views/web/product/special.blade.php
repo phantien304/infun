@@ -5,7 +5,7 @@
     <meta property="og:rich_attachment" content="true" />
     <meta property="og:type" content="article" />
     <meta property="article:publisher" content="{!! getConfigDb('config_facebook') !!}" />
-    <meta property="og:url" itemprop="url" content="{!! route('product.special') !!}" />
+    <meta property="og:url" itemprop="url" content="{!! routeArea('product.special') !!}" />
     <meta property="og:image" itemprop="thumbnailUrl" content="{!! thumbnail(getModuleConfig('img_default'), 800, 354) !!}" />
     <meta property="og:image:width" content="800" />
     <meta property="og:image:height" content="354" />
@@ -15,7 +15,7 @@
     @include('web.share.structure._meta_common')
     <!-- Twitter Card -->
     <meta name="twitter:card" value="summary" />
-    <meta name="twitter:url" content="{!! route('product.special') !!}" />
+    <meta name="twitter:url" content="{!! routeArea('product.special') !!}" />
     <meta name="twitter:title" content="{!! $titleSeo !!}" />
     <meta name="twitter:description" content="{!! $descriptionSeo !!}" />
     <meta name="twitter:image" content="{!! thumbnail(getModuleConfig('img_default'), 800, 354) !!}" />

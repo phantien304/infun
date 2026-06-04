@@ -11,17 +11,20 @@ use Illuminate\Database\Eloquent\Collection;
 class CategoryRepository extends QueryableRepository implements CategoryRepositoryInterface
 {
     use CacheableRepository;
+
     public function model(): string
     {
         return Category::class;
     }
+
     public function listAllCached(): Collection
     {
         return $this->rememberCache(
-            getCoreConfig('cache.categories'),
-            fn() => $this->listAll()
+            setting('cache.categories'),
+            fn () => $this->listAll()
         );
     }
+
     protected function withRelations(): array
     {
         return ['description'];

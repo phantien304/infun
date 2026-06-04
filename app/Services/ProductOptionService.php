@@ -3,186 +3,268 @@
 namespace App\Services;
 
 use App\Models\Entities\Option;
-use App\Models\Entities\ProductOption;
+use App\Models\Entities\Product;
 use Illuminate\Support\Collection;
 
-/**
- * Chuẩn hoá ProductOption tree → mảng phẳng dùng cho blade detail.
- *
- * Logic gốc nằm trong ProductController cũ (`_buildProductOption`,
- * `_processProductOptionValues`, `_processProductOptionValues2`).
- * Tách ra service vì:
- *  - controller giữ "slim" theo chuẩn dự án mới
- *  - logic stateless, tái dùng được (vd: api detail trả JSON)
- */
 class ProductOptionService
 {
-    /**
-     * @param  Collection<int,ProductOption>  $productOptions  đã eager-load đủ
-     *                                                         option.optionValues.description + productOptionValues.optionValue.description +
-     *                                                         productOptionValues.productOptionValues2.optionValue.description
-     * @return array{0: array, 1: array}  [options, imageOptions]
-     */
-    public function build(Collection $productOptions): array
+    public function buildOptions(Product $product): array
     {
-        $data = [];
-        $images = [];
+        $hasVariants = (bool) ($product->has_variants ?? false);
 
-        foreach ($productOptions as $index => $item) {
-            $optionId = $item->option?->id;
-            $variation = $this->resolveVariation($optionId);
-            $children = $this->buildChildren($item->id);
+        $variantSection = $hasVariants
+            ? $this->buildVariantOptions($product)
+            : ['options' => [], 'imageOptions' => []];
 
-            [$productOptionValues, $imageOption] = $this->buildOptionValues(
-                $item->productOptionValues ?? collect(),
-                $variation,
-                $item->option?->type,
-                $children,
-            );
+        $customFieldOptions = $this->buildCustomFieldOptions($product);
 
-            $images = array_merge($images, $imageOption);
-
-            $data[$index] = [
-                'id' => $item->id,
-                'value' => $item->value,
-                'required' => $item->required,
-                'option_id' => $optionId,
-                'option_value_id' => [],
-                'option_value_2_id' => [],
-                'option_name' => $item->option?->description?->name,
-                'option_type' => $item->option?->type,
-                'name_display' => $item->option?->description?->name_display,
-                'variation' => $variation,
-                'product_option_values' => $productOptionValues,
-                'children' => $children,
-            ];
-        }
-
-        return [$data, $images];
-    }
-
-    /**
-     * `variation` ở DB: 1 = chọn (radio/select), 2 = nhập. Convention legacy.
-     */
-    protected function resolveVariation(?int $optionId): int
-    {
-        if (! $optionId) {
-            return 2;
-        }
-        return Option::where('id', $optionId)->where('variation', 1)->exists() ? 1 : 2;
-    }
-
-    protected function buildChildren(int $productOptionId): ?array
-    {
-        $child = ProductOption::query()
-            ->where('parent', $productOptionId)
-            ->with([
-                'option.description',
-                'option.optionValues' => fn ($q) => $q->orderBy('sort_order', 'ASC')->orderBy('id', 'ASC'),
-                'option.optionValues.description',
-            ])
-            ->first();
-
-        if (! $child || ! $child->option) {
-            return null;
-        }
-
-        $optChildValues = $child->option->optionValues->map(fn ($ov) => [
-            'id' => $ov->id,
-            'value' => $ov->description?->name,
-            'image' => resizeImage($ov->image, 50, 50, 'client'),
-        ])->all();
+        $options = [...$variantSection['options'], ...$customFieldOptions];
 
         return [
-            'id' => $child->option->id,
-            'name' => $child->option->description?->name,
-            'name_display' => $child->option->description?->name_display,
-            'type' => $child->option->type,
-            'variation' => $child->option->variation,
-            'option' => $optChildValues,
+            'options'        => $options,
+            'imageOptions'   => $variantSection['imageOptions'],
+            'variantMatrix'  => $hasVariants ? $this->buildVariantMatrix($product) : [],
+            'defaultVariant' => $hasVariants ? $this->resolveDefaultVariant($product) : null,
+            'variantGallery' => $hasVariants ? $this->buildVariantGallery($product) : [],
         ];
     }
 
-    protected function buildOptionValues(
-        Collection $productOptionValues,
-        int $variation,
-        ?string $optionType,
-        ?array $children,
-    ): array {
-        $data = [];
-        $images = [];
-        $lastVariation = array_key_last(getCoreConfig('variation'));
-
-        foreach ($productOptionValues as $index => $optValue) {
-            if ($optionType === 'image') {
-                $images[] = [
-                    'key' => 'opt'.$optValue->id,
-                    'image' => $optValue->image,
-                ];
-            }
-
-            $row = [
-                'id' => $optValue->id,
-                'image' => $optValue->image ? resizeImage($optValue->image, 1000, 1000, 'client') : '',
-                'option_value_1_id' => $optValue->option_value_1_id,
-                'name' => $optValue->optionValue?->description?->name ?? '',
-                'product_id' => $optValue->product_id,
-                'product_option_id' => $optValue->product_option_id,
-                'product_option_values2' => $this->buildOptionValues2(
-                    $optValue->productOptionValues2 ?? collect(),
-                    $children,
-                ),
-            ];
-
-            if ($variation === $lastVariation) {
-                $first = $optValue->productOptionValues2->first();
-                $price = (float) ($first->price ?? 0);
-                $pricePrefix = $first->price_prefix ?? '';
-                $row += [
-                    'price' => $pricePrefix === '+' ? $price : -$price,
-                    'price_prefix' => $pricePrefix,
-                    'quantity' => (int) ($first->quantity ?? 0),
-                ];
-            }
-
-            $data[$index] = $row;
+    protected function buildVariantGallery(Product $product): array
+    {
+        if (! $product->relationLoaded('productImages')) {
+            return [];
         }
 
-        return [$data, $images];
+        $gallery = [];
+        foreach ($product->productImages as $img) {
+            $variantId = $img->product_variant_id;
+            if ($variantId === null) {
+                continue;
+            }
+            $gallery[(int) $variantId][] = [
+                'image'      => (string) $img->image,
+                'alt'        => (string) ($img->alt ?? ''),
+                'sort_order' => (int) ($img->sort_order ?? 0),
+            ];
+        }
+
+        return $gallery;
     }
 
-    protected function buildOptionValues2(Collection $values2, ?array $children): array
+    protected function buildVariantOptions(Product $product): array
     {
-        $out = [];
-        $childType = $children['type'] ?? null;
-
-        foreach ($values2 as $i => $v2) {
-            $price = (float) $v2->price;
-            $signed = match ($v2->price_prefix) {
-                '+' => $price,
-                '-' => -$price,
-                default => 0.0,
-            };
-
-            $row = [
-                'id' => $v2->id,
-                'option_value_2_id' => $v2->option_value_2_id,
-                'name' => $children['name'] ?? null,
-                'value' => $v2->optionValue?->description?->name ?? '',
-                'price' => $signed,
-                'price_prefix' => $v2->price_prefix ?? '',
-                'quantity' => (int) ($v2->quantity ?? 0),
-                'type' => $children['type'] ?? '',
-                'variation' => $children['variation'] ?? null,
-            ];
-
-            if ($childType === 'image') {
-                $row['image'] = resizeImage($v2->optionValue?->image ?? '', 50, 50, 'client');
-            }
-
-            $out[$i] = $row;
+        $productVariants = $product->productVariants ?? collect();
+        if ($productVariants->isEmpty()) {
+            return ['options' => [], 'imageOptions' => []];
         }
 
-        return $out;
+        $variantDeclarations = ($product->productOptions ?? collect())
+            ->filter(fn ($po) => $po->option?->role === getCoreConfig('option.role_variant'));
+
+        if ($variantDeclarations->isEmpty()) {
+            return ['options' => [], 'imageOptions' => []];
+        }
+
+        $optionValuesByVariant = [];
+        $variantImages = [];
+        foreach ($productVariants as $variant) {
+            $image = (string) ($variant->image ?? '');
+            foreach ($variant->productVariantAttributes ?? [] as $attr) {
+                $optionId      = (int) $attr->option_id;
+                $optionValueId = (int) $attr->option_value_id;
+
+                if ($attr->optionValue) {
+                    $optionValuesByVariant[$optionId][$optionValueId] ??= $attr->optionValue;
+                }
+                if ($image !== '') {
+                    $variantImages[$optionValueId][$image] = true;
+                }
+            }
+        }
+        $variantImages = array_map(
+            fn (array $set) => array_key_first($set),
+            array_filter($variantImages, fn (array $set) => count($set) === 1),
+        );
+
+        $options = [];
+        $images  = [];
+        $index   = 0;
+
+        foreach ($variantDeclarations as $value) {
+            $option   = $value->option;
+            $optionId = (int) $option->id;
+
+            $optionValues = $optionValuesByVariant[$optionId] ?? [];
+            if (empty($optionValues)) {
+                continue;
+            }
+
+            $optionType = (string) $option->type;
+            [$rows, $rowImages] = $this->buildImageAndOptionValues(
+                collect($optionValues),
+                $optionType,
+                $variantImages,
+            );
+
+            $images = array_merge($images, $rowImages);
+
+            $options[$index++] = [
+                'id'                    => $optionId,
+                'value'                 => null,
+                'required'              => (bool) ($value->required ?? true),
+                'option_id'             => $optionId,
+                'option_name'           => $option->description?->name,
+                'option_type'           => $optionType,
+                'name_display'          => $option->description?->name_display ?? $option->description?->name,
+                'role'                  => getCoreConfig('option.role_variant'),
+                'product_option_values' => $rows,
+            ];
+        }
+
+        return ['options' => $options, 'imageOptions' => $images];
+    }
+
+    protected function buildImageAndOptionValues(Collection $optionValues, string $optionType, array $variantImages = []): array
+    {
+        $rows = [];
+        $images = [];
+
+        foreach ($optionValues as $ov) {
+            $name         = (string) ($ov->description?->name ?? '');
+            $optionValueImage = (string) ($ov->image ?? '');
+            $variantImage = $variantImages[(int) $ov->id] ?? '';
+
+            if ($optionType === 'image') {
+                $thumbnail = $variantImage !== '' ? $variantImage : $optionValueImage;
+                if ($thumbnail !== '') {
+                    $images[] = [
+                        'key'   => 'opt'.$ov->id,
+                        'image' => $thumbnail,
+                        'alt'   => $name,
+                    ];
+                }
+            }
+
+            $rows[] = [
+                'id'                => (int) $ov->id,
+                'option_value_id'   => (int) $ov->id,
+                'name'              => $name,
+                'image'             => $optionValueImage,
+                'variant_image'     => $variantImage
+            ];
+        }
+
+        return [$rows, $images];
+    }
+
+    protected function buildCustomFieldOptions(Product $product): array
+    {
+        $productOptions = ($product->productOptions ?? collect())
+            ->filter(fn ($value) => $value->option?->role === getCoreConfig('option.role_custom_field'));
+
+        if ($productOptions->isEmpty()) {
+            return [];
+        }
+
+        $data = [];
+        $index = 0;
+
+        foreach ($productOptions as $po) {
+            $option = $po->option;
+            $values = ($po->productOptionValues ?? collect())
+                ->map(fn ($pov) => [
+                    'id'              => (int) $pov->id,
+                    'option_value_id' => (int) $pov->option_value_id,
+                    'name'            => (string) ($pov->optionValue?->description?->name ?? ''),
+                    'image'           => (string) ($pov->image ?? ''),
+                    'product_id'      => (int) $pov->product_id,
+                    'option_id'       => (int) $pov->option_id,
+                ])
+                ->values()
+                ->all();
+
+            $optionId = (int) ($option->id ?? $po->option_id ?? 0);
+
+            $data[$index++] = [
+                'id'                    => $optionId,
+                'value'                 => $po->value,
+                'required'              => (bool) ($po->required ?? false),
+                'option_id'             => $optionId,
+                'option_name'           => $option->description?->name,
+                'option_type'           => (string) $option->type,
+                'name_display'          => $option->description?->name_display ?? $option->description?->name,
+                'role'                  => getCoreConfig('option.role_custom_field'),
+                'product_option_values' => $values,
+            ];
+        }
+
+        return $data;
+    }
+
+    protected function buildVariantMatrix(Product $product): array
+    {
+        $variants = $product->productVariants ?? collect();
+        $matrix = [];
+
+        foreach ($variants as $variant) {
+            $attributes = [];
+            foreach ($variant->productVariantAttributes ?? [] as $attr) {
+                $attributes[(int) $attr->option_id] = (int) $attr->option_value_id;
+            }
+            ksort($attributes);
+
+            $stock = $variant->productStock;
+            $available = $stock ? (int) $stock->available : 0;
+            $subtract = $stock ? (bool) $stock->subtract : true;
+
+            $matrix[] = [
+                'id'         => (int) $variant->id,
+                'sku'        => $variant->sku,
+                'signature'  => $variant->attribute_signature,
+                'attributes' => $attributes,
+                'price'      => (float) $variant->price,
+                'image'      => $variant->image,
+                'is_default' => (bool) $variant->is_default,
+                'available'  => $available,
+                'subtract'   => $subtract,
+                'label'      => $variant->description?->label,
+                'note'       => $variant->description?->note,
+            ];
+        }
+
+        return $matrix;
+    }
+
+    protected function resolveDefaultVariant(Product $product): ?array
+    {
+        $variants = $product->productVariants ?? collect();
+        $default = $variants->sortBy([
+            ['is_default', 'desc'],
+            ['sort_order', 'asc'],
+            ['id', 'asc'],
+        ])->first();
+
+        if (! $default) {
+            return null;
+        }
+
+        $attributes = [];
+        foreach ($default->productVariantAttributes ?? [] as $attr) {
+            $attributes[(int) $attr->option_id] = (int) $attr->option_value_id;
+        }
+        ksort($attributes);
+
+        $stock = $default->productStock;
+
+        return [
+            'id'         => (int) $default->id,
+            'price'      => (float) $default->price,
+            'image'      => $default->image,
+            'attributes' => $attributes,
+            'available'  => $stock ? (int) $stock->available : 0,
+            'sku'        => $default->sku,
+            'label'      => $default->description?->label,
+            'note'       => $default->description?->note,
+        ];
     }
 }

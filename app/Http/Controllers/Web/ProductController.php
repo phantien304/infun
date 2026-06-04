@@ -7,11 +7,11 @@ use App\Data\Output\ProductDTO;
 use App\Data\Output\StoreReviewDTO;
 use App\Http\Controllers\Controller;
 use App\Http\Supports\Pagination;
-use App\Models\Entities\Ingredient;
 use App\Models\Entities\UserWishlist;
 use App\Repositories\Interfaces\BlogRepositoryInterface;
 use App\Repositories\Interfaces\ReviewRepositoryInterface;
 use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
+use App\Repositories\Interfaces\UserWishlistRepositoryInterface;
 use App\Services\ProductOptionService;
 use Carbon\Carbon;
 
@@ -21,7 +21,7 @@ class ProductController extends Controller
         protected BlogRepositoryInterface $blogRepo,
         protected ReviewRepositoryInterface $reviewRepo,
         protected StoreReviewRepositoryInterface $storeReviewRepo,
-        protected ProductOptionService $optionService,
+        protected ProductOptionService $productOptionService,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -29,16 +29,13 @@ class ProductController extends Controller
         ];
     }
 
-    /**
-     * Trang chi tiết 1 sản phẩm. Routing đi qua HomeController::index(slug) →
-     * getControllerBySlug() forward về đây với $id parse từ slug.
-     *
-     * Pattern mới:
-     *  - Data + cache nằm ở repo (getProductDetail)
-     *  - Increment view tách thành 1 call repo nhỏ
-     *  - Option tree build bằng ProductOptionService (stateless)
-     *  - Blade nhận DTO, không nhận Model
-     */
+    protected function lazyMap(): array
+    {
+        return array_merge(parent::lazyMap(), [
+            'userWishlistRepo' => UserWishlistRepositoryInterface::class,
+        ]);
+    }
+
     public function index($id = '')
     {
         $id = (int) $id;
@@ -51,19 +48,21 @@ class ProductController extends Controller
 
         $product = ProductDTO::from($entity);
         $this->setBreadcrumb(['text' => $product->name, 'href' => $product->url, 'separator' => false]);
-        $this->processMetaSeo('buildForSeoByData', (string) $product->metaTitle, (string) $product->metaDescription);
+        $this->processMetaSeo('buildForSeoByData', (string) $product->metaTitle(), (string) $product->metaDescription());
 
-        [$options, $imageOptions] = $this->optionService->build($entity->productOptions ?? collect());
+        $tree = $this->productOptionService->buildOptions($entity);
 
         return $this->render('web.product.index', [
-            'entity'       => $entity,
-            'product'      => $product,
-            'options'      => $options,
-            'images'       => array_merge($product->gallery, $imageOptions),
-            'wishlist'     => $this->getProductUserWishlist($id),
-            'related'      => ProductDTO::collect($this->productRepo->getProductRelatedByProductId($id)),
-            'storeReviews' => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsByProduct($id)),
-            'blogs'        => BlogDTO::collect($this->blogRepo->getBlogLatest(4)),
+            'entity'        => $product,
+            'options'        => $tree['options'],
+            'variantMatrix'  => $tree['variantMatrix'],
+            'defaultVariant' => $tree['defaultVariant'],
+            'variantGallery' => $tree['variantGallery'],
+            'images'         => array_merge($product->gallery, $tree['imageOptions']),
+            'wishlist'       => $this->getProductUserWishlist($id),
+            'related'        => ProductDTO::collect($this->productRepo->getProductRelatedByProductId($id)),
+            'storeReviews'   => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsByProduct($id)),
+            'blogs'          => BlogDTO::collect($this->blogRepo->getBlogLatest(4)),
         ]);
     }
 
@@ -108,9 +107,7 @@ class ProductController extends Controller
         if (! $userId) {
             return null;
         }
-        return UserWishlist::where('user_id', $userId)
-            ->where('product_id', $productId)
-            ->first();
+        return $this->userWishlistRepo->findForUser($userId, $productId);
     }
 
     public function getListReview($productId = 0)
@@ -129,7 +126,7 @@ class ProductController extends Controller
         $pagination->pageIndex = $pageIndex;
         $pagination->pageSize = $pageSize;
         $pagination->text = 'Hiển thị {start} đến {end} trong {total} ({pages} Trang)';
-        $pagination->url = route('product.getListReview', ['product_id' => $productId, 'pageIndex' => '_page']);
+        $pagination->url = routeArea('product.getListReview', ['product_id' => $productId, 'pageIndex' => '_page']);
 
         $pagination = $pagination->render();
         return $this->_buildTemplateReview($reviews, $pagination);
@@ -151,7 +148,7 @@ class ProductController extends Controller
                 'author' => $item['author'],
                 'text' => html_entity_decode($item['text'], ENT_QUOTES, 'UTF-8'),
                 'rating' => (int)$item['rating'],
-                'emotion' => '<img src="/client/images/rate_' . $item['rating'] . '.svg" style="min-width: 14px;vertical-align: text-top;"/>',
+                'emotion' => '<img src="/web/images/rate_' . $item['rating'] . '.svg" style="min-width: 14px;vertical-align: text-top;"/>',
                 'color_emotion' => getModuleConfig('emotion.background.' . $item['rating']),
                 'text_emotion' => getModuleConfig('emotion.text_emotion.' . $item['rating']),
                 'created_at' => Carbon::parse($item['created_at'])->diffForHumans()
@@ -202,19 +199,5 @@ class ProductController extends Controller
         $data = $this->reviewRepo->getDataPagination($query);
 
         return [$total, $data];
-    }
-
-    protected function _getProductIngredients($entity)
-    {
-        $ingredientIds = $entity->productIngredients->pluck('ingredient_id');
-        if ($ingredientIds->isEmpty()) {
-            return collect();
-        }
-        return Ingredient::whereIn('id', $ingredientIds)
-            ->with([
-                'ingredientEffects.effect',
-                'ingredientSafeties.safety',
-                'ingredientSkincares.skincare',
-            ])->get();
     }
 }

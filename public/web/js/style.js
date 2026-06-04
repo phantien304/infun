@@ -449,188 +449,396 @@ $(document).ready(function () {
         }, 0);
         return false;
     });
-    $(document).on('click', '.radio-choose input', function (event) {
-        let optValues = $(this).val();
-        let optionId = $(this).data('option');
-        let type = $(this).data('type');
-        let price = $(this).data('price');
-        renderOptionHtmlV2(optionId, optValues, type);
-        optionProductPrice(optionId, price, type);
-        $(event.target).closest('#option-' + optionId).addClass('has-choose');
-        $(event.target).closest('#option-' + optionId).children('.active').removeClass('active');
-        $(event.target).parent().addClass('active');
-        let img_zoom = $(this).attr('data-image');
-        $('.product-image-slider .slick-active img').attr('src', img_zoom);
-        $('.zoomWindowContainer div').css('background-image', 'url(' + img_zoom + ')');
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('change', '.select-choose', function (event) {
-        let optValues = $(this).val();
-        let optionId = $(this).find(":selected").data("option");
-        let type = $(this).find(":selected").data("type");
-        let price = $(this).find(":selected").data("price");
-        renderOptionHtmlV2(optionId, optValues, type);
-        optionProductPrice(optionId, price, type);
-        $('#option-' + optionId).addClass('has-choose');
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('change', '.select-child-choose', function (event) {
-        let optionId = $(this).find(":selected").data("option");
-        let optionProduct = $('#option-choose-' + optionId);
-        if (!$('#option-child-' + optionId).hasClass('has-choose')) {
-            optionProduct.val(isNaN(parseInt(optionProduct.val())) ? 1 : parseInt(optionProduct.val()) + 1);
-        }
-        $('#option-child-' + optionId).addClass('has-choose');
-        if (optionProduct.val() == 2) {
-            optionProduct.attr('data-price', $(this).find(":selected").data("price"));
-        }
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('click', '.radio-child-choose input', function (event) {
-        let optionId = $(this).data('option');
-        let optionProduct = $('#option-choose-' + optionId);
-        if (!$(event.target).closest('#option-child-' + optionId).hasClass('has-choose')) {
-            optionProduct.val(isNaN(parseInt(optionProduct.val())) ? 1 : parseInt(optionProduct.val()) + 1);
-        }
-        $(event.target).closest('#option-child-' + optionId).addClass('has-choose');
-        $(event.target).closest('.radio-child-choose').children('.active').removeClass('active');
-        $(event.target).parent().addClass('active');
-        if (optionProduct.val() == 2) {
-            optionProduct.attr('data-price', $(this).data('price'));
-        }
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('click', '.image-child-choose input', function (event) {
-        let optionId = $(this).data('option');
-        let optionProduct = $('#option-choose-' + optionId);
-        if (!$(event.target).closest('#option-child-' + optionId).hasClass('has-choose')) {
-            optionProduct.val(isNaN(parseInt(optionProduct.val())) ? 1 : parseInt(optionProduct.val()) + 1);
-        }
-        $(event.target).closest('#option-child-' + optionId).addClass('has-choose');
-        $(event.target).closest('.image-child-choose').children('.active').removeClass('active');
-        $(event.target).parent().addClass('active');
-        if (optionProduct.val() == 2) {
-            optionProduct.attr('data-price', $(this).data('price'));
-        }
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('click', '.checkbox-child-choose input', function (event) {
-        let optionId = $(this).data('option');
-        let optionProduct = $('#option-choose-' + optionId);
-        let checkboxChecked = $('#option-child-' + optionId + ' input:checked');
-        if (checkboxChecked.length > 0 && !$(event.target).closest('#option-child-' + optionId).hasClass('has-choose')) {
-            optionProduct.val(isNaN(parseInt(optionProduct.val())) ? 1 : parseInt(optionProduct.val()) + 1);
-            $(event.target).closest('#option-child-' + optionId).addClass('has-choose');
-        }
-        if (checkboxChecked.length === 0) {
-            optionProduct.val(isNaN(parseInt(optionProduct.val())) ? 0 : parseInt(optionProduct.val()) - 1);
-            $(event.target).closest('#option-child-' + optionId).removeClass('has-choose');
-            optionProduct.attr('data-price', 0);
-        }
-        if (optionProduct.val() == 2) {
-            let checkedOptChild = 0;
-            $.each(checkboxChecked, function () {
-                checkedOptChild = checkedOptChild + (isNaN(parseInt($(this).data('price'))) ? 0 : parseInt($(this).data('price')));
-            });
-            optionProduct.attr('data-price', checkedOptChild);
-        }
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('click', '.radio-choose-v2 input', function (event) {
-        let optValues = $(this).val();
-        let optionId = $(this).data('option');
-        let optionProduct = $('#option-choose-' + optionId);
-        if (!$(event.target).closest('#option-' + optionId).hasClass('has-choose')) {
-            optionProduct.val(isNaN(parseInt(optionProduct.val())) ? 2 : 0);
-        }
-        $(event.target).closest('#option-' + optionId).addClass('has-choose');
-        $(event.target).closest('.radio-choose-v2').children('.active').removeClass('active');
-        $(event.target).parent().addClass('active');
+    (function () {
+        if (typeof variantMatrix === 'undefined') { window.variantMatrix = []; }
+        if (typeof defaultVariant === 'undefined') { window.defaultVariant = null; }
 
-        let option = options.filter(opt => opt.id === parseInt(optionId))[0];
-        option = option['product_option_values'];
-        if (Array.isArray(option)) {
-            let optionValues = option.filter(opt => opt.id === parseInt(optValues))[0];
-            $("#option-value-" + optionId).val(optionValues['name']);
-            let optionValues2 = optionValues['product_option_values2'];
-            if (Array.isArray(optionValues2)) {
-                $('#option-child-' + optionId).val(optionValues2[0]['id'])
+        var PRICE_SELECTOR = 'b#price-product';
+
+        /**
+         * Tập option_id thực sự tham gia SKU (xuất hiện trong attributes của
+         * ít nhất 1 variant). Custom field role có thể render widget radio/select
+         * giống variant nhưng KHÔNG xuất hiện ở đây — JS dùng set này để loại
+         * khỏi cả variant lookup lẫn out-of-stock check, tránh false positive.
+         */
+        var VARIANT_OPTION_IDS = (function () {
+            var ids = new Set();
+            (Array.isArray(variantMatrix) ? variantMatrix : []).forEach(function (v) {
+                Object.keys(v.attributes || {}).forEach(function (k) {
+                    ids.add(parseInt(k, 10));
+                });
+            });
+            return ids;
+        })();
+
+        /**
+         * Đọc selection hiện tại từ DOM. Trả về map { option_id: option_value_id }
+         * chỉ với group đã chọn — group chưa chọn không xuất hiện.
+         *
+         * Chỉ kể inputs có option_id thuộc VARIANT_OPTION_IDS — custom field role
+         * (nếu render dạng radio/select) bị bỏ qua, không phá lookup.
+         *
+         * Convention DB: variant role chỉ cho phép 1 value/option_id (PK pivot
+         * `product_variant_attribute`). Checkbox cho variant role là data-bug
+         * — JS lấy value cuối cùng được check, overwrite cái trước.
+         */
+        function readSelectedAttributes() {
+            var attrs = {};
+            $('.input-option input[type=radio]:checked, .input-option input[type=checkbox]:checked')
+                .each(function () {
+                    var optionId = parseInt($(this).attr('data-option-id'), 10);
+                    var optionValueId = parseInt($(this).attr('data-option-value-id'), 10);
+                    if (!optionId || !optionValueId) return;
+                    if (!VARIANT_OPTION_IDS.has(optionId)) return;
+                    attrs[optionId] = optionValueId;
+                });
+            $('.input-option select').each(function () {
+                var $opt = $(this).find(':selected');
+                if (!$(this).val()) return;
+                var optionId = parseInt($(this).attr('data-option-id'), 10);
+                var optionValueId = parseInt($opt.attr('data-option-value-id'), 10);
+                if (!optionId || !optionValueId) return;
+                if (!VARIANT_OPTION_IDS.has(optionId)) return;
+                attrs[optionId] = optionValueId;
+            });
+            return attrs;
+        }
+
+        /**
+         * Match variant exact: số lượng key + từng cặp (option_id, option_value_id)
+         * phải khớp. Partial selection → trả null, giá giữ nguyên (default hoặc
+         * giá hiện tại).
+         */
+        function findVariant(selected) {
+            var keys = Object.keys(selected);
+            if (!keys.length || !Array.isArray(variantMatrix)) return null;
+
+            return variantMatrix.find(function (v) {
+                var vKeys = Object.keys(v.attributes || {});
+                if (vKeys.length !== keys.length) return false;
+                return keys.every(function (k) {
+                    return String(v.attributes[k]) === String(selected[k]);
+                });
+            }) || null;
+        }
+
+        function formatPriceLabel(price) {
+            if (!price || price <= 0) return 'Liên hệ';
+            return number_format(price) + 'đ';
+        }
+
+        /**
+         * Navigate slick chính tới slide có src khớp `targetSrc`. Trả true
+         * nếu tìm thấy + đã goto, false nếu không. KHÔNG mutate src của slide
+         * → khi user click thumb đầu vẫn thấy ảnh gốc, không bị "kẹt" variant
+         * image như approach mutate trước đây.
+         *
+         * Hoạt động vì `$images = $product->gallery + imageOptions` đã chứa
+         * sẵn variant swatch images như slide cuối, slick render hết.
+         */
+        function goToImageBySrc(targetSrc) {
+            if (!targetSrc) return false;
+            var $slider = $('.product-image-slider');
+            if (!$slider.length || !$slider.hasClass('slick-initialized')) return false;
+
+            var slick = $slider.slick('getSlick');
+            var $slides = slick.$slides;
+            for (var i = 0; i < $slides.length; i++) {
+                if ($($slides[i]).find('img').attr('src') === targetSrc) {
+                    $slider.slick('slickGoTo', i);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Quay về slide 0 (ảnh chính product). Dùng khi user de-select variant
+         * (click lại swatch đã active) → main slider revert về ảnh sản phẩm
+         * mặc định, không kẹt ở variant image cuối.
+         */
+        function resetMainSlider() {
+            var $slider = $('.product-image-slider');
+            if ($slider.length && $slider.hasClass('slick-initialized')) {
+                $slider.slick('slickGoTo', 0);
             }
         }
 
-        if (optionProduct.val() == 2) {
-            optionProduct.attr('data-price', $(this).data('price'));
+        function swapMainImage(src) {
+            if (!src) return;
+            // Ưu tiên navigate slick — KHÔNG mutate src (tránh bug "thumb đầu
+            // hiển thị variant"). Slide variant đã có sẵn trong $images.
+            if (goToImageBySrc(src)) return;
+            // Fallback: nếu src không match slide nào (vd ảnh variant không
+            // được render thành slide), mới mutate src của slide hiện tại.
+            $('.product-image-slider .slick-active img').attr('src', src);
+            $('.zoomWindowContainer div').css('background-image', 'url(' + src + ')');
         }
 
-        let img_zoom = $(this).attr('data-image');
-        if (img_zoom) {
-            $('.product-image-slider .slick-active img').attr('src', img_zoom);
-            $('.zoomWindowContainer div').css('background-image', 'url(' + img_zoom + ')');
+        /**
+         * Áp variant đã chọn lên UI: giá, ảnh chính, toggle nút mua/liên hệ.
+         * Khi `variant` null (selection partial / không khớp) → KHÔNG động vào
+         * giá, tránh nháy về 0.
+         *
+         * @param {Object} variant — variant data từ variantMatrix / defaultVariant
+         * @param {boolean} [swapImg=true] — có swap ảnh main slider không.
+         *   Init page load PHẢI truyền false để main slider giữ $images[0]
+         *   (= product.image), khớp với thumb[0]. Nếu init swap, main hiển thị
+         *   variant.image còn thumb[0] hiển thị product.image → user thấy main
+         *   khác thumb đầu, gây nhầm "chọn variant nào hiện ảnh đó".
+         *   User click variant chủ động → swap (default true).
+         */
+        function applyVariant(variant, swapImg) {
+            if (!variant) return;
+            if (typeof swapImg === 'undefined') swapImg = true;
+
+            $(PRICE_SELECTOR).html(formatPriceLabel(variant.price));
+
+            // Stock-aware buttons: dùng cùng id #button-cart / #button-contact
+            // mà blade index.blade.php toggle khi quantity = 0.
+            var inStock = !variant.subtract || (variant.available && variant.available > 0);
+            $('#button-cart').toggle(!!inStock);
+            $('#button-contact').toggle(!inStock);
+
+            if (swapImg && variant.image) swapMainImage(variant.image);
         }
 
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('click', '.checkbox-choose-v2 input', function (event) {
-        let optionId = $(this).data('option');
-        let optionProduct = $('#option-choose-' + optionId);
-        let checkboxChecked = $('#option-' + optionId + ' input:checked');
-        if (checkboxChecked.length > 0 && !$(event.target).closest('#option-' + optionId).hasClass('has-choose')) {
-            optionProduct.val(2);
-            $(event.target).closest('#option-' + optionId).addClass('has-choose');
-        }
-        if (checkboxChecked.length === 0) {
-            optionProduct.val(0);
-            $(event.target).closest('#option-' + optionId).removeClass('has-choose');
-            optionProduct.attr('data-price', 0);
+        /**
+         * Check 1 option_value còn khả dụng không, GIẢ SỬ user chọn nó cùng
+         * với các option khác đã chọn (overwrite cùng group nếu trùng option_id).
+         *
+         * Available = tồn tại ít nhất 1 variant compatible với selection
+         * hypothetical VÀ (variant.subtract = false) HOẶC (variant.available > 0).
+         *
+         * Dynamic, không phải static — kết quả thay đổi mỗi khi user toggle 1
+         * option khác. UX kiểu Shopify: chọn Color=Red → các Size không có
+         * variant (Red, Size) còn hàng sẽ tự grey-out.
+         */
+        function isValueAvailable(selected, optionId, valueId) {
+            var hypo = Object.assign({}, selected);
+            hypo[optionId] = valueId;
+            var hypoKeys = Object.keys(hypo);
+
+            return variantMatrix.some(function (v) {
+                var attrs = v.attributes || {};
+                var matches = hypoKeys.every(function (k) {
+                    return String(attrs[k]) === String(hypo[k]);
+                });
+                if (!matches) return false;
+                return !v.subtract || (v.available && v.available > 0);
+            });
         }
 
-        let option = options.filter(opt => opt.id === parseInt(optionId))[0];
-        option = option['product_option_values'];
-        if (Array.isArray(option)) {
-            $.each(checkboxChecked, function () {
-                let optionValues = option.filter(opt => opt.id === parseInt($(this).val()))[0];
-                let optionValues2 = optionValues['product_option_values2'];
-                if (Array.isArray(optionValues2)) {
-                    $('input[name="option[' + optionId + '][children][' + $(this).val() + '][]"]').val(optionValues2[0]['id'])
+        /**
+         * Disable mọi option_value không feasible với selection hiện tại.
+         * Áp `disabled` attribute (browser block click + style mờ mặc định) +
+         * class `.out-of-stock` trên wrapper để CSS custom thêm nếu cần.
+         *
+         * Khi `allowAutoUncheck = true`: nếu 1 input/option đang checked bị
+         * disable do constraint mới (vd user vừa đổi Color sang Blue làm
+         * Size=M không còn variant in-stock) → tự uncheck + dọn `has-choose`
+         * /`active` của group. Form submit sẽ không kẹt thiếu key (input
+         * disabled không serialize qua jQuery .serialize()).
+         *
+         * Sau khi auto-uncheck, selection lỏng hơn → re-run refresh 1 lần
+         * (allowAutoUncheck=false, defensive chống loop dù logic không thể
+         * loop vì uncheck chỉ thả constraint) để cập nhật lại disabled state
+         * của các option_value vừa được "giải phóng". Cuối cùng re-apply giá
+         * — nếu selection mới khớp 1 variant đầy đủ thì hiển thị giá đó,
+         * không thì fallback về defaultVariant để user không thấy giá của
+         * combo vừa "chết".
+         */
+        function refreshAvailability(allowAutoUncheck) {
+            if (!Array.isArray(variantMatrix) || !variantMatrix.length) return;
+            var selected = readSelectedAttributes();
+            var hasSelection = Object.keys(selected).length > 0;
+            var uncheckedAny = false;
+
+            // Shopee-style UX: value V của option O bị disable CHỈ khi:
+            //   1) Đã có selection ở option khác (hasSelection=true), VÀ
+            //   2) O chưa được chọn (user chưa active option này, đang explore), VÀ
+            //   3) Combo `selected ∪ {O: V}` không có in-stock variant nào.
+            //
+            // Ngược lại:
+            //  - Chưa chọn gì → ALL enable (init page load)
+            //  - Option O đã được chọn → mọi value của O đều enable (cho user
+            //    switch tự do trong cùng option, vd Blue ↔ Red).
+            //  - Combo khả thi → enable.
+            //
+            // Mục đích: tránh dead-end UX. User luôn picked được color/size đầu
+            // tiên, sau đó chỉ greyed-out các value option khác không match
+            // — đúng pattern Shopee/Tiki/Lazada.
+
+            // Radio + checkbox: data-option-id + data-option-value-id nằm trên input
+            $('.input-option input[type=radio][data-option-value-id], ' +
+              '.input-option input[type=checkbox][data-option-value-id]').each(function () {
+                var $input = $(this);
+                var optionId = parseInt($input.attr('data-option-id'), 10);
+                var valueId = parseInt($input.attr('data-option-value-id'), 10);
+                if (!optionId || !valueId) return;
+                // Custom field nếu render radio/select: KHÔNG check availability
+                // (luôn cho user chọn được). Variant chỉ áp dụng cho variant role.
+                if (!VARIANT_OPTION_IDS.has(optionId)) return;
+
+                var optionAlreadySelected = selected[optionId] !== undefined;
+                var ok = !hasSelection
+                       || optionAlreadySelected
+                       || isValueAvailable(selected, optionId, valueId);
+
+                $input.prop('disabled', !ok);
+                $input.parent().toggleClass('out-of-stock', !ok);
+
+                if (!ok && allowAutoUncheck && $input.is(':checked')) {
+                    $input.prop('checked', false);
+                    uncheckedAny = true;
                 }
             });
-        }
 
-        if (optionProduct.val() == 2) {
-            let checkedOptChild = 0;
-            $.each(checkboxChecked, function () {
-                checkedOptChild = checkedOptChild + (isNaN(parseInt($(this).data('price'))) ? 0 : parseInt($(this).data('price')));
+            // Select: data-option-id ở <select>, data-option-value-id ở từng <option>
+            $('.input-option select[data-option-id]').each(function () {
+                var $select = $(this);
+                var optionId = parseInt($select.attr('data-option-id'), 10);
+                if (!optionId) return;
+                if (!VARIANT_OPTION_IDS.has(optionId)) return;
+                var currentVal = $select.val();
+                var optionAlreadySelected = selected[optionId] !== undefined;
+
+                $select.find('option[data-option-value-id]').each(function () {
+                    var $opt = $(this);
+                    var valueId = parseInt($opt.attr('data-option-value-id'), 10);
+                    if (!valueId) return;
+
+                    var ok = !hasSelection
+                           || optionAlreadySelected
+                           || isValueAvailable(selected, optionId, valueId);
+                    $opt.prop('disabled', !ok);
+
+                    if (!ok && allowAutoUncheck && String(currentVal) === String(valueId)) {
+                        $select.val('');
+                        $('#option-value-' + optionId).val('');
+                        uncheckedAny = true;
+                    }
+                });
             });
-            optionProduct.attr('data-price', checkedOptChild);
-        }
-        $('b#price-product').html(getPriceProduct());
-    });
-    $(document).on('change', '.select-choose-v2', function (event) {
-        let optValues = $(this).val();
-        let optionId = $(this).find(":selected").data("option");
-        let optionProduct = $('input#option-choose-' + optionId);
-        if (optValues !== '') {
-            optionProduct.val(2);
-            optionProduct.attr('data-price', $(this).find(":selected").data("price"));
-            $('#option-value-' + optionId).val($(this).find(":selected").data("label"));
 
-            let option = options.filter(opt => opt.id === parseInt(optionId))[0];
-            option = option['product_option_values'];
-            if (Array.isArray(option)) {
-                let optionValues = option.filter(opt => opt.id === parseInt(optValues))[0];
-                let optionValues2 = optionValues['product_option_values2'];
-                if (Array.isArray(optionValues2)) {
-                    $('#option-child-' + optionId).val(optionValues2[0]['id'])
+            if (uncheckedAny) {
+                // Dọn `has-choose` / `active` cho group radio/checkbox đã rỗng.
+                // Bắt cả select có val rỗng sau auto-clear (id select trùng pattern
+                // `#option-{id}` với group radio/checkbox).
+                $('.radio-choose-v2, .checkbox-choose-v2').each(function () {
+                    var $group = $(this);
+                    var anyChecked = $group.find('input:checked').length > 0;
+                    $group.toggleClass('has-choose', anyChecked);
+                    if (!anyChecked) {
+                        $group.children('.active').removeClass('active');
+                    }
+                });
+                $('.select-choose-v2').each(function () {
+                    var $select = $(this);
+                    $('#option-' + $select.data('option')).toggleClass('has-choose', !!$select.val());
+                });
+
+                // Re-run refresh (no auto-uncheck → no recursion) để cập nhật
+                // disabled state cho các value vừa được giải phóng.
+                refreshAvailability(false);
+
+                // Re-apply giá: combo mới đủ thì hiển thị giá đó, không thì
+                // rơi về defaultVariant để tránh hiển thị giá "ma".
+                var newVariant = findVariant(readSelectedAttributes());
+                if (newVariant) {
+                    applyVariant(newVariant);
+                } else if (defaultVariant) {
+                    applyVariant(defaultVariant);
                 }
             }
-        } else {
-            optionProduct.val(0);
-            optionProduct.attr('data-price', 0);
-            $('#option-value-' + optionId).val('');
-            $('#option-child-' + optionId).val('')
         }
-        $('b#price-product').html(getPriceProduct());
-    });
+
+        function recompute() {
+            applyVariant(findVariant(readSelectedAttributes()));
+            refreshAvailability(true);
+        }
+
+        // ---- Init: áp variant default khi page load (CHỈ giá + nút, KHÔNG ảnh) -----
+        $(function () {
+            // swapImg=false để main slider giữ product.image (= $images[0]),
+            // khớp với thumb đầu. Variant.image chỉ swap khi user actively click.
+            if (defaultVariant) applyVariant(defaultVariant, false);
+            // Init không có selection → không có gì để uncheck. Vẫn truyền
+            // `true` cho thống nhất với recompute(); nếu DOM có pre-checked
+            // value từ server-side trùng combo out-of-stock thì cũng được dọn.
+            refreshAvailability(true);
+        });
+
+        // ---- Variant role: radio / image swatch -------
+        // Click pattern: lần đầu click 1 swatch → select (active class +
+        // checked + swap ảnh). Click LẠI swatch đã active → de-select (uncheck
+        // + clear active + reset slider về slide 0). Cho phép user "huỷ" việc
+        // chọn color khi muốn xem lại toàn bộ product/picker khác.
+        $(document).on('click', '.radio-choose-v2 input', function (e) {
+            var $input = $(this);
+            if ($input.prop('disabled')) {
+                e.preventDefault();
+                return;
+            }
+
+            var optionId = $input.data('option');
+            var $wrapper = $input.parent();
+            var $group = $input.closest('.radio-choose-v2');
+
+            // Click lại swatch đã active → toggle off
+            if ($wrapper.hasClass('active')) {
+                $input.prop('checked', false);
+                $wrapper.removeClass('active');
+                $('#option-' + optionId).removeClass('has-choose');
+                $('#option-value-' + optionId).val('');
+
+                resetMainSlider();
+                // Reset price/stock về defaultVariant (KHÔNG swap ảnh).
+                if (defaultVariant) applyVariant(defaultVariant, false);
+                refreshAvailability(true);
+                return;
+            }
+
+            // Toggle on: clear active group + set wrapper
+            $('#option-' + optionId).addClass('has-choose');
+            $group.children('.active').removeClass('active');
+            $wrapper.addClass('active');
+
+            // Capture label cho hidden input (backend đọc khi add-to-cart).
+            $('#option-value-' + optionId).val($input.next('label').text().trim());
+
+            // Image swatch: navigate slick tới ảnh variant ngay khi click,
+            // không chờ đủ tổ hợp. swapMainImage ưu tiên goToImageBySrc.
+            var swatch = $input.attr('data-image');
+            if (swatch) swapMainImage(swatch);
+
+            recompute();
+        });
+
+        $(document).on('click', '.checkbox-choose-v2 input', function () {
+            var $input = $(this);
+            var optionId = $input.data('option');
+            var $group = $('#option-' + optionId);
+            var hasChecked = $group.find('input:checked').length > 0;
+            $group.toggleClass('has-choose', hasChecked);
+
+            recompute();
+        });
+
+        $(document).on('change', '.select-choose-v2', function () {
+            var $select = $(this);
+            var optionId = $select.data('option');
+            var $opt = $select.find(':selected');
+            $('#option-' + optionId).toggleClass('has-choose', !!$select.val());
+            $('#option-value-' + optionId).val($opt.attr('data-label') || '');
+            recompute();
+        });
+
+        $(document).on('input change', '.input-choose, .textarea-choose', function () {
+            var $el = $(this);
+            $('#option-value-' + $el.data('option')).val($el.val());
+        });
+    })();
     $(document).on('click', '#button-cart', function () {
         $.ajax({
             url: '/checkout/add-to-cart',
@@ -651,10 +859,6 @@ $(document).ready(function () {
                     for (i in json['message']) {
                         if (json['message'][i]['parent']) {
                             $('#option-' + i).after('<span class="error text-danger">' + json['message'][i]['parent'] + '</span>');
-                        }
-                        if (json['message'][i]['child']) {
-                            let nameChild = options.filter(k => k.id == i)[0]['children']['name_display'] ?? '';
-                            $('#option-child-' + i).after('<span class="error text-danger">' + json['message'][i]['child'] + nameChild + '</span>');
                         }
                     }
                     if (json['message']['quantity']) {
@@ -691,10 +895,6 @@ $(document).ready(function () {
                     for (i in json['message']) {
                         if (json['message'][i]['parent']) {
                             $('#option-' + i).after('<span class="error text-danger">' + json['message'][i]['parent'] + '</span>');
-                        }
-                        if (json['message'][i]['child']) {
-                            let nameChild = options.filter(k => k.id == i)[0]['children']['name_display'] ?? '';
-                            $('#option-child-' + i).after('<span class="error text-danger">' + json['message'][i]['child'] + nameChild + '</span>');
                         }
                     }
                     if (json['message']['quantity']) {
@@ -894,35 +1094,68 @@ var productDetails = function () {
     $('.product-image-slider').slick({
         slidesToShow: 1,
         slidesToScroll: 1,
-        loop: false,
+        infinite: false,
         arrows: false,
-        fade: false,
+        fade: true,
+        speed: 0,
         asNavFor: '.slider-nav-thumbnails',
     });
 
     $('.slider-nav-thumbnails').slick({
         slidesToShow: 4,
-        slidesToScroll: 2,
+        slidesToScroll: 1,
+        infinite: false,
         asNavFor: '.product-image-slider',
         dots: false,
         focusOnSelect: true,
+        speed: 0,
         prevArrow: '<button type="button" class="slick-prev"><i class="fi-rs-arrow-small-left"></i></button>',
         nextArrow: '<button type="button" class="slick-next"><i class="fi-rs-arrow-small-right"></i></button>'
     });
 
-    /* Remove active class from all thumbnail slides */
+    $(document).on('mouseenter', '.slider-nav-thumbnails .slick-slide:not(.slick-cloned)', function () {
+        var $thumb = $(this);
+        var $strip = $('.slider-nav-thumbnails');
+        var $thumbImg = $thumb.find('img');
+        if (!$thumbImg.length) return;
+
+        $strip.addClass('is-hovering')
+              .find('.slick-slide.is-hover-active')
+              .removeClass('is-hover-active');
+        $thumb.addClass('is-hover-active');
+
+        var mainSrc = $thumbImg.attr('src').replace(/\/\d+x\d+\//, '/1000x1000/');
+        var $mainImg = $('.product-image-slider .slick-active img');
+        if (!$mainImg.length) return;
+        if ($mainImg.data('hoverBaseline') === undefined) {
+            $mainImg.data('hoverBaseline', $mainImg.attr('src'));
+        }
+        $mainImg.attr('src', mainSrc);
+        $('.zoomWindowContainer div').css('background-image', 'url(' + mainSrc + ')');
+    });
+
+    $(document).on('mouseleave', '.slider-nav-thumbnails', function () {
+        var $strip = $(this);
+        $strip.removeClass('is-hovering')
+              .find('.slick-slide.is-hover-active')
+              .removeClass('is-hover-active');
+
+        var $mainImg = $('.product-image-slider .slick-active img');
+        var baseline = $mainImg.data('hoverBaseline');
+        if (baseline !== undefined) {
+            $mainImg.attr('src', baseline);
+            $mainImg.removeData('hoverBaseline');
+            $('.zoomWindowContainer div').css('background-image', 'url(' + baseline + ')');
+        }
+    });
+
     $('.slider-nav-thumbnails .slick-slide').removeClass('slick-active');
-
-    /* Set active class to first thumbnail slides */
     $('.slider-nav-thumbnails .slick-slide').eq(0).addClass('slick-active');
-
-    /* On before slide change match active thumbnail to current slide*/
     $('.product-image-slider').on('beforeChange', function (event, slick, currentSlide, nextSlide) {
         var mySlideNumber = nextSlide;
         $('.slider-nav-thumbnails .slick-slide').removeClass('slick-active');
         $('.slider-nav-thumbnails .slick-slide').eq(mySlideNumber).addClass('slick-active');
     });
-
     $('.product-image-slider').on('beforeChange', function (event, slick, currentSlide, nextSlide) {
         var img = $(slick.$slides[nextSlide]).find("img");
         $('.zoomWindowContainer,.zoomContainer').remove();
@@ -933,7 +1166,6 @@ var productDetails = function () {
             zoomWindowFadeOut: 750
         });
     });
-    /*Elevate Zoom*/
     if ($(".product-image-slider").length) {
         $('.product-image-slider .slick-active img').elevateZoom({
             zoomType: "inner",
@@ -942,7 +1174,6 @@ var productDetails = function () {
             zoomWindowFadeOut: 750
         });
     }
-    /*Filter color/Size*/
     $('.list-filter').each(function () {
         $(this).find('a').on('click', function (event) {
             event.preventDefault();
@@ -977,159 +1208,6 @@ function mobileHeaderActive() {
         container.removeClass("sidebar-visible");
         wrapper4.removeClass("mobile-menu-active");
     });
-}
-
-function renderOptionHtmlV2(optionId, optValues, type) {
-    if (Array.isArray(options)) {
-        let option = options.filter(opt => opt.id === parseInt(optionId))[0];
-        option = option['product_option_values'];
-        if (Array.isArray(option)) {
-            let optionValues = option.filter(opt => opt.id === parseInt(optValues))[0];
-            $("#option-value-" + optionId).val(optionValues['name']);
-            let optionValues2 = optionValues['product_option_values2'];
-            if (Array.isArray(optionValues2)) {
-                if (type === 'radio') {
-                    let input = '';
-                    let valueChild = $("#option-child-" + optionId + " input[type=radio]:checked").data('value');
-                    for (let i = 0; i < optionValues2.length; i++) {
-                        let active = '', checked = '', disable = 'disabled';
-                        if (valueChild == optionValues2[i]['value'] && parseInt(optionValues2[i]['quantity']) > 0) {
-                            active = 'active';
-                            checked = 'checked';
-                        }
-                        if (parseInt(optionValues2[i]['quantity']) > 0) {
-                            disable = '';
-                        }
-                        input += '<div class="' + active + '">' +
-                            '<input type="radio" name="option[' + optionId + '][children][]" ' + checked + ' ' +
-                            disable + ' ' +
-                            'id="opt-' + optionId + '-child-' + optionValues2[i]['id'] + '" ' +
-                            'value="' + optionValues2[i]['id'] + '" ' +
-                            'data-value="' + optionValues2[i]['value'] + '"' +
-                            'data-option="' + optionId + '"' +
-                            'data-quantity="' + optionValues2[i]['quantity'] + '"' +
-                            'data-price="' + optionValues2[i]['price'] + '">' +
-                            '<label for="opt-' + optionId + '-child-' + optionValues2[i]['id'] + '" class="' + disable + '">' +
-                            optionValues2[i]['value'] + '</label>' +
-                            '</div>';
-                    }
-                    $('#option-child-' + optionId).html(input);
-                }
-                if (type === 'image') {
-                    let input = '';
-                    let valueChild = $("#option-child-" + optionId + " input[type=radio]:checked").data('value');
-                    for (let i = 0; i < optionValues2.length; i++) {
-                        let active = '', checked = '', disable = 'disabled';
-                        if (valueChild == optionValues2[i]['value'] && parseInt(optionValues2[i]['quantity']) > 0) {
-                            active = 'active';
-                            checked = 'checked';
-                        }
-                        if (parseInt(optionValues2[i]['quantity']) > 0) {
-                            disable = '';
-                        }
-                        input += '<div class="' + active + '">' +
-                            '<input type="radio" name="option[' + optionId + '][children][]"' + checked + ' ' +
-                            disable + ' ' +
-                            'id="opt-' + optionId + '-child-' + optionValues2[i]['id'] + '"' +
-                            'value="' + optionValues2[i]['id'] + '"' +
-                            'data-value="' + optionValues2[i]['value'] + '"' +
-                            'data-option="' + optionId + '"' +
-                            'data-quantity="' + optionValues2[i]['quantity'] + '"' +
-                            'data-price="' + optionValues2[i]['price'] + '">' +
-                            '<label for="opt-' + optionId + '-child-' + optionValues2[i]['id'] + '" class="' + disable + '">' +
-                            '<img src="' + optionValues2[i]['image'] + '" alt="' + optionValues2[i]['value'] + '" class="img-thumbnail">' +
-                            '</label>' +
-                            '</div>';
-                    }
-                    $('#option-child-' + optionId).html(input);
-                }
-                if (type === 'select') {
-                    let select = '<select name="option[' + optionId + '][children][]"' +
-                        'class="select-child-choose select-option-product">' +
-                        '<option value="" data-option="' + optionId + '">--Chọn--</option>';
-                    let labelChild = $("#option-child-" + optionId + " select").find(":selected").data('label');
-                    let valueChild = '';
-                    for (let i = 0; i < optionValues2.length; i++) {
-                        if (labelChild == optionValues2[i]['value']) {
-                            valueChild = optionValues2[i]['id'];
-                        }
-                        select += '<option value="' + optionValues2[i]['id'] + '"' +
-                            'data-label="' + optionValues2[i]['value'] + '"' +
-                            'data-value="' + optionValues2[i]['id'] + '"' +
-                            'data-option="' + optionId + '"' +
-                            'data-quantity="' + optionValues2[i]['quantity'] + '"' +
-                            'data-price="' + optionValues2[i]['price'] + '">' + optionValues2[i]['value'] + '</option>';
-                    }
-                    $('#option-child-' + optionId).html(select + '</select>');
-                    selectJs = $('#option-child-' + optionId + ' .select-option-product').select2({
-                        minimumResultsForSearch: Infinity,
-                        placeholder: "--Chọn--"
-                    });
-                    if (valueChild) {
-                        selectJs.val(valueChild).trigger("change");
-                    }
-                }
-                if (type === 'checkbox') {
-                    let input = '', checkedOptChild = [];
-                    $.each($("#option-child-" + optionId + " input[type=checkbox]:checked"), function () {
-                        checkedOptChild.push($(this).data('value'));
-                    });
-                    for (let i = 0; i < optionValues2.length; i++) {
-                        let active = '', checked = '', disable = 'disabled';
-                        if (checkedOptChild.includes(optionValues2[i]['value']) && parseInt(optionValues2[i]['quantity']) > 0) {
-                            active = 'active';
-                            checked = 'checked';
-                        }
-                        if (parseInt(optionValues2[i]['quantity']) > 0) {
-                            disable = '';
-                        }
-                        input += '<div class="' + active + ' form-check form-check-inline">' +
-                            '<input class="form-check-input" type="checkbox" ' +
-                            disable + ' ' +
-                            'id="opt-' + optionId + '-child-' + optionValues2[i]['id'] + '" ' +
-                            'name="option[' + optionId + '][children][]" ' + checked + ' ' +
-                            'value="' + optionValues2[i]['id'] + '" ' +
-                            'data-value="' + optionValues2[i]['value'] + '"' +
-                            'data-option="' + optionId + '"' +
-                            'data-quantity="' + optionValues2[i]['quantity'] + '"' +
-                            'data-price="' + optionValues2[i]['price'] + '">' +
-                            '<label class="form-check-label" for="opt-' + optionId + '-child-' + optionValues2[i]['id'] + '" class="' + disable + '">' +
-                            optionValues2[i]['value'] + '</label>' +
-                            '</div>';
-                    }
-                    $('#option-child-' + optionId).html(input);
-                }
-            }
-        }
-    }
-}
-
-function optionProductPrice(optionId, price, type) {
-    let optionProduct = $('#option-choose-' + optionId);
-    if (!$('#option-' + optionId).hasClass('has-choose')) {
-        optionProduct.val(isNaN(parseInt(optionProduct.val())) ? 1 : parseInt(optionProduct.val()) + 1);
-    }
-    if (optionProduct.val() == 2) {
-        if (type === 'radio') {
-            let priceOption = $('#option-child-' + optionId + ' input[name="option[' + optionId + '][children][]"]:checked').data('price');
-            optionProduct.attr('data-price', priceOption);
-        }
-        if (type === 'image') {
-            let priceOption = $('#option-child-' + optionId + ' input[name="option[' + optionId + '][children][]"]:checked').data('price');
-            optionProduct.attr('data-price', priceOption);
-        }
-        if (type === 'select') {
-            let priceOption = $('#option-child-' + optionId + ' select').find(":selected").data("price");
-            optionProduct.attr('data-price', priceOption);
-        }
-        if (type === 'checkbox') {
-            let checkedOptChild = 0;
-            $.each($('#option-child-' + optionId + ' input:checked'), function () {
-                checkedOptChild = checkedOptChild + (isNaN(parseInt(price)) ? 0 : parseInt(price));
-            });
-            optionProduct.attr('data-price', checkedOptChild);
-        }
-    }
 }
 
 productDetails();
@@ -1224,16 +1302,6 @@ window.onscroll = function () {
 
 if (typeof urlListReview !== 'undefined') {
     $('#review').load(urlListReview);
-}
-
-function getPriceProduct() {
-    let priceOption = 0;
-    $('.product-info input[name="option_price"]').each(function () {
-        if ($(this).val() == 2) {
-            priceOption = priceOption + parseInt($(this).attr('data-price'));
-        }
-    });
-    return number_format(priceProduct + priceOption) + 'đ';
 }
 
 function isNaN(x) {

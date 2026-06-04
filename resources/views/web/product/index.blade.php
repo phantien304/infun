@@ -1,15 +1,16 @@
 @php
-    /** @var \App\Data\Output\ProductDTO $product */
-    /** @var \App\Models\Entities\Product $entity */
-    $special = $product->productSpecial;
-    $priceFinal = $special?->pricePromotion ?: $product->price;
+    $special = $entity->productSpecial;
+    $priceFinal = $defaultVariant['price'] ?? ($special?->pricePromotion ?: $entity->price);
 @endphp
 @section('script_header')
     <script type="text/javascript">
         var options = {!! json_encode($options) !!};
+        var variantMatrix = {!! json_encode($variantMatrix ?? []) !!};
+        var defaultVariant = {!! json_encode($defaultVariant) !!};
+        var variantGallery = {!! json_encode($variantGallery ?? []) !!};
         var urlUserWishlist = '{{ route('account.userWishlist') }}';
         var priceProduct = {{ $priceFinal }};
-        var urlListReview = '{!! route('product.getListReview', ['product_id' => $product->id, 'pageIndex' => 1]) !!}';
+        var urlListReview = '{!! routeArea('product.getListReview', ['product_id' => $entity->id, 'pageIndex' => 1]) !!}';
     </script>
 @stop
 @extends('web.layouts.main')
@@ -19,34 +20,34 @@
     <meta property="og:rich_attachment" content="true" />
     <meta property="og:type" content="article" />
     <meta property="article:publisher" content="{!! getConfigDb('config_facebook') !!}" />
-    <meta property="og:url" itemprop="url" content="{!! $product->url !!}" />
-    <meta property="og:image" itemprop="thumbnailUrl" content="{!! $product->thumbnail(800, 354, 'client') !!}" />
+    <meta property="og:url" itemprop="url" content="{!! $entity->url !!}" />
+    <meta property="og:image" itemprop="thumbnailUrl" content="{!! $entity->thumbnail(800, 354) !!}" />
     <meta property="og:image:width" content="800" />
     <meta property="og:image:height" content="354" />
     <meta content="{!! $titleSeo !!}" itemprop="headline" property="og:title" />
     <meta content="{!! $descriptionSeo !!}" itemprop="description" property="og:description" />
     <!-- END META FOR FACEBOOK -->
-    <meta content="{!! $product->dateAvailable !!}" itemprop="datePublished" name="pubdate" />
-    <meta content="{!! $product->modifiedDate !!}" itemprop="dateModified" name="lastmod" />
-    <meta content="{!! $product->publishedDate !!}" itemprop="dateCreated" />
+    <meta content="{!! $entity->dateAvailable !!}" itemprop="datePublished" name="pubdate" />
+    <meta content="{!! $entity->modifiedDate !!}" itemprop="dateModified" name="lastmod" />
+    <meta content="{!! $entity->publishedDate !!}" itemprop="dateCreated" />
     @include('web.share.structure._meta_common')
     <!-- Twitter Card -->
     <meta name="twitter:card" value="summary" />
-    <meta name="twitter:url" content="{!! $product->url !!}" />
+    <meta name="twitter:url" content="{!! $entity->url !!}" />
     <meta name="twitter:title" content="{!! $titleSeo !!}" />
     <meta name="twitter:description" content="{!! $descriptionSeo !!}" />
-    <meta name="twitter:image" content="{!! $product->thumbnail(800, 354, 'client') !!}" />
+    <meta name="twitter:image" content="{!! $entity->thumbnail(800, 354) !!}" />
     <meta name="twitter:site" content="{!! getConfigDb('config_name') !!}" />
     <meta name="twitter:creator" content="{!! getConfigDb('config_name') !!}" />
     <!-- End Twitter Card -->
     <script type="application/ld+json">
-        {"@context":"http://schema.org","@type":"BreadcrumbList","itemListElement": {!! json_encode($breadcrumbSchema, JSON_UNESCAPED_UNICODE) !!}}
+        {"@@context":"http://schema.org","@@type":"BreadcrumbList","itemListElement": {!! json_encode($breadcrumbSchema, JSON_UNESCAPED_UNICODE) !!}}
     </script>
     <script type="application/ld+json">
-        {"@context":"https://schema.org/","@type":"Product","url":"{!! $product->url !!}","image":"{!! $product->thumbnail(540, 540, 'client') !!}","name":"{!! $titleSeo !!}","description":"{!! $descriptionSeo !!}","sku":"{!! $product->sku !!}","aggregateRating":{"@type":"AggregateRating","ratingValue":"{!! $product->rating !!}","reviewCount":"{!! $product->totalRating !!}"},"brand":{"@type":"Brand","name":"{{ $product->manufacturer?->name ?? getConfigDb('config_name') }}"},"offers":{"@type":"Offer","url":"{!! $product->url !!}","seller":{"@type":"Organization","name":"{{ getConfigDb('config_name') }}","url":"{{ route('home') }}","telephone":"{{ getConfigDb('config_telephone') }}","email":"{{ getConfigDb('config_email') }}","address":"{{ getConfigDb('config_address') }}"},"itemCondition":"https://schema.org/NewCondition","availability":"https://schema.org/InStock","priceValidUntil":"{!! $product->dateAvailable !!}","priceCurrency":"VND","price":{!! $priceFinal !!}}}
+        {"@@context":"https://schema.org/","@@type":"Product","url":"{!! $entity->url !!}","image":"{!! $entity->thumbnail(540, 540) !!}","name":"{!! $titleSeo !!}","description":"{!! $descriptionSeo !!}","sku":"{!! $entity->sku !!}","aggregateRating":{"@@type":"AggregateRating","ratingValue":"{!! $entity->rating !!}","reviewCount":"{!! $entity->totalRating !!}"},"brand":{"@@type":"Brand","name":"{{ $entity->manufacturer?->name ?? getConfigDb('config_name') }}"},"offers":{"@@type":"Offer","url":"{!! $entity->url !!}","seller":{"@@type":"Organization","name":"{{ getConfigDb('config_name') }}","url":"{{ route('home') }}","telephone":"{{ getConfigDb('config_telephone') }}","email":"{{ getConfigDb('config_email') }}","address":"{{ getConfigDb('config_address') }}"},"itemCondition":"https://schema.org/NewCondition","availability":"https://schema.org/InStock","priceValidUntil":"{!! $entity->dateAvailable !!}","priceCurrency":"VND","price":{!! $priceFinal !!}}}
     </script>
     <script type="application/ld+json">
-        {"@context":"http://schema.org","@type":"WebSite","name":"{!! getConfigDb('config_name') !!}","url":"{!! getConfigDb('config_domain') !!}"}
+        {"@@context":"http://schema.org","@@type":"WebSite","name":"{!! getConfigDb('config_name') !!}","url":"{!! getConfigDb('config_domain') !!}"}
     </script>
 @stop
 @section('content')
@@ -63,48 +64,54 @@
                             @if ($special && $special->discountPercent)
                                 <span class="stock-status out-stock">Tiết kiệm -{{ $special->discountPercent }}%</span>
                             @endif
-                            <h1>{{ $product->name }}</h1>
+                            <h1>{{ $entity->name }}</h1>
                             <div class="d-flex mt-2 mb-20" style="font-size: 20px;">
-                                <div itemtype="http://data-vocabulary.org/Review-aggregate" itemscope=""
-                                    itemprop="review" style="display: block;">
-                                    <img src="/client/images/stars-{!! $product->ratingRounded !!}.png"
+                                <div itemtype="http://data-vocabulary.org/Review-aggregate" itemscope="" itemprop="review"
+                                    style="display: block;">
+                                    <img src="/web/images/stars-{!! $entity->ratingRounded !!}.png"
                                         style="height: 25px; vertical-align: top;"
-                                        alt="{!! $product->totalRating !!} đánh giá" />&nbsp;
-                                    <span itemprop="rating">{!! $product->ratingRounded !!}</span>/5&nbsp;
-                                    @if ($product->totalRating)
-                                        <span itemprop="count">({!! $product->totalRating !!})</span>
+                                        alt="{!! $entity->totalRating !!} đánh giá" />&nbsp;
+                                    <span itemprop="rating">{!! $entity->ratingRounded !!}</span>/5&nbsp;
+                                    @if ($entity->totalRating)
+                                        <span itemprop="count">({!! $entity->totalRating !!})</span>
                                     @endif
                                 </div>
                                 <div class="price-wraper">
                                     &nbsp;|&nbsp;
                                     @if ($special && $special->pricePromotion > 0)
-                                        <b class="text-secondary text-decoration-line-through">{{ $special->priceRegularLabel }}</b>
-                                        &nbsp;<b class="text-danger" id="price-product">{{ $special->pricePromotionLabel }}</b>
-                                    @elseif ($product->price > 0)
-                                        <b class="text-danger" id="price-product">{{ $product->priceLabel }}</b>
+                                        <b class="text-secondary text-decoration-line-through">
+                                            {{ $special->priceRegularLabel }}
+                                        </b>&nbsp;
+                                        <b class="text-danger" id="price-product">
+                                            {{ $special->pricePromotionLabel }}
+                                        </b>
+                                    @elseif ($entity->price > 0)
+                                        <b class="text-danger" id="price-product">{{ $entity->priceLabel }}</b>
                                     @else
                                         <b class="text-secondary">{{ getModuleConfig('product.text_contact') }}</b>
                                     @endif
-                                    @if ($product->weight && $product->weight > 0)
-                                        <span class="text-secondary">/{{ (int) $product->weight . $product->weightUnit }}</span>
+                                    @if ($entity->weight && $entity->weight > 0)
+                                        <span class="text-secondary">
+                                            /{{ (int) $entity->weight . $entity->weightUnit }}
+                                        </span>
                                     @endif
                                 </div>
                             </div>
                             <div class="description mb-30">
-                                @if ($product->manufacturer)
+                                @if ($entity->manufacturer)
                                     <p>
                                         <i class="fa fa-chevron-down"></i> <b>Hãng sản xuất:</b>
-                                        <a href="{!! $product->manufacturer->url !!}"
-                                            title="{{ $product->manufacturer->name }}">
-                                            <span>{{ $product->manufacturer->name }}</span>
+                                        <a href="{!! $entity->manufacturer?->url !!}" title="{{ $entity->manufacturer?->name }}">
+                                            <span>{{ $entity->manufacturer?->name }}</span>
                                         </a>
                                     </p>
                                 @endif
-                                @if (count($product->categories))
+                                @if (count($entity->categories))
                                     <p>
                                         <i class="fa fa-chevron-down"></i> <b>Loại sản phẩm:</b>
-                                        @foreach ($product->categories as $cat)
-                                            <a href="{{ $cat->url }}"><span>{{ $cat->title }}</span></a>{{ ! $loop->last ? ', ' : '' }}
+                                        @foreach ($entity->categories as $cat)
+                                            <a
+                                                href="{{ $cat->url }}"><span>{{ $cat->title }}</span></a>{{ !$loop->last ? ', ' : '' }}
                                         @endforeach
                                     </p>
                                 @endif
@@ -118,17 +125,17 @@
                             @endif
                             <div id="product-quantity"></div>
                             <div class="detail-extralink product-quantity mb-50">
-                                <input type="hidden" name="product_id" value="{{ $product->id }}">
+                                <input type="hidden" name="product_id" value="{{ $entity->id }}">
                                 <input type="number" name="quantity" class="detail-qty border radius" size="2"
                                     value="1" min="1" style="height: 42px">
                                 @if (getConfigDb('config_stock_checkout'))
-                                    @if ($product->isCustom)
+                                    @if ($entity->isCustom)
                                         <button id="consult-sign" class="button btn-secondary button-add-to-cart mt-2 me-2">
                                             <i class="fas fa-adjust"></i>&nbsp;Tư vấn ngay
                                         </button>
                                     @endif
-                                    @if ($product->isAddCart)
-                                        @if ($product->quantity > 0)
+                                    @if ($entity->isAddCart)
+                                        @if ($entity->quantity > 0)
                                             <button id="button-cart" class="button btn-brand button-add-to-cart mt-2 me-2">
                                                 <i class="fa fa-shopping-cart"></i>&nbsp;Mua hàng
                                             </button>
@@ -145,7 +152,7 @@
                                         <i class="fa fa-shopping-cart"></i>&nbsp;Mua hàng
                                     </button>
                                 @endif
-                                @foreach ($product->linkSaleCustom as $item)
+                                @foreach ($entity->linkSaleCustom as $item)
                                     @if (filled($item['name'] ?? null))
                                         <a href="{{ $item['link'] ?? '#' }}"
                                             class="button btn-brand button-add-to-cart mt-2 me-2" target="_blank"
@@ -156,21 +163,22 @@
                                 @endforeach
                                 <div class="action pull-left mt-2">
                                     <div class="pull-left">
-                                        <div class="wishlist @if ($wishlist) active @endif" id="wishlist">
+                                        <div class="wishlist @if ($wishlist) active @endif"
+                                            id="wishlist">
                                             <button class="product-icon fa fa-heart product-icon wishlist-61"
                                                 title="Sản phẩm ưu thích" style="border-color: #F4a883;"
-                                                onclick="userWishlist('{{ $product->id }}');"></button>
+                                                onclick="userWishlist('{{ $entity->id }}');"></button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             <div class="short-desc mb-30 font-lg">
-                                {!! $product->description !!}
+                                {!! $entity->description !!}
                             </div>
                         </div>
                     </div>
                 </div>
-                @if (count($storeReviews) && $product->isCustom)
+                @if (count($storeReviews) && $entity->isCustom)
                     <div class="row store-review mt-60">
                         <div class="col-12 d-flex justify-content-center">
                             <h2 class="section-title style-2 mb-30">Sản phẩm đã làm</h2>
@@ -184,8 +192,7 @@
                                         <div class="card-1">
                                             <figure class="img-hover-scale overflow-hidden">
                                                 <a href="{!! $review->url !!}" title="{!! $review->name !!}">
-                                                    <img src="{!! $review->thumbnail(312, 340, 'client') !!}"
-                                                        alt="{!! $review->name !!}">
+                                                    <img src="{!! $review->thumbnail(312, 340) !!}" alt="{!! $review->name !!}">
                                                     <div class="author-review">
                                                         <i class="fab fa-{{ $review->socialIcon }}"></i>
                                                         <span>by {!! $review->name !!}</span>
@@ -206,10 +213,10 @@
                                 <a class="nav-link active" id="description-tab" data-bs-toggle="tab"
                                     href="#description">Mô tả</a>
                             </li>
-                            @if ($product->isReview)
+                            @if ($entity->isReview)
                                 <li class="nav-item">
                                     <a class="nav-link" id="reviews-tab" data-bs-toggle="tab" href="#reviews">
-                                        Đánh giá ({!! $product->totalRating ?? 0 !!})
+                                        Đánh giá ({!! $entity->totalRating ?? 0 !!})
                                     </a>
                                 </li>
                             @endif
@@ -218,7 +225,7 @@
                             <div class="tab-pane fade show active" id="description">
                                 <div class="inner">
                                     <div class="product-description">
-                                        <div>{!! $product->content !!}</div>
+                                        <div>{!! $entity->content() !!}</div>
                                         <div class="gradient"></div>
                                     </div>
                                     <div class="wrap-btn-more pt-4 pb-4">
@@ -231,7 +238,7 @@
                                     </div>
                                 </div>
                             </div>
-                            @if ($product->isReview)
+                            @if ($entity->isReview)
                                 <div class="tab-pane fade" id="reviews">
                                     <div class="comments-area">
                                         <div class="row">
@@ -271,11 +278,12 @@
                         <div class="col-12">
                             <div class="row blog-latest">
                                 @foreach ($blogs as $blog)
-                                    <article class="col-xl-3 col-lg-4 col-md-6 text-center wow fadeIn animated hover-up mb-30 animated">
+                                    <article
+                                        class="col-xl-3 col-lg-4 col-md-6 text-center wow fadeIn animated hover-up mb-30 animated">
                                         <div class="post-thumb">
                                             <a href="{!! $blog->url !!}" title="{!! $blog->title !!}">
-                                                <img src="{!! $blog->thumbnail(400, 250, 'client') !!}"
-                                                    alt="{!! $blog->title !!}" class="border-radius-15">
+                                                <img src="{!! $blog->thumbnail(400, 250) !!}" alt="{!! $blog->title !!}"
+                                                    class="border-radius-15">
                                             </a>
                                         </div>
                                         <div class="entry-content-2">
@@ -287,7 +295,8 @@
                                             <div class="entry-meta font-xs color-grey mt-10 pb-10">
                                                 <div>
                                                     <span class="post-on mr-10">{!! $blog->publishedDate !!}</span>
-                                                    <span class="hit-count has-dot mr-10">{!! $blog->viewed !!} lượt xem</span>
+                                                    <span class="hit-count has-dot mr-10">{!! $blog->viewed !!} lượt
+                                                        xem</span>
                                                 </div>
                                             </div>
                                         </div>

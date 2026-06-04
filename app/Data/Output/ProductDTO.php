@@ -3,16 +3,17 @@
 namespace App\Data\Output;
 
 use App\Data\Concerns\HasThumbnail;
+use App\Data\Concerns\LazyData;
 use App\Models\Entities\Product;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Lazy;
 
 class ProductDTO extends Data
 {
     use HasThumbnail;
+    use LazyData;
 
     public function __construct(
         public int $id,
@@ -36,6 +37,9 @@ class ProductDTO extends Data
         public ?float $rating,
         public ?int $totalRating,
         public ?int $viewed,
+        public bool $hasVariants,
+        public ?float $minVariantPrice,
+        public ?float $maxVariantPrice,
         public ?int $isAddCart,
         public ?int $isCustom,
         public ?int $isReview,
@@ -105,6 +109,9 @@ class ProductDTO extends Data
             rating: $product->rating,
             totalRating: $product->total_rating,
             viewed: $product->viewed,
+            hasVariants: (bool) ($product->has_variants ?? false),
+            minVariantPrice: isset($product->min_variant_price) ? (float) $product->min_variant_price : null,
+            maxVariantPrice: isset($product->max_variant_price) ? (float) $product->max_variant_price : null,
             isAddCart: $product->is_add_cart,
             isCustom: $product->is_custom,
             isReview: $product->is_review,
@@ -112,7 +119,7 @@ class ProductDTO extends Data
             description: $description,
             slug: $slug,
             excerpt: Str::limit(strip_tags($description), 150),
-            priceLabel: self::formatPrice((float) $product->price),
+            priceLabel: self::formatPrice($product),
             stockLabel: self::formatStock($product),
             url: buildUrl($slug, getModuleConfig('url.product'), (int) $product->id),
             publishedDate: $product->created_at?->format('d/m/Y') ?? '',
@@ -132,22 +139,60 @@ class ProductDTO extends Data
         );
     }
 
-    /**
-     * Gallery cho trang chi tiết: ảnh chính + ảnh phụ. Chỉ build khi
-     * productImages đã được eager-load (tránh N+1 ở list page).
-     */
+    public function content(): string
+    {
+        return $this->resolveLazy($this->content);
+    }
+
+    public function tag(): string
+    {
+        return $this->resolveLazy($this->tag);
+    }
+
+    public function metaTitle(): string
+    {
+        return $this->resolveLazy($this->metaTitle);
+    }
+
+    public function metaDescription(): string
+    {
+        return $this->resolveLazy($this->metaDescription);
+    }
+
     private static function resolveGallery(Product $product): array
     {
         $gallery = [
-            ['key' => 'p'.$product->id, 'image' => (string) $product->image],
+            [
+                'key'   => 'p'.$product->id,
+                'image' => (string) $product->image,
+                'alt'   => '',
+            ],
         ];
         if (! $product->relationLoaded('productImages')) {
             return $gallery;
         }
+
+        $visibleTypes = [
+            setting('product_image.type.main'),
+            setting('product_image.type.gallery'),
+            setting('product_image.type.zoom')
+        ];
+
         foreach ($product->productImages as $img) {
+            if (! ($img->is_active ?? true)) {
+                continue;
+            }
+            if (($img->product_variant_id ?? null) !== null) {
+                continue;
+            }
+            if (! in_array($img->type ?? 'gallery', $visibleTypes, true)) {
+                continue;
+            }
+
             $gallery[] = [
-                'key' => 'pImg'.$img->id,
+                'key'   => 'pImg'.$img->id,
                 'image' => (string) $img->image,
+                'alt'   => (string) ($img->alt ?? ''),
             ];
         }
         return $gallery;
@@ -178,10 +223,25 @@ class ProductDTO extends Data
             ->all();
     }
 
-    private static function formatPrice(float $price): string
+    private static function formatPrice(Product $product): string
     {
+        $currency = getConfigDb('config_currency');
+
+        if (($product->has_variants ?? false) && ($product->min_variant_price ?? null) !== null) {
+            $min = (float) $product->min_variant_price;
+            $max = (float) ($product->max_variant_price ?? $min);
+            if ($min <= 0 && $max <= 0) {
+                return getModuleConfig('product.text_contact');
+            }
+            if ($min === $max) {
+                return number_format($min) . $currency;
+            }
+            return number_format($min) . ' – ' . number_format($max) . $currency;
+        }
+
+        $price = (float) $product->price;
         return $price > 0
-            ? number_format($price) . getConfigDb('config_currency')
+            ? number_format($price) . $currency
             : getModuleConfig('product.text_contact');
     }
 

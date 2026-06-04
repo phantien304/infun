@@ -1,4 +1,4 @@
-@extends('client.infunstudio.layouts.main_account')
+@extends('web.layouts.main_account')
 @section('content')
     <div class="col-xl-9 account">
         <div class="card">
@@ -21,32 +21,26 @@
                         @foreach($entities as $item)
                             <tr class="border-bottom">
                                 <td class="model">
-                                    @php
-                                        $countProduct = count($item->ordersProducts);
-                                        if($countProduct){
-                                            $nameProduct = $item->ordersProducts[0]->name;
-                                            $append = $countProduct > 1 ? '...và ' . ($countProduct - 1). ' sản phẩm' : '';
-                                            echo $nameProduct . $append;
-                                        }
-                                    @endphp
-                                </td>
-                                <td class="date underline" data-title="Ngày mua">
-                                    {!! \Carbon\Carbon::parse($item->created_at)->format('H:i m/d/Y') !!}
-                                </td>
-                                <td class="price" data-title="Tổng tiền">
-                                    @if(isset($item->ordersTotal))
-                                        {{ number_format($item->ordersTotal->value, 0, '', ',') . 'đ' }}
+                                    {{ $item->firstProductName }}
+                                    @if($item->productCount > 1)
+                                        ...và {{ $item->productCount - 1 }} sản phẩm
                                     @endif
                                 </td>
+                                <td class="date underline" data-title="Ngày mua">
+                                    {{ $item->createdAt }}
+                                </td>
+                                <td class="price" data-title="Tổng tiền">
+                                    {{ $item->totalLabel }}
+                                </td>
                                 <td class="status" data-title="Trạng thái">
-                                    {!! array_get($item, 'ordersStatus.name') !!}
+                                    {{ $item->orderStatusName }}
                                 </td>
                                 <td class="action" data-title="Thao tác">
                                     <a href="{{ route('account.detailOrder', ['id' => $item->id]) }}"
                                        style="font-size: 20px" title="Xem chi tiết đơn hàng">
                                         <i class="fas fa-eye"></i>
                                     </a>&nbsp;&nbsp;
-                                    <a href="{{ route('order.search', ['order_code' => $item->invoice_no]) }}"
+                                    <a href="{{ route('order.search', ['order_code' => $item->invoiceNo]) }}"
                                        target="_blank" style="font-size: 20px">
                                         <i class="fas fa-search" title="Theo dõi đơn hàng"></i>
                                     </a>
@@ -58,7 +52,7 @@
                 </div>
                 <div class="pagination-area mt-15 mb-sm-5 mb-lg-0">
                     <nav aria-label="Phân trang">
-                        {!! $entities->links('client.infunstudio.share.structure._paging', ['removeKey' => ['category_id_eq', 'per_page']]) !!}
+                        {!! $entities->links('web.share.structure._paging', ['removeKey' => ['per_page']]) !!}
                     </nav>
                 </div>
             </div>

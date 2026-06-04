@@ -1,6 +1,6 @@
-<?php $typeRegister = auth()->user()->type_register ?>
-@extends('client.infunstudio.layouts.main_account')
+@extends('web.layouts.main_account')
 @section('content')
+    @php $typeRegister = $entity?->typeRegister; @endphp
     <div class="col-xl-9 account">
         <div class="card">
             <div class="card-header">
@@ -8,6 +8,7 @@
             </div>
             <div class="card-body">
                 <form action="{{ route('account.password') }}" method="post" class="mt-30">
+                    @csrf
                     @if (empty($typeRegister))
                         <div class="row mb-30">
                             <label for="inputOldPassword" class="col-sm-2 col-form-label">Mật khẩu cũ</label>

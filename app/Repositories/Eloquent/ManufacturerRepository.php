@@ -11,15 +11,17 @@ use Illuminate\Database\Eloquent\Collection;
 class ManufacturerRepository extends QueryableRepository implements ManufacturerRepositoryInterface
 {
     use CacheableRepository;
+
     public function model(): string
     {
         return Manufacturer::class;
     }
+
     public function listAllCached(): Collection
     {
         return $this->rememberCache(
-            getCoreConfig('cache.manufacturers'),
-            fn() => $this->listAll()
+            setting('cache.manufacturers'),
+            fn () => $this->listAll()
         );
     }
 }

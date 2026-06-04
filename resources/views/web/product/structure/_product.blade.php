@@ -1,5 +1,4 @@
 @php
-    /** @var \App\Data\Output\ProductDTO $product */
     $special = $product->productSpecial;
 @endphp
 <div class="col-lg-3 col-md-4 col-12 col-sm-6">

@@ -191,13 +191,10 @@ return new class extends Migration
                     p.max_variant_price = v.mx
             ');
 
-            // Seed product_option_definition từ pivot
-            DB::statement('
-                INSERT IGNORE INTO product_option_definition (product_id, option_id, is_required, sort_order)
-                SELECT DISTINCT pv.product_id, pva.option_id, 1, 0
-                FROM product_variant_attribute pva
-                INNER JOIN product_variant pv ON pv.id = pva.product_variant_id
-            ');
+            // KHÔNG seed product_option_definition — bảng đã bỏ. Declare
+            // option của product vẫn dùng legacy `product_option` (xem
+            // migration 100005). product_option đã có sẵn row cho mỗi
+            // (product, option) từ schema cũ — không cần backfill thêm.
         });
     }
 

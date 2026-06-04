@@ -1,58 +1,17 @@
-@extends('client.infunstudio.layouts.main_account')
+@extends('web.layouts.main_account')
 @section('style')
     <style type="text/css">
-        .cancel-order {
-            background-color: #dc3545;
-            border-color: #dc3545;
-        }
-
-        .cancel-order:hover {
-            background-color: #dc3545;
-        }
-
-        .table-bordered {
-            border: 1px solid #dee2e6;
-        }
-
-        .table-bordered thead td, .table-bordered thead th {
-            border-bottom-width: 1px;
-        }
-
-        .table-bordered td, .table-bordered th {
-            border: 1px solid #dee2e6 !important;
-        }
-
-        .modal-body h4 {
-            font-size: 21px;
-            margin-top: 0;
-            margin-bottom: 0.5em;
-            color: rgba(0, 0, 0, 0.85);
-            font-weight: 500;
-        }
-
-        .modal-body ul {
-            padding-left: 16px;
-            line-height: 1.6;
-            list-style: none;
-        }
-
-        .modal-body ul li {
-            position: relative;
-        }
-
-        .modal-body ul li::before {
-            content: "• ";
-            color: rgb(176, 176, 176);
-            font-size: 26px;
-            position: absolute;
-            top: -8px;
-            left: -16px;
-        }
-
+        .cancel-order { background-color: #dc3545; border-color: #dc3545; }
+        .cancel-order:hover { background-color: #dc3545; }
+        .table-bordered { border: 1px solid #dee2e6; }
+        .table-bordered thead td, .table-bordered thead th { border-bottom-width: 1px; }
+        .table-bordered td, .table-bordered th { border: 1px solid #dee2e6 !important; }
+        .modal-body h4 { font-size: 21px; margin-top: 0; margin-bottom: 0.5em; color: rgba(0, 0, 0, 0.85); font-weight: 500; }
+        .modal-body ul { padding-left: 16px; line-height: 1.6; list-style: none; }
+        .modal-body ul li { position: relative; }
+        .modal-body ul li::before { content: "• "; color: rgb(176, 176, 176); font-size: 26px; position: absolute; top: -8px; left: -16px; }
         @media only screen and (max-width: 480px) {
-            .table td {
-                display: table-cell;
-            }
+            .table td { display: table-cell; }
         }
     </style>
 @stop
@@ -60,9 +19,12 @@
     <div class="col-xl-9 account">
         <div class="card">
             <div class="card-header">
-                <h3>Chi tiết đơn hàng #{{ $entity->invoice_no }}</h3>
+                <h3>Chi tiết đơn hàng #{{ $entity->invoiceNo }}</h3>
             </div>
             <div class="card-body">
+                @if(filled($message))
+                    <div class="alert alert-info">{!! $message !!}</div>
+                @endif
                 <table class="table table-bordered mt-3">
                     <thead>
                     <tr>
@@ -73,19 +35,17 @@
                     <tr>
                         <td class="left" style="width: 50%;">
                             <b>Hóa đơn:</b>&nbsp;
-                            {{ $entity->invoice_prefix }}-{{ $entity->invoice_no }}<br>
-                            <b>Mã đơn hàng:</b>&nbsp;
-                            {{ $entity->invoice_no }}<br>
-                            <b>Ngày tạo:</b>&nbsp;
-                            {!! \Carbon\Carbon::parse($entity->created_at)->format('H:i m/d/Y') !!}
+                            {{ $entity->invoicePrefix }}-{{ $entity->invoiceNo }}<br>
+                            <b>Mã đơn hàng:</b>&nbsp; {{ $entity->invoiceNo }}<br>
+                            <b>Ngày tạo:</b>&nbsp; {{ $entity->createdAt }}
                         </td>
                         <td class="left" style="width: 50%;">
                             <b>Hình thức thanh toán:</b>&nbsp;
-                            @if(isset($entity->payment->paymentDescription))
-                                {!! $entity->payment->paymentDescription->name !!}<br>
+                            @if(filled($entity->paymentName))
+                                {!! $entity->paymentName !!}<br>
                             @endif
-                            @if($entity->order_status_id == getConfigDb('order_payment_waiting_status_id'))
-                                @if(\Carbon\Carbon::parse($entity->created_at)->diffInMinutes() < 240)
+                            @if($entity->isPaymentWaiting)
+                                @if($entity->repaymentAllowed)
                                     <p class="text-danger" style="font-size: 14px; font-style: italic;">
                                         Thanh toán thất bại. Vui lòng thanh toán lại
                                     </p>
@@ -105,7 +65,7 @@
                                         đơn hàng.
                                     </p>
                                 @endif
-                            @elseif($entity->order_status_id == getConfigDb('order_payment_success_status_id'))
+                            @elseif($entity->isPaymentSuccess)
                                 <p class="text-danger" style="font-size: 14px; font-style: italic;">
                                     Thanh toán thành công.
                                 </p>
@@ -123,21 +83,18 @@
                     <tbody>
                     <tr>
                         <td class="left" style="width: 50%;">
-                            <b>Họ tên:</b>&nbsp;
-                            {!! $entity->full_name !!}<br>
+                            <b>Họ tên:</b>&nbsp; {!! $entity->fullName !!}<br>
                             <b>Địa chỉ:</b>&nbsp;
-                            {!! implode(', ', [$entity->address, $entity->ward, $entity->district, $entity->zone ]) !!}
+                            {!! implode(', ', array_filter([$entity->address, $entity->ward, $entity->district, $entity->zone])) !!}
                             <br>
-                            <b>Số điện thoại:</b>&nbsp;
-                            {!! $entity->telephone !!}<br>
+                            <b>Số điện thoại:</b>&nbsp; {!! $entity->telephone !!}<br>
                         </td>
                         <td class="left" style="width: 50%;">
-                            <b>Hình thức giao hàng:</b>&nbsp;{!! array_get($entity, 'carrier.name') !!}<br>
+                            <b>Hình thức giao hàng:</b>&nbsp;{!! $entity->carrierName !!}<br>
                         </td>
                     </tr>
                     </tbody>
                 </table>
-                @php $products = $entity->ordersProducts;@endphp
                 <table class="table table-bordered">
                     <thead>
                     <tr>
@@ -149,57 +106,43 @@
                     </tr>
                     </thead>
                     <tbody>
-                    @foreach($products as $product)
+                    @foreach($entity->items as $product)
                         <tr>
                             <td>
-                                @if(isset($product->product) && isset($product->product->productDescription))
-                                    <a href="{!! $product->product->productDescription->getUrlClient() !!}">
-                                        {!! $product->name !!}
-                                    </a>
+                                @if($product->productUrl !== '#')
+                                    <a href="{!! $product->productUrl !!}">{!! $product->name !!}</a>
                                 @else
                                     {!! $product->name !!}
                                 @endif
                                 <br>
                                 <small>
-                                    @if(isset($product->ordersProductOptions) && filled($product->ordersProductOptions))
-                                        @foreach($product->ordersProductOptions as $opt)
-                                            @php $child = unserialize($opt->children);@endphp
-                                            <p>- {{ $opt->name }}
-                                                : {{ $opt->value }}
-                                                @if($opt->variation == 1)
-                                                    @php $optChildValue = []; $optChildName = '';@endphp
-                                                    @foreach($child as $chd)
-                                                        @php
-                                                            $optChildName = $chd['name'];
-                                                            $optChildValue[] = $chd['value'];
-                                                        @endphp
-                                                    @endforeach
-                                                    - {!! $optChildName . ': ' . implode(', ', $optChildValue) !!}
-                                                @endif
-                                            </p>
-                                        @endforeach
-                                    @endif
+                                    @foreach($product->options as $opt)
+                                        <p>- {{ $opt->name }}: {{ $opt->value }}
+                                            @if($opt->variation == 1 && filled($opt->childrenLabel))
+                                                - {!! $opt->childrenLabel !!}
+                                            @endif
+                                        </p>
+                                    @endforeach
                                 </small>
                             </td>
                             <td>{{ $product->model }}</td>
                             <td>{{ $product->quantity }}</td>
-                            <td>{{ number_format($product->price, 0, '', ',').'đ' }}</td>
-                            <td>{{ number_format($product->total, 0, '', ',').'đ' }}</td>
+                            <td>{{ $product->priceLabel }}</td>
+                            <td>{{ $product->totalLabel }}</td>
                         </tr>
                     @endforeach
                     </tbody>
                     <tfoot>
-                    @php $totalData = $entity->ordersTotals;@endphp
-                    @foreach($totalData as $item)
+                    @foreach($entity->totals as $total)
                         <tr>
                             <td colspan="3"></td>
-                            <td class="right"><b>{!! $item->title !!}</b></td>
-                            <td class="right">{!! number_format($item->value, 0, '', ',').'đ' !!}</td>
+                            <td class="right"><b>{!! $total->title !!}</b></td>
+                            <td class="right">{!! $total->valueLabel !!}</td>
                         </tr>
                     @endforeach
                     </tfoot>
                 </table>
-                @if(!in_array($entity->order_status_id, getConfigDb('config_order_member_not_delete')))
+                @if($entity->canCancel)
                     <table class="table">
                         <tbody>
                         <tr>
@@ -228,7 +171,8 @@
     <div class="modal fade" id="alertCancelOrder" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
-                <div class="modal-body"><h4>Thời gian hoàn tiền:</h4>
+                <div class="modal-body">
+                    <h4>Thời gian hoàn tiền:</h4>
                     <ul>
                         <li>3 - 5 ngày làm việc với Ví ZaloPay, thẻ ATM nội địa</li>
                         <li>5 - 7 ngày làm việc với thẻ Visa/ Master/ JCB</li>
@@ -249,34 +193,23 @@
     </div>
     <div class="modal fade" id="confirmCancelOrder" tabindex="-1" role="dialog">
         <form action="{{ route('account.cancelOrder') }}" method="post">
+            @csrf
             <div class="modal-dialog modal-dialog-centered" role="document">
                 <div class="modal-content">
                     <div class="modal-body">
                         <div class="title">
-                            <h4>Lý do hủy đơn hàng #{{ $entity->invoice_no }}</h4>
+                            <h4>Lý do hủy đơn hàng #{{ $entity->invoiceNo }}</h4>
                         </div>
                         <div class="form mb-30">
                             <div class="mb-3" id="return_reason">
                                 <select class="form-control" name="return_reason">
                                     <option value="">Chọn lý do hủy</option>
-                                    <option value="Đổi hình thức thanh toán">
-                                        Đổi hình thức thanh toán
-                                    </option>
-                                    <option value="Không còn nhu cầu">
-                                        Không còn nhu cầu
-                                    </option>
-                                    <option value="Đặt trùng">
-                                        Đặt trùng
-                                    </option>
-                                    <option value="Thời gian giao hàng quá lâu/sớm">
-                                        Thời gian giao hàng quá lâu/sớm
-                                    </option>
-                                    <option value="Thêm/bớt sản phẩm">
-                                        Thêm/bớt sản phẩm
-                                    </option>
-                                    <option value="Thay đổi địa chỉ giao hàng">
-                                        Thay đổi địa chỉ giao hàng
-                                    </option>
+                                    <option value="Đổi hình thức thanh toán">Đổi hình thức thanh toán</option>
+                                    <option value="Không còn nhu cầu">Không còn nhu cầu</option>
+                                    <option value="Đặt trùng">Đặt trùng</option>
+                                    <option value="Thời gian giao hàng quá lâu/sớm">Thời gian giao hàng quá lâu/sớm</option>
+                                    <option value="Thêm/bớt sản phẩm">Thêm/bớt sản phẩm</option>
+                                    <option value="Thay đổi địa chỉ giao hàng">Thay đổi địa chỉ giao hàng</option>
                                     <option value="Khác">Khác</option>
                                 </select>
                             </div>
@@ -288,7 +221,7 @@
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" id="confirm-delete">Đồng ý</button>
+                        <button type="submit" class="btn btn-secondary" id="confirm-delete">Đồng ý</button>
                         <button type="button" class="btn" data-bs-dismiss="modal">Không</button>
                     </div>
                 </div>

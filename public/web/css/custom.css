@@ -177,6 +177,109 @@ ul li.splide__slide:hover {
     border: 1px solid #f4a883;
 }
 
+/* ============================================================
+ * Out-of-stock variant value (Shopee-style)
+ *
+ * `.out-of-stock` class do JS `refreshAvailability` toggle lên wrapper <div>
+ * khi `isValueAvailable` trả false (combo selection + value không có in-stock
+ * variant nào). Input bên trong cũng được `prop('disabled', true)` → block click.
+ * CSS chỉ phụ trách visual indication: mờ + diagonal stripe + grayscale.
+ * ============================================================ */
+.radio-choose-v2 .out-of-stock,
+.checkbox-choose-v2 .out-of-stock,
+.radio-child-choose .out-of-stock,
+.select-child-choose .out-of-stock {
+    opacity: 0.45;
+    position: relative;
+}
+
+.radio-choose-v2 .out-of-stock label,
+.checkbox-choose-v2 .out-of-stock label {
+    cursor: not-allowed !important;
+    color: #999;
+}
+
+/* Text-only swatch (no-image): nền xám + viền dashed + strikethrough.
+   Phân biệt rõ với active (viền orange solid). */
+.radio-choose-v2.no-image .out-of-stock label,
+.checkbox-choose-v2.no-image .out-of-stock label {
+    background: #fafafa !important;
+    border: 1px dashed #cbd5e0 !important;
+    color: #a0aec0 !important;
+    text-decoration: line-through;
+}
+
+/* Image swatch: desaturate ảnh + viền xám. */
+.radio-choose-v2 .out-of-stock .img-thumbnail {
+    border-color: #e2e8f0 !important;
+    filter: grayscale(70%);
+}
+
+/* Diagonal stripe overlay — Shopee/Tiki style visual cue.
+   `pointer-events: none` để overlay không chặn click (input disabled mới chặn,
+   không phải overlay). */
+.radio-choose-v2 .out-of-stock::after,
+.checkbox-choose-v2 .out-of-stock::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to top right,
+        transparent calc(50% - 1px),
+        rgba(160, 174, 192, 0.7) calc(50% - 1px),
+        rgba(160, 174, 192, 0.7) calc(50% + 1px),
+        transparent calc(50% + 1px)
+    );
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+/* Select <option disabled> — browser tự style nhưng tăng contrast cho rõ. */
+.select-choose-v2 option:disabled,
+.select-choose option:disabled {
+    color: #cbd5e0;
+    background: #f7fafc;
+    text-decoration: line-through;
+}
+
+/* ============================================================
+ * Thumb strip — hover preview state (Shopee UX)
+ *
+ * JS toggle `.is-hovering` lên strip + `.is-hover-active` lên thumb được hover.
+ * Khi `.is-hovering` active:
+ *   - Suppress visual của `.slick-current` thật (border + triangle về trong)
+ *   - Áp visual `.slick-current` lên `.is-hover-active`
+ * Mouseleave strip → JS gỡ class → `.slick-current` thật hiện lại.
+ *
+ * Style mirror chính xác `.slider-nav-thumbnails .slick-slide.slick-current`
+ * trong main.css line 3629-3641. Sync nếu main.css thay đổi.
+ * ============================================================ */
+.slider-nav-thumbnails .slick-slide.is-hover-active img {
+    border: 2px solid #F4a883;
+}
+
+.slider-nav-thumbnails .slick-slide.is-hover-active::before {
+    border-bottom: 5px solid #333;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    content: "";
+    height: 0;
+    left: 50%;
+    margin-left: -5px;
+    position: absolute;
+    top: -6px;
+    width: 0;
+}
+
+/* Khi đang hover bất kỳ thumb nào, ẩn visual của slick-current thật. */
+.slider-nav-thumbnails.is-hovering .slick-slide.slick-current:not(.is-hover-active) img {
+    border-color: transparent;
+}
+
+.slider-nav-thumbnails.is-hovering .slick-slide.slick-current:not(.is-hover-active)::before {
+    display: none;
+}
+
 .product-image .image {
     position: relative;
     margin-bottom: 10px;

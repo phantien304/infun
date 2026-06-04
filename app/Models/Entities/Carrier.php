@@ -2,7 +2,7 @@
 
 namespace App\Models\Entities;
 
-use App\Model\Entities\CarrierOrderStatus;
+use App\Models\Entities\CarrierOrderStatus;
 use App\Models\Base\Base;
 use Illuminate\Database\Eloquent\SoftDeletes;
 

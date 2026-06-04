@@ -83,12 +83,22 @@ class MyStorage
         $fromPublic = false;
 
         if (!$disk->exists($path)) {
-            $noImg = getModuleConfig('no_img', $module);
-            if (!$noImg || !is_file(public_path($noImg))) {
-                return $noImg ? asset($noImg) : '';
+            // Storage disk `public` map tới storage/app/public/. Nhưng nhiều
+            // ảnh hệ thống (legacy + seed) nằm thẳng trong Laravel public/
+            // (vd public/seed/products/, public/data/, public/catalog/). Trước
+            // khi rơi xuống no_img fallback, thử đọc trực tiếp từ public_path
+            // — flag $fromPublic để file_get_contents + asset() dùng đường
+            // dẫn đúng.
+            if (is_file(public_path($path))) {
+                $fromPublic = true;
+            } else {
+                $noImg = getModuleConfig('no_img', $module);
+                if (!$noImg || !is_file(public_path($noImg))) {
+                    return $noImg ? asset($noImg) : '';
+                }
+                $path = $noImg;
+                $fromPublic = true;
             }
-            $path = $noImg;
-            $fromPublic = true;
         }
 
         if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'svg') {

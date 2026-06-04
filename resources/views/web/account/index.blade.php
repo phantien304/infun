@@ -1,4 +1,4 @@
-@extends('client.infunstudio.layouts.main_account')
+@extends('web.layouts.main_account')
 @section('content')
     <div class="col-xl-9">
         <div class="card">

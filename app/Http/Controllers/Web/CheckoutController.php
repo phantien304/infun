@@ -2,43 +2,59 @@
 
 namespace App\Http\Controllers\Web;
 
-use App\Helpers\Cart;
-use App\Helpers\ZaloPay;
-use App\Http\Controllers\Client\InfunStudio\Traits\CheckoutMarketing;
-use App\Http\Controllers\Client\InfunStudio\Traits\CheckoutPayment;
-use App\Http\Controllers\Client\InfunStudio\Traits\CheckoutTotal;
-use App\Http\Controllers\Client\InfunStudio\Traits\CreateOrder;
 use App\Http\Controllers\Controller;
-use App\Jobs\Client\InfunStudio\ConsultSignEmailToAdmin;
-use App\Jobs\Client\InfunStudio\ConsultSignEmailToCustomer;
-use App\Jobs\Client\InfunStudio\OrderCreateSendEmailJob;
-use App\Jobs\Client\InfunStudio\OrderCreateSendEmailToAdminJob;
-use App\Model\Entities\Carrier;
-use App\Model\Entities\Orders;
-use App\Model\Entities\OrdersHistory;
-use App\Model\Entities\OrdersStatus;
-use App\Model\Entities\Payment;
-use App\Model\Entities\Product;
-use App\Repositories\Client\InfunStudio\OrderRepository;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
+use App\Http\Requests\Web\CheckoutAddToCartRequest;
+use App\Http\Requests\Web\CheckoutSaveOrderRequest;
+use App\Http\Requests\Web\CheckoutSaveRepaymentRequest;
+use App\Jobs\ConsultSignEmailToAdmin;
+use App\Jobs\OrderCreateSendEmailJob;
+use App\Jobs\OrderCreateSendEmailToAdminJob;
+use App\Models\Entities\OrdersStatus;
+use App\Repositories\Interfaces\CarrierRepositoryInterface;
+use App\Repositories\Interfaces\CouponRepositoryInterface;
+use App\Repositories\Interfaces\OrderRepositoryInterface;
+use App\Repositories\Interfaces\PaymentRepositoryInterface;
+use App\Repositories\Interfaces\VoucherRepositoryInterface;
+use App\Services\CartService;
+use App\Services\Checkout\CheckoutContext;
+use App\Services\Checkout\CheckoutPaymentService;
+use App\Services\Checkout\CheckoutTotalService;
+use App\Services\Checkout\CreateOrderService;
+use Illuminate\Http\Request;
 
+/**
+ * Checkout flow refactor — extend base controller mới (lazyMap repo + breadcrumbs
+ * + processMetaSeo).
+ *
+ * Phân tầng:
+ *  - Controller: orchestrate, không tự query model, không tự cache, không tự
+ *    transaction. Chỉ inject service/repo qua DI rồi gọi.
+ *  - Service (CartService, CheckoutTotalService, CreateOrderService,
+ *    CheckoutPaymentService): business logic + transaction.
+ *  - Repository (Carrier/Payment/Coupon/Voucher/Order/UserReward): persistence +
+ *    cache (theo CacheableRepository trait).
+ *
+ * Schema mới: Cart đọc product_variant_id resolve qua product_variant_attribute
+ * (xem CartService::resolveVariantId). Giá lấy từ ProductVariant.price tuyệt
+ * đối, tồn từ product_stock.on_hand - reserved.
+ *
+ * Blade contract: giữ raw array shape (`$products[i]['name']` etc) để không
+ * phá web/checkout/*.blade.php hiện tại.
+ */
 class CheckoutController extends Controller
 {
-    protected $_cart;
-    protected $_zaloPay;
-    protected $_error;
-    use CheckoutTotal, CheckoutMarketing, CheckoutPayment, CreateOrder;
-    const TRANSACTION_REWARD_ON_ORDER = 12;
-
-    public function __construct(OrderRepository $orderRepository)
-    {
-        parent::__construct();
-        $this->setRepository($orderRepository);
-        $this->_cart = app()->make(Cart::class);
-        $this->_zaloPay = app()->make(ZaloPay::class);
-        $this->_breadcrumbs = [
+    public function __construct(
+        protected CartService $cart,
+        protected CheckoutTotalService $totalService,
+        protected CreateOrderService $createOrderService,
+        protected CheckoutPaymentService $paymentService,
+        protected CarrierRepositoryInterface $carrierRepo,
+        protected PaymentRepositoryInterface $paymentRepo,
+        protected CouponRepositoryInterface $couponRepo,
+        protected VoucherRepositoryInterface $voucherRepo,
+        protected OrderRepositoryInterface $orderRepo,
+    ) {
+        $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
             ['text' => trans('messages.breadcrumbs.cart'), 'href' => route('checkout.cart'), 'separator' => false],
         ];
@@ -46,617 +62,383 @@ class CheckoutController extends Controller
 
     public function index()
     {
-        $this->_error = '';
-
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.checkout'), 'href' => route('checkout.index'), 'separator' => true]);
+        $this->processMetaSeo('buildForSeoBySetting', 'seo_title_checkout', 'seo_description_checkout');
 
-        $this->_processMetaSeo('_buildForSeoBySetting', 'seo_title_checkout', 'seo_description_checkout');
+        $ctx = $this->buildContext();
+        [$error, $items] = $this->extractItems($ctx);
+        $this->syncCartHeader($items);
+        [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
 
-        $this->_processDataCart();
-
-        $totalData = [];
-        $countProduct = $total = $subTotal = 0;
-        $productData = $this->_processProductOfCart($subTotal, $total, $countProduct);
-        if ($countProduct != session()->get('total_cart_header')) {
-            session()->put('total_cart_header', $countProduct);
-        }
-        $this->getTotalCheckout($totalData, $total);
-
-        $carriers = Carrier::orderBy('sort_order', 'DESC')->get();
-        $payments = Payment::with([
-            'paymentDescription' => function ($q) {
-                $q->where('language_code', app()->getLocale());
-            }
-        ])
-            ->orderBy('sort_order', 'DESC')
-            ->orderBy('id', 'DESC')
-            ->get();
-
-        return $this->render('client.infunstudio.checkout.index', [
-            'carriers' => $carriers,
-            'payments' => $payments,
-            'error' => $this->_error,
-            'products' => $productData,
-            'totalData' => $totalData,
-            'total' => $total,
-            'countProduct' => $countProduct,
-        ]);
-    }
-
-    public function repayment($id)
-    {
-        $this->_error = '';
-        $this->_breadcrumbs = [
-            ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
-            ['text' => trans('messages.breadcrumbs.account'), 'href' => route('account.index'), 'separator' => false],
-            ['text' => trans('messages.breadcrumbs.account_orders_history'), 'href' => route('account.orders'), 'separator' => false],
-            ['text' => trans('messages.breadcrumbs.account_order_detail'), 'href' => route('account.detailOrder', ['id' => $id]), 'separator' => false],
-            ['text' => trans('messages.breadcrumbs.account_repayment'), 'href' => route('checkout.repayment'), 'separator' => true],
-        ];
-
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.detail_order.title', 'account.detail_order.description');
-
-        $entity = Orders::where('user_id', getUserLoginId())
-            ->where('id', $id)
-            ->where('created_at', '>', Carbon::now()->subMinutes(240))
-            ->with([
-                'ordersProducts.ordersProductOptions',
-                'ordersProducts.product' => function ($q) {
-                    $q->dateAvailable();
-                },
-                'ordersProducts.product.productDescription' => function ($q) {
-                    $q->languageCode();
-                },
-                'ordersTotals' => function ($q) {
-                    $q->orderBy('sort_order', 'ASC');
-                },
-                'carrier',
-                'payment.paymentDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                },
-            ])
-            ->orderBy('created_at', 'DESC')
-            ->first();
-        if (empty($entity)) {
-            return redirect(route('account.detailOrder', ['id' => $id]))->with('failed', trans('messages.ErrorAction'));
-        }
-        $payments = Payment::with([
-            'paymentDescription' => function ($q) {
-                $q->where('language_code', app()->getLocale());
-            }
-        ])
-            ->orderBy('sort_order', 'DESC')
-            ->orderBy('id', 'DESC')
-            ->get();
-
-        return $this->render('client.infunstudio.checkout.repayment', [
-            'payments' => $payments,
-            'error' => $this->_error,
-            'entity' => $entity,
+        return $this->render('web.checkout.index', [
+            'carriers'     => $this->carrierRepo->listAllCached(),
+            'payments'     => $this->paymentRepo->listAllCached(),
+            'error'        => $error,
+            'products'     => array_values($items),
+            'totalData'    => $totalData,
+            'total'        => $total,
+            'countProduct' => $this->cart->countItems(),
         ]);
     }
 
     public function cart()
     {
-        $this->_error = '';
-        $this->_processMetaSeo('_buildForSeoBySetting', 'seo_title_cart', 'seo_description_cart');
+        $this->processMetaSeo('buildForSeoBySetting', 'seo_title_cart', 'seo_description_cart');
 
-        if (!empty(request()->get('quantity'))) {
-            foreach (request()->get('quantity') as $key => $value) {
-                $this->_cart->update($key, $value);
+        if (filled(request()->get('quantity'))) {
+            foreach ((array) request()->get('quantity') as $key => $value) {
+                $this->cart->update((string) $key, (int) $value);
             }
-            $this->_processTotalCartHeader();
+            $this->syncCartHeader();
+
             return redirect(route('checkout.cart'))->with('success', trans('messages.SuccessUpdateCart'));
         }
 
         if (request()->has('remove')) {
-            $this->_cart->remove(request()->get('remove'));
-            $this->_processTotalCartHeader();
+            $this->cart->remove((string) request()->get('remove'));
+            $this->syncCartHeader();
+
             return redirect(route('checkout.cart'))->with('success', trans('messages.SuccessUpdateCart'));
         }
 
-        $this->_processDataCart();
+        // Coupon / voucher set qua query string
         if (filled(request()->get('coupon', ''))) {
-            if (empty($this->getOptions('coupon'))) {
-                return redirect(route('checkout.cart'))->with('failed', trans('messages.ErrorCoupon'));
-            }
-            session()->put('coupon', request()->get('coupon'));
-            return redirect(route('checkout.cart'))->with('success', trans('messages.SuccessAddCoupon'));
+            return $this->applyCouponToSession(redirectRoute: 'checkout.cart');
         }
         if (filled(request()->get('voucher', ''))) {
-            if (empty($this->getOptions('voucher'))) {
-                return redirect(route('checkout.cart'))->with('failed', trans('messages.ErrorVoucher'));
-            }
-            session()->put('voucher', request()->get('voucher'));
-            return redirect(route('checkout.cart'))->with('success', trans('messages.SuccessAddVoucher'));
+            return $this->applyVoucherToSession(redirectRoute: 'checkout.cart');
         }
 
-        $productData = $totalData = [];
-        $countProduct = $subTotal = $total = 0;
-        if ($this->_cart->hasProducts()) {
-            $productData = $this->_processProductOfCart($subTotal, $total, $countProduct);
+        $error = '';
+        $items = [];
+        $totalData = [];
+        $total = 0;
+        if ($this->cart->hasItems()) {
+            $ctx = $this->buildContext();
+            [$error, $items] = $this->extractItems($ctx);
+            [$totalData, $total] = $this->totalService->build($ctx, withShipping: false);
+        }
+        $this->syncCartHeader($items);
 
-            $this->getTotalCheckout($totalData, $total, false);
-        }
-        if ($countProduct != session()->get('total_cart_header')) {
-            session()->put('total_cart_header', $countProduct);
-        }
-        return $this->render('client.infunstudio.checkout.cart', [
-            'error' => $this->_error,
-            'products' => $productData,
-            'totalData' => $totalData,
-            'total' => $total,
-            'countProduct' => $countProduct,
+        return $this->render('web.checkout.cart', [
+            'error'        => $error,
+            'products'     => array_values($items),
+            'totalData'    => $totalData,
+            'total'        => $total,
+            'countProduct' => $this->cart->countItems(),
         ]);
     }
 
-    public function addToCart()
+    public function addToCart(CheckoutAddToCartRequest $request)
     {
-        $params = $this->getParams();
-        $options = array_get($params, 'option', []);
-        list($product, $errors) = $this->_validateAddToCart($params, $options);
+        $params = $request->validated();
 
-        if (empty($product)) {
+        $product = $this->productRepo->resetModel()
+            ->where('id', $params['product_id'])
+            ->where('is_add_cart', 1)
+            ->dateAvailable()
+            ->with('description')
+            ->first();
+        if (! $product) {
             return errValidator(trans('messages.ErrorNotFoundProduct'), 200);
         }
 
-        if (count($errors)) {
-            return errValidator($errors, 200);
-        }
-
-        $this->_cart->add([
-            'id' => $product->id,
-            'quantity' => array_get($params, 'quantity', 1),
-            'option' => $options
+        $this->cart->add([
+            'id'       => $product->id,
+            'quantity' => $params['quantity'] ?? 1,
+            'option'   => $params['option'] ?? [],
         ]);
-
-        $this->_processTotalCartHeader();
+        $this->syncCartHeader();
 
         return successData('AddSuccess', [
-            'success_2' => sprintf(trans('messages.TextAddCartSuccess'), $product->getUrlClient(), isset($product->productDescription) ? $product->productDescription->name : ''),
+            'success_2'         => sprintf(
+                trans('messages.TextAddCartSuccess'),
+                method_exists($product, 'getUrlClient') ? $product->getUrlClient() : '#',
+                $product->description->name ?? ''
+            ),
             'total_cart_header' => session()->get('total_cart_header'),
-            'link_cart' => route('checkout.cart')
+            'link_cart'         => route('checkout.cart'),
         ]);
     }
 
-    public function consultSign()
+    public function consultSign(CheckoutAddToCartRequest $request)
     {
-        $params = $this->getParams();
-        $options = array_get($params, 'option', []);
-        list($product, $errors) = $this->_validateAddToCart($params, $options, 'sign');
+        $params = $request->validated();
 
-        if (empty($product)) {
+        $product = $this->productRepo->resetModel()
+            ->where('id', $params['product_id'])
+            ->dateAvailable()
+            ->with('description')
+            ->first();
+        if (! $product) {
             return errValidator(trans('messages.ErrorNotFoundProduct'), 200);
         }
 
-        if (count($errors)) {
-            return errValidator($errors, 200);
-        }
-
-        $this->_sendConsultSignToAdmin($product, $params, $options);
+        dispatch(new ConsultSignEmailToAdmin($product, $params, $params['option'] ?? []));
 
         return successData('SendSuccess', [
-            'success_2' => sprintf(trans('messages.TextConsultSignSuccess'), $product->getUrlClient(), isset($product->productDescription) ? $product->productDescription->name : ''),
+            'success_2' => sprintf(
+                trans('messages.TextConsultSignSuccess'),
+                method_exists($product, 'getUrlClient') ? $product->getUrlClient() : '#',
+                $product->description->name ?? ''
+            ),
         ]);
     }
 
-    public function saveOrder()
+    public function saveOrder(CheckoutSaveOrderRequest $request)
     {
-        $this->_error = '';
-        $this->_processDataCart();
-
-        if (filled(request()->get('coupon', ''))) {
-            if (empty($this->getOptions('coupon'))) {
-                return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCoupon'));
-            }
-            session()->put('coupon', request()->get('coupon'));
-            return redirect(route('checkout.index'))->with('success', trans('messages.SuccessAddCoupon'));
+        $ctx = $this->buildContext();
+        [$error, $items] = $this->extractItems($ctx);
+        if ($error !== '' || empty($items)) {
+            return redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
         }
 
-        if (filled(request()->get('voucher', ''))) {
-            if (empty($this->getOptions('voucher'))) {
-                return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorVoucher'));
+        [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
+
+        try {
+            $orderId = $this->createOrderService->create($ctx, $request->validated(), $totalData, $total);
+
+            $params = $request->validated();
+            $this->sendNotifications($items, $totalData, $this->buildMailData($params, $orderId));
+
+            $payload = $this->paymentService->buildOrderPayload(
+                $params['payment_code'],
+                $orderId,
+                $total,
+                $params['telephone'] ?? null,
+                $params['email'] ?? null
+            );
+            $url = $this->paymentService->startPayment($orderId, $payload);
+
+            $this->cart->clear();
+            session()->put('lastOrderSuccess', $orderId);
+
+            if (filled($url)) {
+                return redirect($url);
             }
-            session()->put('voucher', request()->get('voucher'));
-            return redirect(route('checkout.index'))->with('success', trans('messages.SuccessAddVoucher'));
+
+            return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
+        } catch (\Throwable $e) {
+            logError($e);
+
+            return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
         }
-
-        $totalData = [];
-        $countProduct = $subTotal = $total = 0;
-        $productData = $this->_processProductOfCart($subTotal, $total, $countProduct);
-        if (empty($this->_error)) {
-            $validator = $this->getRepository()->getValidator();
-            if (!$validator->validateCreate(request()->all())) {
-                $messages = $validator->errorsBag()->getMessages();
-                return redirect()->to(route('checkout.index'))->withErrors($messages)->withInput();
-            }
-
-            if (count($productData)) {
-                $this->getTotalCheckout($totalData, $total);
-                DB::beginTransaction();
-                try {
-                    $uniqid = strtoupper(uniqid());
-                    $reward = 0;
-                    $orderId = $this->_saveDataToOrder($total, $uniqid);
-                    $this->setOptions(['order_id' => $orderId]);
-
-                    $dataPayment = $this->_buildDataForPayment($total);
-
-                    $this->_saveDataToOrdersHistory();
-
-                    $this->_saveDataToVoucherHistory($totalData);
-
-                    $this->_saveDataToCouponHistory();
-
-                    $this->_saveDataToOrderOption($productData, $reward);
-
-                    $this->_saveDataToUserReward($reward);
-
-                    $this->_saveDataToOrdersTotal($totalData);
-
-                    $dataCustomer = $this->_processDataBeforeSendMail($uniqid);
-                    if (filled(request()->get('email', ''))) {
-                        $this->_sendNotificationToCustomer($productData, $totalData, $dataCustomer);
-                    }
-                    if (filled(getConfigDb('config_email_notification'))) {
-                        $this->_sendNotificationToAdmin($productData, $totalData, $dataCustomer);
-                    }
-
-                    $urlRedirect = $this->_getUrlRedirectPaymentOrder($dataPayment);
-                    DB::commit();
-                    $this->_cart->clear();
-                    session()->put('lastOrderSuccess', $orderId);
-                    if (filled($urlRedirect)) {
-                        return redirect($urlRedirect);
-                    }
-                    return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
-                } catch (\Exception $e) {
-                    logError($e);
-                    DB::rollBack();
-                    return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
-                }
-            }
-        }
-        return redirect(route('checkout.index'));
     }
 
-    public function saveRepayment()
+    public function saveRepayment(CheckoutSaveRepaymentRequest $request)
     {
-        $params = $this->getParams();
-        $validator = $this->getRepository()->getValidator();
-        if (!$validator->validateRepayment($params)) {
-            $messages = $validator->errorsBag()->getMessages();
-            return back()->withErrors($messages)->withInput();
-        }
-        $order = $this->getRepository()
-            ->where('id', $params['order_id'])
-            ->where('user_id', getUserLoginId())
-            ->first();
-        if ($order) {
-            $paymentCode = $params['payment_code'];
-            if ($paymentCode == 'cod') {
-                $order->fill([
-                    'payment_code' => $paymentCode,
-                    'order_status_id' => getConfigDb('order_status_id'),
-                ])->save();
-                return redirect()->to(route('account.detailOrder', ['id' => $order->id]))
-                    ->with('success', trans('messages.UpdateSuccess'));
-            }
+        $params = $request->validated();
 
-            $dataPayment = $this->_buildDataForRePayment([
-                'id' => $order->id,
-                'telephone' => $order->telephone,
-                'email' => $order->email,
-                'total' => (int)$order->total,
-                'payment_code' => $paymentCode,
-            ]);
-            $order->fill([
-                'app_trans_id' => $dataPayment['app_trans_id'],
-            ])->save();
-            $orderPayment = $this->_zaloPay->createOrder($dataPayment);
-            $urlRedirect = '';
-            if ($orderPayment["return_code"] === 1) {
-                $urlRedirect = $orderPayment['order_url'];
-            }
-            if (filled($urlRedirect)) {
-                return redirect($urlRedirect);
-            }
+        $order = $this->orderRepo->getOrderForUser((int) $params['order_id'], (int) getCurrentUserId());
+        if (! $order) {
+            return back()->with('failed', trans('messages.ErrorRepaymentOrder'))->withInput();
         }
+
+        $code = $params['payment_code'];
+        if ($code === 'cod') {
+            $this->orderRepo->upsertOrder([
+                'id'              => $order->id,
+                'payment_code'    => $code,
+                'order_status_id' => getConfigDb('order_status_id'),
+            ]);
+
+            return redirect()->to(route('account.detailOrder', ['id' => $order->id]))
+                ->with('success', trans('messages.UpdateSuccess'));
+        }
+
+        $payload = $this->paymentService->buildRepaymentPayload([
+            'id'           => $order->id,
+            'telephone'    => $order->telephone,
+            'email'        => $order->email,
+            'total'        => (int) $order->total,
+            'payment_code' => $code,
+        ]);
+        $this->orderRepo->upsertOrder([
+            'id'           => $order->id,
+            'app_trans_id' => $payload['app_trans_id'] ?? null,
+        ]);
+
+        $url = $this->paymentService->startPayment($order->id, $payload);
+        if (filled($url)) {
+            return redirect($url);
+        }
+
         return back()->with('failed', trans('messages.ErrorRepaymentOrder'))->withInput();
     }
 
-    public function paymentCallBack()
+    public function repayment($id)
+    {
+        $this->breadcrumbs = [
+            ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
+            ['text' => trans('messages.breadcrumbs.account'), 'href' => route('account.index'), 'separator' => false],
+            ['text' => trans('messages.breadcrumbs.account_orders_history'), 'href' => route('account.orders'), 'separator' => false],
+            ['text' => trans('messages.breadcrumbs.account_order_detail'), 'href' => route('account.detailOrder', ['id' => $id]), 'separator' => false],
+            ['text' => trans('messages.breadcrumbs.account_repayment'), 'href' => '', 'separator' => true],
+        ];
+        $this->processMetaSeo('buildForSeoByConfig', 'account.detail_order.title', 'account.detail_order.description');
+
+        $entity = $this->orderRepo->getOrderForUser((int) $id, (int) getCurrentUserId(), recentOnly: true);
+        if (! $entity) {
+            return redirect(route('account.detailOrder', ['id' => $id]))->with('failed', trans('messages.ErrorAction'));
+        }
+
+        return $this->render('web.checkout.repayment', [
+            'payments' => $this->paymentRepo->listAllCached(),
+            'error'    => '',
+            'entity'   => $entity,
+        ]);
+    }
+
+    public function paymentCallBack(Request $request)
     {
         try {
-            $params = json_decode(file_get_contents('php://input'), true);
-            $result = $this->_zaloPay->verifyCallback($params);
-            if ($result['return_code'] === 1) {
-                $data = json_decode($params['data'], true);
-                $order = Orders::where('app_trans_id', $data['app_trans_id'])->first();
-                if ($order) {
-                    DB::beginTransaction();
-                    try {
-                        $order->fill([
-                            'zp_trans_id' => $data['zp_trans_id'],
-                            'channel' => $data['channel'],
-                            'order_status_id' => getConfigDb('order_payment_success_status_id')
-                        ])->save();
-                        OrdersHistory::create([
-                            'order_id' => $order->id,
-                            'order_status_id' => getConfigDb('order_payment_success_status_id'),
-                        ]);
-                        DB::commit();
-                    } catch (\Exception $e) {
-                        logError($e->getMessage());
-                        DB::rollBack();
-                    }
-                }
-            }
-        } catch (\Exception $e) {
+            $this->paymentService->processCallback($request->getContent());
+        } catch (\Throwable $e) {
             logError($e);
         }
     }
 
     public function shipping()
     {
-        $totalData = [];
-        $countProduct = $subTotal = $total = 0;
-        $this->_processDataCart();
-        $this->_processProductOfCart($subTotal, $total, $countProduct);
-        $this->getTotalCheckout($totalData, $total);
+        $ctx = $this->buildContext();
+        $this->extractItems($ctx);
+        [$totalData] = $this->totalService->build($ctx, withShipping: true);
+
         return successData('SearchSuccess', $totalData, 0);
     }
 
     public function success()
     {
-        $params = $this->getParams();
-        $appTransId = array_get($params, 'apptransid', '');
+        $appTransId = (string) request()->get('apptransid', '');
         if (filled($appTransId)) {
-            $this->_processUrlPaymentRedirect($params, $appTransId);
+            $this->paymentService->processRedirect(request()->all(), $appTransId);
+
             return redirect(route('checkout.success'));
         }
 
-        $entity = $this->getRepository()->where('id', session()->get('lastOrderSuccess', 0))->select('id', 'invoice_no', 'full_name', 'email', 'order_status_id', 'telephone')->first();
-        if (empty($entity)) {
+        $entity = $this->orderRepo->getOrderSummary((int) session()->get('lastOrderSuccess', 0));
+        if (! $entity) {
             return redirect(route('home'));
         }
 
-        $this->_error = '';
-
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.checkout_success'), 'href' => route('checkout.success'), 'separator' => true]);
+        $this->processMetaSeo('buildForSeoBySetting', 'seo_title_checkout_success', 'seo_description_checkout_success');
 
-        $this->_processMetaSeo('_buildForSeoBySetting', 'seo_title_checkout_success', 'seo_description_checkout_success');
-
-        return $this->render('client.infunstudio.checkout.success', [
+        return $this->render('web.checkout.success', [
             'entity' => $entity,
         ]);
     }
 
-    protected function _processDataCart()
-    {
-        $products = $this->_cart->getProducts();
-        $coupon = $this->getCoupon($products, getCouponCode());
-        $voucher = $this->getVoucher(getVoucherCode());
-        $this->setOptions([
-            'products' => $products,
-            'coupon' => $coupon,
-            'voucher' => $voucher,
-        ]);
-    }
+    // ===== private helpers ============================================
 
-    protected function _processProductOfCart(&$subTotal, &$total, &$countProduct)
+    /**
+     * Build context cho 1 request checkout — gồm cart items, coupon, voucher
+     * đã resolve. Mọi service downstream nhận context này thay vì tự query.
+     */
+    protected function buildContext(): CheckoutContext
     {
-        $products = $this->getOptions('products');
-        if (!$this->_cart->hasProducts()) {
-            $this->_error = trans('messages.ErrorProduct');
-            return [];
+        $items = $this->cart->getItems();
+        $subtotal = $this->cart->getSubtotal();
+
+        $ctx = new CheckoutContext();
+        $ctx->setItems($items);
+
+        if (filled(session()->get('coupon'))) {
+            $ctx->setCoupon($this->couponRepo->resolveCoupon((string) session()->get('coupon'), $items, $subtotal));
+        }
+        if (filled(session()->get('voucher'))) {
+            $ctx->setVoucher($this->voucherRepo->resolveVoucher((string) session()->get('voucher')));
         }
 
-        if (!$this->_cart->hasStock() && getConfigDb('config_stock_checkout')) {
-            $this->_error = trans('messages.ErrorStock');
+        return $ctx;
+    }
+
+    /**
+     * Trả [error, items] cho controller. Empty error = OK. Quy tắc:
+     *  - cart rỗng → ErrorProduct.
+     *  - cart không đủ tồn (config_stock_checkout bật) → ErrorStock.
+     *  - vi phạm minimum theo product → ErrorMinimum.
+     */
+    protected function extractItems(CheckoutContext $ctx): array
+    {
+        if (! $this->cart->hasItems()) {
+            return [trans('messages.ErrorProduct'), []];
         }
 
-        foreach ($products as $product) {
-            $productTotal = 0;
+        $items = $ctx->items;
 
-            foreach ($products as $product2) {
-                if ($product2['id'] == $product['id']) {
-                    $productTotal += $product2['quantity'];
-                }
-            }
-
-            if ($product['minimum'] > $productTotal) {
-                $this->_error = sprintf(trans('messages.ErrorMinimum'), $product['name'], $product['minimum']);
-                break;
-            }
+        if (getConfigDb('config_stock_checkout') && ! $this->cart->hasStock()) {
+            return [trans('messages.ErrorStock'), $items];
         }
 
-        $productData = [];
-        foreach ($products as $product) {
-            $optionData = [];
-
-            foreach ($product['option'] as $option) {
-                $childs = $option['child'];
-                $childData = [];
-                if (count($childs)) {
-                    foreach ($childs as $child) {
-                        $childData[] = [
-                            'id' => $child['id'],
-                            'product_option_value_2_id' => $child['id'],
-                            'option_value_2_id' => $child['option_value_2_id'],
-                            'name' => $child['name'],
-                            'type' => $child['type'],
-                            'variation' => $child['variation'],
-                            'subtract' => $child['subtract'],
-                            'value' => $child['value'],
-                            'price' => $child['price'],
-                            'price_prefix' => $child['price_prefix'],
-                            'points' => $child['points'],
-                            'points_prefix' => $child['points_prefix'],
-                            'weight' => $child['weight'],
-                            'weight_prefix' => $child['weight_prefix'],
-                            'quantity' => $child['subtract'] ? ($child['quantity'] - $product['quantity']) : $child['quantity'],
-                        ];
-                    }
-                }
-                $optionData[] = [
-                    'product_option_value_id' => $option['product_option_value_id'],
-                    'option_id' => $option['option_id'],
-                    'product_option_id' => $option['product_option_id'],
-                    'image' => $option['image'],
-                    'name' => $option['name'],
-                    'type' => $option['type'],
-                    'variation' => $option['variation'],
-                    'value' => $option['value'],
-                    'required' => $option['required'],
-                    'child' => $childData,
-                ];
-            }
-
-            $subTotal += $product['total'];
-            $total += $product['price'] * $product['quantity'];
-            $countProduct += $product['quantity'];
-
-            $productData[] = [
-                'key' => $product['key'],
-                'id' => $product['id'],
-                'image' => resizeImage($product['image'], 60, 60, 'client'),
-                'name' => $product['name'],
-                'model' => $product['model'],
-                'option' => $optionData,
-                'quantity' => $product['quantity'],
-                'reward' => $product['reward'],
-                'points' => $product['points'],
-                'stock' => $product['stock'],
-                'price' => $product['price'],
-                'total' => $product['price'] * $product['quantity'],
-                'url' => $product['url'],
-                'remove' => route('checkout.cart', ['remove' => $product['key']]),
-            ];
+        $minimumViolation = $this->cart->validateMinimum();
+        if ($minimumViolation) {
+            return [sprintf(trans('messages.ErrorMinimum'), $minimumViolation['name'], $minimumViolation['minimum']), $items];
         }
 
-        return $productData;
+        return ['', $items];
     }
 
-    protected function _validateAddToCart($params, &$options, $action = 'cart')
+    protected function applyCouponToSession(string $redirectRoute)
     {
-        $productId = array_get($params, 'product_id', 0);
-        $product = Product::where('id', $productId)
-            ->with([
-                'productDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                }
-            ])
-            ->when($action == 'cart', function ($q) {
-                $q->where('is_add_cart', 1);
-            })
-            ->dateAvailable()
-            ->first();
-        $errors = [];
-        if ($product) {
-            $quantity = array_get($params, 'quantity', 1);
-            if ($quantity <= 0) {
-                $errors['quantity'] = trans('messages.ErrorQuantity');
-            }
-            foreach ($options as $key => $opt) {
-                if ($opt['required'] == 1) {
-                    if (array_get($opt, 'variation', 2) == 1) {
-                        if (empty(array_filter(array_get($opt, 'children', [])))) {
-                            $errors[$key]['child'] = sprintf(trans('messages.TextRequiredChoose'), '');
-                        }
-                        if (empty($opt['product_option_value_id'])) {
-                            $errors[$key]['parent'] = sprintf(trans('messages.TextRequiredChoose'), $opt['name']);
-                        }
-                    }
-                    if (array_get($opt, 'variation', 2) == 2) {
-                        if ($opt['type'] == 'file' || $opt['type'] == 'datetime' || $opt['type'] == 'date' || $opt['type'] == 'time') {
-                            if (empty($opt['value'])) {
-                                $errors[$key]['parent'] = sprintf(trans('messages.TextRequiredChoose'), $opt['name']);
-                            }
-                        }
-                        if ($opt['type'] == 'text' || $opt['type'] == 'textarea' || $opt['type'] == 'email' || $opt['type'] == 'phone') {
-                            if (empty($opt['value'])) {
-                                $errors[$key]['parent'] = sprintf(trans('messages.TextRequiredInput'), $opt['name']);
-                            } else {
-                                if ($opt['type'] == 'email') {
-                                    $validator = Validator::make(
-                                        ['email' => $opt['value']],
-                                        ['email' => 'email']
-                                    );
-                                    if ($validator->fails()) {
-                                        $errors[$key]['parent'] = $validator->errors()->first();
-                                    }
-                                }
-                                if ($opt['type'] == 'phone') {
-                                    $validator = Validator::make(
-                                        ['phone' => $opt['value']],
-                                        ['phone' => 'min_length:8|max_length:12'],
-                                        [
-                                            'phone.min_length' => trans('messages.ErrorPhone'),
-                                            'phone.max_length' => trans('messages.ErrorPhone'),
-                                        ]
-                                    );
-                                    if ($validator->fails()) {
-                                        $errors[$key]['parent'] = $validator->errors()->first();
-                                    }
-                                }
-                            }
-                        }
-                        if ($opt['type'] == 'image' || $opt['type'] == 'select' || $opt['type'] == 'radio' || $opt['type'] == 'checkbox') {
-                            if (empty($opt['product_option_value_id'])) {
-                                $errors[$key]['parent'] = sprintf(trans('messages.TextRequiredChoose'), $opt['name']);
-                            }
-                        }
-                    }
-                } else {
-                    if (!isset($opt['product_option_value_id'])) {
-                        unset($options[$key]);
-                    }
-                }
-            }
+        $code = (string) request()->get('coupon');
+        $items = $this->cart->getItems();
+        $subtotal = $this->cart->getSubtotal();
+        $resolved = $this->couponRepo->resolveCoupon($code, $items, $subtotal);
+
+        if (empty($resolved)) {
+            return redirect(route($redirectRoute))->with('failed', trans('messages.ErrorCoupon'));
         }
-        return [$product, $errors];
+
+        session()->put('coupon', $code);
+
+        return redirect(route($redirectRoute))->with('success', trans('messages.SuccessAddCoupon'));
     }
 
-    protected function _sendNotificationToCustomer($productData, $totalData, $data)
+    protected function applyVoucherToSession(string $redirectRoute)
     {
-        dispatch(new OrderCreateSendEmailJob($productData, $totalData, $data));
+        $code = (string) request()->get('voucher');
+        $resolved = $this->voucherRepo->resolveVoucher($code);
+
+        if (empty($resolved)) {
+            return redirect(route($redirectRoute))->with('failed', trans('messages.ErrorVoucher'));
+        }
+
+        session()->put('voucher', $code);
+
+        return redirect(route($redirectRoute))->with('success', trans('messages.SuccessAddVoucher'));
     }
 
-    protected function _sendNotificationToAdmin($productData, $totalData, $data)
+    protected function syncCartHeader(?array $items = null): void
     {
-        dispatch(new OrderCreateSendEmailToAdminJob($productData, $totalData, $data));
+        $count = $items === null ? $this->cart->countItems() : array_sum(array_column($items, 'quantity'));
+        if ((int) session()->get('total_cart_header', -1) !== $count) {
+            session()->put('total_cart_header', $count);
+        }
     }
 
-    protected function _sendConsultSignToCustomer($product, $data, $options)
+    protected function sendNotifications(array $items, array $totalData, array $mailData): void
     {
-        dispatch(new ConsultSignEmailToCustomer($product, $data, $options));
+        if (filled($mailData['email'] ?? null)) {
+            dispatch(new OrderCreateSendEmailJob($items, $totalData, $mailData));
+        }
+        if (filled(getConfigDb('config_email_notification'))) {
+            dispatch(new OrderCreateSendEmailToAdminJob($items, $totalData, $mailData));
+        }
     }
 
-    protected function _sendConsultSignToAdmin($product, $data, $options)
+    protected function buildMailData(array $params, int $orderId): array
     {
-        dispatch(new ConsultSignEmailToAdmin($product, $data, $options));
-    }
-
-    protected function _processDataBeforeSendMail($uniqid)
-    {
-        $params = $this->getParams();
-
-        $ordersStatus = OrdersStatus::where('id', getConfigDb('order_status_id'))
+        $status = OrdersStatus::where('id', getConfigDb('order_status_id'))
             ->where('language_code', app()->getLocale())
             ->first();
-        $payment = Payment::where('code', array_get($params, 'payment_code'))
-            ->leftJoin('payment_description', function ($q) {
-                $q->on('payment_description.payment_id', '=', 'payment.id')
-                    ->where('language_code', app()->getLocale());
-            })
-            ->first();
+        $payment = $this->paymentRepo->findByCode((string) ($params['payment_code'] ?? ''));
 
-        $data = array_merge($this->getParams(), [
-            'uniqid' => $uniqid,
-            'order_status' => $ordersStatus ? $ordersStatus->name : '',
-            'payment_name' => $payment ? $payment->name : 'Trả tiền khi nhận hàng',
+        return array_merge($params, [
+            'order_id'     => $orderId,
+            'uniqid'       => strtoupper(uniqid()),
+            'order_status' => $status?->name ?? '',
+            'payment_name' => $payment?->description?->name ?? 'Trả tiền khi nhận hàng',
         ]);
-        return $data;
     }
 }

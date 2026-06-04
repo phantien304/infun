@@ -43,6 +43,10 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder');
         Route::get('success', 'CheckoutController@success')->name('checkout.success');
         Route::get('shipping', 'CheckoutController@shipping')->name('checkout.shipping');
+        // IPN từ ZaloPay (server-to-server) — không nằm trong cache_page/auth.
+        // Endpoint phải trả JSON theo schema ZaloPay yêu cầu (xem
+        // CheckoutPaymentService::processCallback).
+        Route::post('payment/call-back', 'CheckoutController@paymentCallBack')->name('checkout.paymentCallBack')->withoutMiddleware(['cache_page']);
         Route::get('/', 'CheckoutController@index')->name('checkout.index');
     });
     Route::prefix('resource')->group(function () {

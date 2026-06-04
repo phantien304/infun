@@ -7,7 +7,8 @@ use App\Models\Base\Base;
 class ProductOption extends Base
 {
     protected $table = 'product_option';
-    protected $primaryKeyAutoIncrement = 'id';
+    public $primaryKey = ['product_id', 'option_id'];
+    public $incrementing = false;
     public $timestamps = true;
     protected static $_destroyRelations = ['productOptionValues'];
 
@@ -18,6 +19,10 @@ class ProductOption extends Base
 
     public function productOptionValues()
     {
-        return $this->hasMany(ProductOptionValue::class, 'product_option_id', 'id');
+        return $this->hasMany(
+            ProductOptionValue::class,
+            ['product_id', 'option_id'],
+            ['product_id', 'option_id'],
+        );
     }
 }

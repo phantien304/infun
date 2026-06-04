@@ -1,49 +1,39 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * product_option_definition: khai báo tập option BẮT BUỘC của 1 product.
+ * DEPRECATED — bảng product_option_definition đã bị bỏ.
  *
- * Enforce invariant "mọi variant của cùng product có cùng tập option_id".
- * Vd: áo có Size + Color → mọi variant phải gồm đúng 1 Size và đúng 1 Color,
- * không variant nào chỉ có Size.
+ * Lý do gộp: legacy bảng `product_option` (product_id, option_id, value,
+ * required) đã đủ vai trò "declare 1 product có option X". Tạo thêm
+ * product_option_definition cho variant role là duplication — 2 bảng cùng
+ * khai báo "product có option Y" chỉ khác cách lấy value (variant từ pivot
+ * vs custom field từ cột value). Đáng lý ra dispatch theo `option.role`
+ * trên 1 bảng duy nhất.
  *
- * Application layer khi insert variant phải:
- *   1. Đọc danh sách option_id từ bảng này theo product_id
- *   2. Đảm bảo pivot product_variant_attribute của variant mới khớp tập đó
+ * Migration này giờ chỉ DROP bảng nếu đã tạo (cho DB đã chạy version cũ).
+ * Lần migrate fresh sẽ là no-op.
  *
- * Có thể tăng cường bằng trigger nếu cần cưỡng chế tuyệt đối ở DB.
+ * Code application phải đọc cả 2 role từ legacy `product_option`:
+ *   $product->productOptions  → ProductOption model (legacy)
+ *     - option.role = ROLE_VARIANT      → value column NULL, đọc values
+ *                                          qua product_variant_attribute
+ *     - option.role = ROLE_CUSTOM_FIELD → value column là default,
+ *                                          user override lúc checkout
  *
- * is_required = false dành cho option phụ (vd "Engraving text") có thể bỏ
- * qua trong 1 số variant.
+ * Service ProductOptionService phải đổi từ productOptionDefinitions sang
+ * productOptions, dispatch theo option.role.
  */
-return new class extends Migration
-{
+return new class () extends Migration {
     public function up(): void
     {
-        Schema::create('product_option_definition', function (Blueprint $table) {
-            // product.id và option.id legacy INT(11) SIGNED.
-            $table->integer('product_id');
-            $table->integer('option_id');
-            $table->boolean('is_required')->default(true);
-            $table->unsignedInteger('sort_order')->default(0);
-
-            $table->primary(['product_id', 'option_id'], 'pk_product_option_definition');
-
-            $table->foreign('product_id')
-                ->references('id')->on('product')
-                ->cascadeOnDelete();
-            $table->foreign('option_id')
-                ->references('id')->on('option')
-                ->restrictOnDelete();
-        });
+        Schema::dropIfExists('product_option_definition');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('product_option_definition');
+        // KHÔNG recreate — bảng này đã bỏ vĩnh viễn.
     }
 };

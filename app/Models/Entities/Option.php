@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Option extends Base
 {
     use SoftDeletes;
+
     protected $table = 'option';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;

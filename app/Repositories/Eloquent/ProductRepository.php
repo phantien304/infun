@@ -3,6 +3,7 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\Product;
+use App\Models\Entities\ProductImage;
 use App\Models\Entities\ProductRelated;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
@@ -98,9 +99,9 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             });
     }
 
-    protected function beforeBuild(Builder $query): Builder
+    protected function beforeBuildForList(Builder $query): Builder
     {
-        $query = $this->clientScope($query);
+        $query = $this->cardScope($query);
 
         $min = self::normalizePrice(request()->input('filter.price_min'));
         $max = self::normalizePrice(request()->input('filter.price_max'));
@@ -113,7 +114,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     protected function withRelations(): array
     {
-        $relations = $this->clientRelations();
+        $relations = $this->cardRelations();
         $selected = (array) request()->input('filter.filter_value_id', []);
         if (! empty($selected)) {
             $relations[] = ['productFilters' => fn ($q) => $q->whereIn('filter_value_id', $selected)];
@@ -128,10 +129,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $this->resetModel()->whereIn('id', $productIds)->get();
     }
 
-    /**
-     * Lấy 1 product cho trang chi tiết — đầy đủ relation cần cho view,
-     * cache theo user_group + user_type (giá hiệu lực phụ thuộc nhóm).
-     */
     public function getProductDetail(int $id): ?Product
     {
         if ($id <= 0) {
@@ -148,10 +145,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         );
     }
 
-    /**
-     * Atomic increment view counter. Bỏ qua model events + cache (cột viewed
-     * nằm trong $auditExclude, đổi thường xuyên không cần ghi cache).
-     */
     public function incrementViewed(int $id): void
     {
         try {
@@ -163,10 +156,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         }
     }
 
-    /**
-     * Related products của 1 product cụ thể — admin sắp xếp ở bảng
-     * product_related, giữ nguyên thứ tự.
-     */
     public function getProductRelatedByProductId(int $id, int $limit = 4)
     {
         $relatedIds = ProductRelated::query()
@@ -189,7 +178,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $this->rememberCacheTagged(
             [getCoreConfig('cache.product_root')],
             $this->specialLatestCacheKey($limit),
-            fn () => $this->clientQuery()
+            fn () => $this->cardQuery()
                 ->hasActiveSpecial()
                 ->orderBy('product.sort_order', 'DESC')
                 ->orderBy('product.created_at', 'DESC')
@@ -201,7 +190,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     public function getProductFeature(int $limit = 6)
     {
-        return $this->clientQuery()
+        return $this->cardQuery()
             ->where('product.badge', 'feature')
             ->orderBy('product.id', 'DESC')
             ->take($limit)
@@ -213,7 +202,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $this->rememberCacheTagged(
             [getCoreConfig('cache.product_root'), getCoreConfig('cache.product_latest')],
             $this->latestCacheKey($limit),
-            fn () => $this->clientQuery()
+            fn () => $this->cardQuery()
                 ->orderBy('product.created_at', 'DESC')
                 ->take($limit)
                 ->get(),
@@ -236,7 +225,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $this->rememberCacheTagged(
             [getCoreConfig('cache.product_root')],
             $key,
-            fn () => $this->clientQuery()
+            fn () => $this->cardQuery()
                 ->whereIn('product.id', $productIds)
                 ->orderByRaw('FIELD(product.id, '.implode(',', $productIds).')')
                 ->get(),
@@ -244,19 +233,19 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         );
     }
 
-    protected function clientQuery(): Builder
+    protected function cardQuery(): Builder
     {
-        return $this->clientScope($this->model->newQuery())
+        return $this->cardScope($this->model->newQuery())
             ->select('product.*')
-            ->with($this->clientRelations());
+            ->with($this->cardRelations());
     }
 
-    protected function clientScope(Builder $query): Builder
+    protected function cardScope(Builder $query): Builder
     {
         return $query->dateAvailable();
     }
 
-    protected function clientRelations(): array
+    protected function cardRelations(): array
     {
         return [
             'description',
@@ -267,20 +256,29 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         ];
     }
 
-    /**
-     * Eager-load đầy đủ cho trang chi tiết — gallery, option tree,
-     * weight class, special đại diện (priority cao nhất).
-     */
     protected function detailRelations(): array
     {
-        return array_merge($this->clientRelations(), [
-            'productImages',
+        return array_merge($this->cardRelations(), [
+            'productImages' => fn ($q) => $q
+                ->where('is_active', true)
+                ->whereIn('type', [
+                    setting('product_image.type.main'),
+                    setting('product_image.type.gallery'),
+                    setting('product_image.type.zoom'),
+                ])
+                ->orderBy('sort_order'),
             'productSpecials',
             'weightClass.description',
             'productOptions.option.description',
             'productOptions.option.optionValues.description',
             'productOptions.productOptionValues.optionValue.description',
-            'productOptions.productOptionValues.productOptionValues2.optionValue.description',
+            'productVariants' => fn ($q) => $q
+                ->orderBy('is_default', 'DESC')
+                ->orderBy('sort_order', 'ASC')
+                ->orderBy('id', 'ASC'),
+            'productVariants.productVariantAttributes.optionValue.description',
+            'productVariants.productStock',
+            'productVariants.description',
         ]);
     }
 
@@ -296,7 +294,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     protected function specialLatestCacheKey(int $limit): string
     {
-        return implode('_', ['product_special_latest', getUserGroupId(), getUserType(), $limit]).'_';
+        return implode('_', [getCoreConfig('cache.product_special_latest'), getUserGroupId(), getUserType(), $limit]).'_';
     }
 
     private static function normalizePrice(?string $value): ?int

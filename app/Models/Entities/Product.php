@@ -87,6 +87,11 @@ class Product extends Base implements Auditable
         return $this->hasMany(ProductOption::class, 'product_id', 'id');
     }
 
+    public function productVariants()
+    {
+        return $this->hasMany(ProductVariant::class, 'product_id', 'id');
+    }
+
     public function productFilters()
     {
         return $this->hasMany(ProductFilter::class, 'product_id', 'id');

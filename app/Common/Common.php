@@ -5,6 +5,69 @@ use App\Helpers\Facades\CustomStorage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
+function errValidator($error, $code = 422)
+{
+    return response()->json([
+        'success' => false,
+        'validator' => false,
+        'code' => $code,
+        'message' => $error,
+    ], $code);
+}
+
+function errNoValidator($error, $code = 422)
+{
+    return response()->json([
+        'success' => false,
+        'validator' => true,
+        'code' => $code,
+        'message' => $error,
+    ], $code);
+}
+
+function successNoData($key = '', $code = 200)
+{
+    return response()->json([
+        'success' => true,
+        'validator' => true,
+        'code' => $code,
+        'message' => $key,
+    ], $code);
+}
+
+function successData($key = '', $data = null, $totalRow = 0, $code = 200)
+{
+    return response()->json([
+        'success' => true,
+        'validator' => true,
+        'code' => $code,
+        'message' => $key,
+        'data' => $data,
+        'totalRow' => $totalRow
+    ], $code);
+}
+
+function getForwardedIp()
+{
+    if (filled(request()->server('HTTP_X_FORWARDED_FOR'))) {
+        $forwardedIp = request()->server('HTTP_X_FORWARDED_FOR');
+    } elseif (filled(request()->server('HTTP_CLIENT_IP'))) {
+        $forwardedIp = request()->server('HTTP_CLIENT_IP');
+    } else {
+        $forwardedIp = '';
+    }
+    return $forwardedIp;
+}
+
+function getCookie($cookieName = '', $default = null)
+{
+    if (empty($cookieName)) {
+        return request()->cookie();
+    }
+
+    return request()->cookie($cookieName) ? request()->cookie($cookieName) : $default;
+}
+
 function getDeletedByColumn($key = 'field')
 {
     return getSystemConfig('deleted_by_column.' . $key, getUpdatedByColumn());
@@ -138,7 +201,7 @@ function isApi()
 {
     return request()->routeIs('api.*');
 }
-function routeArea($name, $params = [])
+function routeArea(?string $name, $params = [])
 {
     if (str_starts_with($name, 'http')) {
         return $name;

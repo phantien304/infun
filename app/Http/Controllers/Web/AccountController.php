@@ -1,43 +1,52 @@
 <?php
 
-namespace App\Http\Controllers\Client\InfunStudio;
+namespace App\Http\Controllers\Web;
 
-use App\Helpers\ZaloPay;
-use App\Http\Controllers\Client\InfunStudio\Traits\CheckoutPayment;
-use App\Model\Entities\Orders;
-use App\Model\Entities\OrdersCancel;
-use App\Model\Entities\OrdersHistory;
-use App\Model\Entities\UserWishlist;
-use App\Repositories\Client\InfunStudio\OrderRepository;
-use App\Repositories\Client\InfunStudio\UserAddressRepository;
-use App\Repositories\Client\InfunStudio\UserPhoneRepository;
-use App\Repositories\Client\InfunStudio\UserRepository;
-use App\Repositories\Client\InfunStudio\UserWishlistRepository;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cookie;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
+use App\Data\Output\OrderDTO;
+use App\Data\Output\UserAddressDTO;
+use App\Data\Output\UserDTO;
+use App\Data\Output\WishlistItemDTO;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Web\AccountAddAddressRequest;
+use App\Http\Requests\Web\AccountAddressRequest;
+use App\Http\Requests\Web\AccountCancelOrderRequest;
+use App\Http\Requests\Web\AccountChangePasswordRequest;
+use App\Http\Requests\Web\AccountUpdateProfileRequest;
+use App\Repositories\Interfaces\OrderRepositoryInterface;
+use App\Repositories\Interfaces\UserRepositoryInterface;
+use App\Services\Account\AccountService;
+use App\Services\Account\AddressService;
+use App\Services\Account\WishlistService;
+use App\Services\Checkout\RefundService;
+use Illuminate\Http\Request;
 
-class AccountController extends BaseInfunStudioController
+/**
+ * Trang account (đã đăng nhập): profile / password / address / wishlist /
+ * orders / newsletter.
+ *
+ * Refactor 2026-05-31 — xem CLAUDE.md mục "Account flow":
+ *  - Namespace mới `App\Http\Controllers\Web` (cũ `Client\InfunStudio`).
+ *  - Base extends `App\Http\Controllers\Controller` (lazyMap repo + render).
+ *  - Service layer mới: AccountService / AddressService / WishlistService.
+ *  - RefundService tách khỏi CheckoutPaymentService cho cancel order.
+ *  - FormRequest mới thay validator legacy
+ *    `OrderValidator::validateCancelOrder` / `UserValidator::validateUpdateUser`
+ *    v.v. (validator legacy đã gỡ).
+ *  - DTO: UserDTO / UserAddressDTO / WishlistItemDTO / OrderDTO ... thay raw model.
+ *  - Helper: `getCurrentUserId()` thay `getUserLoginId()`, `request()->cookie()`
+ *    thay `getCookie()`, `processMetaSeo()` thay `_processMetaSeo()`.
+ */
+class AccountController extends Controller
 {
-    protected $_zaloPay;
-    use CheckoutPayment;
-
-    public function __construct(UserRepository $userRepository,
-                                UserPhoneRepository $userPhoneRepository,
-                                UserAddressRepository $userAddressRepository,
-                                OrderRepository $orderRepository)
-    {
-        parent::__construct();
-        $this->setRepository($userRepository);
-        $this->registerRepository(
-            $userPhoneRepository,
-            $userAddressRepository,
-            $orderRepository
-        );
-        $this->_zaloPay = app()->make(ZaloPay::class);
-        $this->_breadcrumbs = [
+    public function __construct(
+        protected AccountService $accountService,
+        protected AddressService $addressService,
+        protected WishlistService $wishlistService,
+        protected RefundService $refundService,
+        protected UserRepositoryInterface $userRepo,
+        protected OrderRepositoryInterface $orderRepo,
+    ) {
+        $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
             ['text' => trans('messages.breadcrumbs.account'), 'href' => route('account.index'), 'separator' => false],
         ];
@@ -45,492 +54,302 @@ class AccountController extends BaseInfunStudioController
 
     public function index()
     {
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.index.title', 'account.index.description');
+        $this->processMetaSeo('buildForSeoByConfig', 'account.index.title', 'account.index.description');
 
-        return $this->render('client.infunstudio.account.index');
+        return $this->render('web.account.index');
     }
 
-    public function edit()
+    // ===== Profile / password / newsletter ============================
+
+    public function edit(Request $request)
     {
-        $data = $this->_getParams();
-        $user = Auth::user();
-
-        if ($this->_isPOST()) {
-            $validator = $this->getRepository()->getValidator();
-            if (!$validator->validateUpdateUser($data)) {
-                return back()->withErrors($validator->errorsBag()->getMessages())->withInput();
-            }
-            DB::beginTransaction();
-            try {
-                $user = $this->getRepository()->where('id', $user->id)->firstOrNew();
-                $user->fill([
-                    'address' => request()->get('address'),
-                    'full_name' => request()->get('full_name'),
-                    'sex' => request()->get('sex'),
-                ])->save();
-
-                $userPhone = $this->fetchRepository(UserPhoneRepository::class)
-                    ->where('user_id', $user->id)
-                    ->firstOrNew();
-
-                $verify = 0;
-                if ($userPhone->exists && array_get($userPhone, 'is_verify')) {
-                    $verify = 1;
-                }
-                $userPhone->fill([
-                    'user_id' => $user->id,
-                    'phone' => array_get($data, 'phone'),
-                    'is_verify' => $verify
-                ])->save();
-                DB::commit();
-                return redirect(route('account.edit'))->with('success', trans('messages.UpdateSuccess'));
-            } catch (\Exception $e) {
-                logError($e->getMessage());
-                DB::rollback();
-            }
-            return back()->with('failed', trans('messages.UpdateFailed'))->withInput();
+        if ($request->isMethod('post')) {
+            return $this->handleProfileUpdate($request);
         }
+
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_edit'), 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.edit.title', 'account.edit.description');
 
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.edit.title', 'account.edit.description');
+        $user = $this->userRepo->getProfile((int) getCurrentUserId());
 
-        return $this->render('client.infunstudio.account.edit', [
-            'entity' => $this->getUserInfo(Auth::user())
+        return $this->render('web.account.edit', [
+            'entity' => $user ? UserDTO::fromModel($user) : null,
         ]);
     }
 
-    public function password()
+    public function password(Request $request)
     {
-        $data = $this->getParams();
-        $user = Auth::user();
-        if ($this->_isPOST()) {
-            $data = array_merge($data, ['real_password' => $user->password]);
-            $validator = $this->getRepository()->getValidator();
-            if (!$validator->validateChangeUserPassword($data)) {
-                return back()->withErrors($validator->errorsBag()->getMessages())->withInput();
-            }
-            $user->lockForUpdate();
-            $user->fill([
-                'password' => Hash::make(array_get($data, 'password')),
-            ])->save();
-            return back()->with('success', trans('messages.UpdateSuccess'));
+        if ($request->isMethod('post')) {
+            return $this->handlePasswordChange($request);
         }
 
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_password'), 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.password.title', 'account.password.description');
 
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.password.title', 'account.password.description');
+        $user = $this->userRepo->findById((int) getCurrentUserId());
 
-        return $this->render('client.infunstudio.account.password');
-    }
-
-    public function address()
-    {
-        if (request()->has('remove')) {
-            try {
-                $this->fetchRepository(UserAddressRepository::class)
-                    ->where('user_id', Auth::user()->id)
-                    ->where('id', request()->get('remove'))
-                    ->delete();
-                $this->setCookieUserAddress($this->getUserAddress());
-                return redirect(route('account.address'))->with('success', trans('messages.DeleteSuccess'));
-            } catch (\Exception $e) {
-                logError($e->getMessage());
-                return redirect(route('account.address'))->with('failed', trans('messages.DeleteFailed'));
-            }
-        }
-
-        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_address'), 'href' => '', 'separator' => false]);
-
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.address.title', 'account.address.description');
-
-        $entities = $this->fetchRepository(UserAddressRepository::class)
-            ->where('user_id', Auth::user()->id)
-            ->with([
-                'country',
-                'zone.zoneDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                },
-                'district.districtDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                },
-                'ward.wardDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                },
-            ])
-            ->get();
-        return $this->render('client.infunstudio.account.address', [
-            'entities' => $entities,
+        return $this->render('web.account.password', [
+            'entity' => $user ? UserDTO::fromModel($user) : null,
         ]);
     }
 
-    public function cancelOrder()
+    public function newsletter(Request $request)
     {
-        $data = $this->getParams();
-        $orderRepository = app()->make(OrderRepository::class);
-        $validator = $orderRepository->getValidator();
-        if (!$validator->validateCancelOrder($data)) {
-            return back()->withErrors($validator->errorsBag()->getMessages())->withInput();
-        }
-        $zaloPay = app()->make(ZaloPay::class);
-        DB::beginTransaction();
-        try {
-            $order = $orderRepository
-                ->where('user_id', getUserLoginId())
-                ->where('id', $data['order_id'])
-                ->first();
-            $refundId = $order->zp_refund_id;
-            if (filled($order->zp_trans_id) && empty($refundId)) {
-                $refundData = $zaloPay->buildRefundData([
-                    'zp_trans_id' => $order->zp_trans_id,
-                    'amount' => $order->total,
-                    'description' => $data['return_reason']
-                ]);
-                $response = $zaloPay->refund($refundData);
-                if ($response['return_code'] === 2) {
-                    return back()->with('failed', trans('messages.RefundFailed'))->withInput();
-                }
-                $refundId = $response['refund_id'];
-            }
+        if ($request->isMethod('post')) {
+            $this->accountService->updateNewsletter(
+                (int) getCurrentUserId(),
+                (bool) $request->input('newsletter'),
+            );
 
-            $order->fill([
-                'order_status_id' => getConfigDb('order_cancel_status_id'),
-                'zp_refund_id' => $refundId,
-            ])->save();
-            OrdersHistory::create([
-                'order_id' => $data['order_id'],
-                'order_status_id' => getConfigDb('order_cancel_status_id'),
-                'user_id' => getUserLoginId(),
-            ]);
-            OrdersCancel::create([
-                'order_id' => $data['order_id'],
-                'user_id' => getUserLoginId(),
-                'return_reason' => $data['return_reason'],
-                'comment' => array_get($data, 'comment')
-            ]);
-            DB::commit();
-            return back()->with('success', trans('messages.CancelSuccess'));
-        } catch (\Exception $e) {
-            logError($e->getMessage());
-            DB::rollback();
-        }
-        return back()->with('failed', trans('messages.UpdateFailed'))->withInput();
-    }
-
-    public function detailOrder($id)
-    {
-        $params = $this->getParams();
-        $appTransId = array_get($params, 'apptransid', '');
-        if (filled($appTransId)) {
-            $this->_processUrlPaymentRedirect($params, $appTransId);
-            return redirect(route('account.detailOrder', ['id' => $id]))->with('success', trans('messages.PaymentOrderSuccess'));
-        }
-
-        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_orders_history'), 'href' => route('account.orders'), 'separator' => false]);
-        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_order_detail'), 'href' => '', 'separator' => false]);
-
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.detail_order.title', 'account.detail_order.description');
-
-        $entity = Orders::where('user_id', getUserLoginId())
-            ->where('id', $id)
-            ->with([
-                'ordersProducts.ordersProductOptions',
-                'ordersProducts.product' => function ($q) {
-                    $q->dateAvailable();
-                },
-                'ordersProducts.product.productDescription' => function ($q) {
-                    $q->languageCode();
-                },
-                'ordersTotals' => function ($q) {
-                    $q->orderBy('sort_order', 'ASC');
-                },
-                'carrier',
-                'payment.paymentDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                },
-            ])
-            ->orderBy('created_at', 'DESC')
-            ->first();
-
-        if (empty($entity)) {
-            return redirect(route('account.orders'))->with('failed', trans('messages.ErrorAction'));
-        }
-
-        $message = '';
-        if (filled($entity->zp_refund_id)) {
-            $message = trans('messages.RefundSuccess');
-            $refundStatus = app()->make(ZaloPay::class)->getRefundStatus($entity->zp_refund_id);
-            $returnCode = $refundStatus['return_code'];
-            if ($returnCode == 2 || $returnCode == 3) {
-                $message = trans('messages.RefundProcess');
-            }
-        }
-
-        return $this->render('client.infunstudio.account.order_detail', [
-            'entity' => $entity,
-            'message' => $message,
-        ]);
-    }
-
-    public function addressForm()
-    {
-        $data = $this->getParams();
-        $user = Auth::user();
-        if ($this->_isPOST()) {
-            $userAddressRepository = $this->fetchRepository(UserAddressRepository::class);
-            $validator = $userAddressRepository->getValidator();
-            if (!$validator->validateAddress($data)) {
-                return back()->withErrors($validator->errorsBag()->getMessages())->withInput();
-            }
-            DB::beginTransaction();
-            try {
-                $isDefault = request()->get('is_default') ? 1 : 0;
-                if ($isDefault) {
-                    $userAddressRepository
-                        ->where('user_id', $user->id)
-                        ->update(['is_default' => 0]);
-                }
-                $userAddress = $userAddressRepository->where('id', array_get($data, 'id'))->firstOrNew();
-                $userAddress->fill([
-                    'user_id' => $user->id,
-                    'full_name' => request()->get('full_name'),
-                    'telephone' => request()->get('telephone'),
-                    'country_id' => 230,
-                    'zone_id' => request()->get('zone_id'),
-                    'district_id' => request()->get('district_id'),
-                    'ward_id' => request()->get('ward_id'),
-                    'address' => request()->get('address'),
-                    'is_default' => $isDefault
-                ])->save();
-                $this->setCookieUserAddress($this->getUserAddress());
-                DB::commit();
-                $redirectUrl = array_get($data, 'redirect_url') ?? route('account.address');
-                return redirect($redirectUrl)->with('success', trans('messages.UpdateSuccess'));
-            } catch (\Exception $e) {
-                logError($e->getMessage());
-                DB::rollback();
-            }
-            return back()->with('failed', trans('messages.UpdateFailed'))->withInput();
-        }
-
-        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_address'), 'href' => '', 'separator' => false]);
-        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_address_form'), 'href' => '', 'separator' => false]);
-
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.address_form.title', 'account.address_form.description');
-
-        $entity = $this->fetchRepository(UserAddressRepository::class)
-            ->where('user_id', Auth::user()->id)
-            ->where('id', array_get($data, 'address_id'))
-            ->firstOrNew();
-
-        return $this->render('client.infunstudio.account.address_form', [
-            'entity' => $entity
-        ]);
-    }
-
-    public function wishList()
-    {
-        $wishListRepository = app()->make(UserWishlistRepository::class);
-        if (request()->has('remove')) {
-            try {
-                $wishListRepository
-                    ->where('user_id', Auth::user()->id)
-                    ->where('product_id', request()->get('remove'))
-                    ->delete();
-                $this->setSessionUserTotalWishlist($this->getUserTotalWishlist());
-                return redirect(route('account.wishlist'))->with('success', trans('messages.DeleteSuccess'));
-            } catch (\Exception $e) {
-                logError($e->getMessage());
-                return redirect(route('account.wishlist'))->with('failed', trans('messages.DeleteFailed'));
-            }
-        }
-        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_wishlist'), 'href' => '', 'separator' => false]);
-
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.wishlist.title', 'account.wishlist.description');
-
-        $entities = $wishListRepository->where('user_id', Auth::user()->id)
-            ->with([
-                'product.productDescription' => function ($q) {
-                    $q->where('language_code', app()->getLocale());
-                },
-                'product.productSpecials' => function ($q) {
-                    $q->where(function ($qStart) {
-                        $qStart->where('date_start', '<', Carbon::now())
-                            ->orWhereNull('date_start');
-                    })->where(function ($qEnd) {
-                        $qEnd->where('date_end', '>', Carbon::now())
-                            ->orWhereNull('date_end');
-                    })->orderBy('priority');
-                },
-                'product.stockStatus'
-            ])->get();
-        if (count($entities) != session()->get(getCoreConfig('session.total_wishlist'), 0)) {
-            session()->put(getCoreConfig('session.total_wishlist'), count($entities));
-        }
-        return $this->render('client.infunstudio.account.wishlist', [
-            'entities' => $entities,
-        ]);
-    }
-
-    public function userWishlist()
-    {
-        $productId = request()->get('product_id', 0);
-        $userWishlist = UserWishlist::where('user_id', getUserLoginId())
-            ->where('product_id', $productId)
-            ->firstOrNew();
-        if ($userWishlist->exists) {
-            $userWishlist->delete();
-            $total = $this->getUserTotalWishlist();
-            $this->setSessionUserTotalWishlist($total);
-            return successData(trans('messages.DeleteWishlistSuccess'), ['delete' => true, 'total' => $total]);
-        } else {
-            $userWishlist->create([
-                'user_id' => auth()->user()->id,
-                'product_id' => $productId
-            ]);
-            $total = $this->getUserTotalWishlist();
-            $this->setSessionUserTotalWishlist($total);
-            return successData(trans('messages.AddWishlistSuccess'), ['delete' => false, 'total' => $total]);
-        }
-    }
-
-    public function orders()
-    {
-        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_orders_history'), 'href' => '', 'separator' => false]);
-
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.orders.title', 'account.orders.description');
-
-        $entities = $this->fetchRepository(OrderRepository::class)->getListForFrontend($this->getParams());
-
-        return $this->render('client.infunstudio.account.orders', [
-            'entities' => $entities,
-        ]);
-    }
-
-    public function newsletter()
-    {
-        $user = Auth::user();
-        if ($this->_isPOST()) {
-            $user->fill([
-                'newsletter' => request()->get('newsletter')
-            ])->save();
             return redirect(route('account.newsletter'))->with('success', trans('messages.UpdateSuccess'));
         }
 
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_orders_newsletter'), 'href' => route('account.newsletter'), 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.newsletter.title', 'account.newsletter.description');
 
-        $this->_processMetaSeo('_buildForSeoByConfig', 'account.newsletter.title', 'account.newsletter.description');
+        $user = $this->userRepo->findById((int) getCurrentUserId());
 
-        return $this->render('client.infunstudio.account.newsletter', [
-            'entity' => $user,
+        return $this->render('web.account.newsletter', [
+            'entity' => $user ? UserDTO::fromModel($user) : null,
         ]);
     }
 
-    public function checkVerifyPhone()
-    {
-        $userPhone = $this->fetchRepository(UserPhoneRepository::class)->getUserPhoneByUserId();
-        return successData('CheckSuccess', $userPhone);
-    }
+    // ===== Address =====================================================
 
-    public function logout()
+    public function address(Request $request)
     {
-        $this->_removeCookieSessionUser();
-        return redirect(route('auth.login'));
-    }
+        if ($request->has('remove')) {
+            $ok = $this->addressService->delete((int) getCurrentUserId(), (int) $request->get('remove'));
 
-    public function addAddress()
-    {
-        $data = $this->getParams();
-        $validator = $this->getRepository()->getValidator();
-        if (!$validator->validateAddAddress($data)) {
-            $this->removeCookieAddressVisitor();
-            return back()->withErrors($validator->errorsBag()->getMessages())->withInput();
+            return redirect(route('account.address'))
+                ->with($ok ? 'success' : 'failed', trans($ok ? 'messages.DeleteSuccess' : 'messages.DeleteFailed'));
         }
 
-        $fullAddress = implode(', ', [
-            array_get($data, 'address'),
-            array_get($data, 'ward_name'),
-            array_get($data, 'district_name'),
-            array_get($data, 'zone_name')
+        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_address'), 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.address.title', 'account.address.description');
+
+        $addresses = $this->addressService->listForUser((int) getCurrentUserId());
+
+        return $this->render('web.account.address', [
+            'entities' => UserAddressDTO::collect($addresses),
         ]);
-        $userAddress[] = array_merge($data, [
-            'full_address' => $fullAddress,
-            'is_default' => 1
-        ]);
-        $cookieAddress = getCoreConfig('cookie.user.address');
-        if (auth()->check()) {
-            $userAddress = json_decode(getCookie($cookieAddress, '[]'));
-            if (empty($userAddress)) {
-                $userAddress = json_decode(json_encode($this->getUserAddress()));
-            }
-            foreach ($userAddress as $i => $item) {
-                $item->is_default = 0;
-                if ($item->id == array_get($data, 'id', 0)) {
-                    $item->is_default = 1;
-                }
-            }
+    }
+
+    public function addressForm(Request $request)
+    {
+        if ($request->isMethod('post')) {
+            return $this->handleAddressSave($request);
         }
-        Cookie::queue(getCoreConfig('cookie.user.address'), json_encode($userAddress), getCoreConfig('cookie.time'));
+
+        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_address'), 'href' => '', 'separator' => false]);
+        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_address_form'), 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.address_form.title', 'account.address_form.description');
+
+        $userId = (int) getCurrentUserId();
+        $addressId = (int) $request->get('address_id', 0);
+        $entity = $addressId > 0
+            ? $this->addressService->findForUser($userId, $addressId)
+            : null;
+
+        return $this->render('web.account.address_form', [
+            'entity' => $entity ? UserAddressDTO::fromModel($entity) : null,
+        ]);
+    }
+
+    /**
+     * Endpoint AJAX/POST `/account/add-address` (no auth required). Visitor
+     * lưu địa chỉ vãng lai vào cookie; login user set 1 address là default
+     * trong cookie để form checkout pre-fill.
+     */
+    public function addAddress(AccountAddAddressRequest $request)
+    {
+        $this->addressService->applyQuickAddress(
+            getCurrentUserId(),
+            $request->validated(),
+        );
+
         return back();
     }
 
-    protected function _buildOrdersProducts($products)
+    // ===== Wishlist ====================================================
+
+    public function wishList(Request $request)
     {
-        $data = [];
-        foreach ($products as $product) {
-            $ordersProductOptions = array_get($product, 'orders_product_options');
-            $optionData = [];
-            foreach ($ordersProductOptions as $option) {
-                $variation = array_get($option, 'variation', 2);
-                $optChild = null;
-                if ($variation == 1) {
-                    $children = unserialize(array_get($option, 'children'));
-                    $childName = '';
-                    $childValue = [];
-                    foreach ($children as $child) {
-                        $childName = $child['name'];
-                        $childValue[] = $child['value'];
-                    }
-                    $optChild = ['name' => $childName, 'value' => implode(', ', $childValue)];
-                }
-                $optionData[] = [
-                    "id" => array_get($product, 'id'),
-                    "name" => array_get($option, 'name'),
-                    "order_id" => array_get($option, 'order_id'),
-                    "order_product_id" => array_get($option, 'order_product_id'),
-                    "product_option_id" => array_get($option, 'product_option_id'),
-                    "product_option_value_id" => array_get($option, 'product_option_value_id'),
-                    "value" => array_get($option, 'value'),
-                    "children" => $optChild,
-                    "type" => array_get($option, 'type'),
-                    "variation" => $variation,
-                ];
-            }
-            $data[] = [
-                "id" => array_get($product, 'id'),
-                "model" => array_get($product, 'model'),
-                "name" => array_get($product, 'name'),
-                "order_id" => array_get($product, 'order_id'),
-                "price" => number_format(array_get($product, 'price', 0), 0, '', ',') . 'đ',
-                "product_id" => array_get($product, 'product_id'),
-                "quantity" => array_get($product, 'quantity'),
-                "reward" => array_get($product, 'reward'),
-                "tax" => array_get($product, 'tax'),
-                "total" => number_format(array_get($product, 'total', 0), 0, '', ',') . 'đ',
-                "options" => $optionData
-            ];
+        $userId = (int) getCurrentUserId();
+        if ($request->has('remove')) {
+            $ok = $this->wishlistService->remove($userId, (int) $request->get('remove'));
+
+            return redirect(route('account.wishlist'))
+                ->with($ok ? 'success' : 'failed', trans($ok ? 'messages.DeleteSuccess' : 'messages.DeleteFailed'));
         }
-        return $data;
+
+        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_wishlist'), 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.wishlist.title', 'account.wishlist.description');
+
+        $items = $this->wishlistService->listForUser($userId);
+
+        return $this->render('web.account.wishlist', [
+            'entities' => WishlistItemDTO::collect($items),
+        ]);
     }
 
-    protected function _buildOrdersTotals($ordersTotal)
+    /**
+     * AJAX toggle wishlist từ trang sản phẩm. Trả JSON shape giữ
+     * backward-compat với JS client:
+     *  - `delete`: true nếu state mới là đã xoá, false nếu đã thêm.
+     *  - `total`: tổng số wishlist của user sau toggle.
+     */
+    public function userWishlist(Request $request)
     {
-        $data = [];
-        foreach ($ordersTotal as $total) {
-            $data[] = [
-                'title' => $total['title'],
-                'value' => number_format($total['value'], 0, '', ',') . 'đ',
-            ];
+        $userId = (int) getCurrentUserId();
+        $productId = (int) $request->get('product_id', 0);
+        if ($productId <= 0) {
+            return errValidator(trans('messages.ErrorNotFoundProduct'));
         }
-        return $data;
+
+        $added = $this->wishlistService->toggle($userId, $productId);
+        $total = $this->wishlistService->countForUser($userId);
+
+        return successData(
+            $added ? 'AddWishlistSuccess' : 'DeleteWishlistSuccess',
+            ['delete' => ! $added, 'total' => $total],
+        );
+    }
+
+    // ===== Orders ======================================================
+
+    public function orders(Request $request)
+    {
+        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_orders_history'), 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.orders.title', 'account.orders.description');
+
+        $paginator = $this->orderRepo->getListForUser((int) getCurrentUserId(), $request);
+        $paginator->setCollection(
+            $paginator->getCollection()->map(fn ($order) => OrderDTO::fromModel($order)),
+        );
+
+        return $this->render('web.account.orders', [
+            'entities' => $paginator,
+        ]);
+    }
+
+    public function detailOrder(Request $request, $id)
+    {
+        // ZaloPay redirect sau khi user thanh toán lại từ trang detail.
+        // Verify + cập nhật status được CheckoutPaymentService::processRedirect
+        // xử lý — vì checkout.repayment redirect về account.detailOrder, cùng
+        // luồng. Để tránh DI thêm CheckoutPaymentService vào controller này
+        // (đã đủ dày), inject ad-hoc qua container.
+        $appTransId = (string) $request->get('apptransid', '');
+        if (filled($appTransId)) {
+            app(\App\Services\Checkout\CheckoutPaymentService::class)
+                ->processRedirect($request->all(), $appTransId);
+
+            return redirect(route('account.detailOrder', ['id' => $id]))
+                ->with('success', trans('messages.PaymentOrderSuccess'));
+        }
+
+        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_orders_history'), 'href' => route('account.orders'), 'separator' => false]);
+        $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_order_detail'), 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.detail_order.title', 'account.detail_order.description');
+
+        $order = $this->orderRepo->getDetailForUser((int) $id, (int) getCurrentUserId());
+        if (! $order) {
+            return redirect(route('account.orders'))->with('failed', trans('messages.ErrorAction'));
+        }
+
+        $message = '';
+        if (filled($order->zp_refund_id)) {
+            $status = $this->refundService->getStatus((string) $order->zp_refund_id);
+            $message = trans(match ($status) {
+                'success'    => 'messages.RefundSuccess',
+                'processing' => 'messages.RefundProcess',
+                default      => 'messages.RefundSuccess',
+            });
+        }
+
+        return $this->render('web.account.order_detail', [
+            'entity'  => OrderDTO::fromModel($order),
+            'message' => $message,
+        ]);
+    }
+
+    public function cancelOrder(AccountCancelOrderRequest $request)
+    {
+        $data = $request->validated();
+        try {
+            $order = $this->accountService->cancelOrder(
+                (int) $data['order_id'],
+                (int) getCurrentUserId(),
+                (string) $data['return_reason'],
+                $data['comment'] ?? null,
+            );
+        } catch (\RuntimeException $e) {
+            // RefundService trả [false, null] → throw 'refund_failed'.
+            if ($e->getMessage() === 'refund_failed') {
+                return back()->with('failed', trans('messages.RefundFailed'))->withInput();
+            }
+
+            return back()->with('failed', trans('messages.UpdateFailed'))->withInput();
+        } catch (\Throwable $e) {
+            logError($e);
+
+            return back()->with('failed', trans('messages.UpdateFailed'))->withInput();
+        }
+
+        if (! $order) {
+            return back()->with('failed', trans('messages.UpdateFailed'))->withInput();
+        }
+
+        return back()->with('success', trans('messages.CancelSuccess'));
+    }
+
+    // ===== Logout ======================================================
+
+    public function logout()
+    {
+        $this->addressService->clearVisitorCookie();
+        auth()->logout();
+        session()->invalidate();
+        session()->regenerateToken();
+
+        return redirect(route('auth.login'));
+    }
+
+    // ===== private helpers ============================================
+
+    protected function handleProfileUpdate(Request $request)
+    {
+        $validated = app(AccountUpdateProfileRequest::class)->validated();
+        $user = $this->accountService->updateProfile((int) getCurrentUserId(), $validated);
+
+        return $user
+            ? redirect(route('account.edit'))->with('success', trans('messages.UpdateSuccess'))
+            : back()->with('failed', trans('messages.UpdateFailed'))->withInput();
+    }
+
+    protected function handlePasswordChange(Request $request)
+    {
+        $validated = app(AccountChangePasswordRequest::class)->validated();
+        $user = $this->accountService->changePassword(
+            (int) getCurrentUserId(),
+            (string) $validated['password'],
+        );
+
+        return $user
+            ? back()->with('success', trans('messages.UpdateSuccess'))
+            : back()->with('failed', trans('messages.UpdateFailed'))->withInput();
+    }
+
+    protected function handleAddressSave(Request $request)
+    {
+        $validated = app(AccountAddressRequest::class)->validated();
+        $this->addressService->save((int) getCurrentUserId(), $validated);
+
+        $redirectUrl = filled($validated['redirect_url'] ?? null)
+            ? (string) $validated['redirect_url']
+            : route('account.address');
+
+        return redirect($redirectUrl)->with('success', trans('messages.UpdateSuccess'));
     }
 }

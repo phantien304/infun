@@ -48,12 +48,12 @@ abstract class QueryableRepository extends BaseRepository
         return $this->model->newQuery();
     }
 
-    protected function beforeBuild(Builder $query): Builder
+    protected function beforeBuildForList(Builder $query): Builder
     {
         return $query;
     }
 
-    protected function afterBuild(QueryBuilder $query): QueryBuilder
+    protected function afterBuildForList(QueryBuilder $query): QueryBuilder
     {
         return $query;
     }
@@ -65,19 +65,19 @@ abstract class QueryableRepository extends BaseRepository
         $perPage ??= (int) $request->get('per_page', $this->defaultPerPage);
         $perPage = max(1, min($perPage, $this->maxPerPage));
 
-        return $this->buildQuery($request, $modifyBase)
+        return $this->buildQueryForList($request, $modifyBase)
             ->paginate($perPage)
             ->appends($request->query());
     }
 
     public function listAll(?Request $request = null, ?\Closure $modifyBase = null): Collection
     {
-        return $this->buildQuery($request ?? request(), $modifyBase)->get();
+        return $this->buildQueryForList($request ?? request(), $modifyBase)->get();
     }
 
-    protected function buildQuery(Request $request, ?\Closure $modifyBase = null): QueryBuilder
+    protected function buildQueryForList(?Request $request = null, ?\Closure $modifyBase = null): QueryBuilder
     {
-        $base = $this->beforeBuild($this->baseQuery());
+        $base = $this->beforeBuildForList($this->baseQuery());
 
         if ($modifyBase !== null) {
             $modifyBase($base);
@@ -96,6 +96,6 @@ abstract class QueryableRepository extends BaseRepository
             $query->with($this->withRelations());
         }
 
-        return $this->afterBuild($query);
+        return $this->afterBuildForList($query);
     }
 }

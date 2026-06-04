@@ -1,4 +1,5 @@
 <?php
+
 return [
     'area_mapping' => [
         'cms' => 'cms',
@@ -119,11 +120,14 @@ return [
         'filters' => 'filters_',
         'products' => 'product_',
         'product_latest' => 'product_latest',
+        'product_special_latest' => 'product_special_latest',
         'product_root' => 'product',
         'blog' => 'blog_',
         'blog_categories' => 'blog_categories_',
         'blog_tags' => 'blog_tags_',
         'information' => 'information_',
+        'carriers' => 'carriers_',
+        'payments' => 'payments_',
     ],
     'zones' => [
         'country_id_default' => 230
@@ -136,4 +140,17 @@ return [
         'cache' => 3600
     ],
     'folder_cache' => 'cache',
+    'product_image' => [
+        'type' => [
+            'main' => 'main',
+            'gallery' => 'gallery',
+            'thumbnail' => 'thumbnail',
+            'zoom' => 'zoom',
+            '360' => '360',
+        ]
+    ],
+    'option' => [
+        'role_custom_field' => 0,
+        'role_variant' => 1,
+    ]
 ];

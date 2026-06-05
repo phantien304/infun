@@ -839,3 +839,460 @@ seed + legacy nhiều nơi nằm thẳng trong Laravel `public/` (vd `public/see
 - Variant gallery JS handler chưa được viết — `window.variantGallery` đã
   inject nhưng chưa có listener swap toàn slider khi user chốt variant. Có
   sẵn data structure để mở rộng.
+- Admin CMS chưa có UI cho `product_variant.regular_price` — hiện chỉ seed
+  generate. Wire `ProductVariantObserver::saved/deleted` recompute
+  `product.max_variant_discount_percent` khi xây admin form.
+- `setting('config_review_policy', ...)` mâu thuẫn key giữa Service và
+  Controller — đã sync ở review nhưng audit lại các flow khác.
+
+## Convention add-to-cart key (refactor 2026-06-05)
+
+Blade `_option.blade.php` emit hai input name khác nhau tuỳ role:
+
+```php
+$valueParam = $isVariant ? 'option_value_id' : 'product_option_value_id';
+// → option[X][option_value_id]          (variant role)
+// → option[X][product_option_value_id]  (custom field role)
+```
+
+Hai caller cùng đọc payload PHẢI nhận DIỄN cả 2 key cho variant role (đọc
+nhầm `product_option_value_id` của variant = mảng rỗng = silent corruption,
+cart add ở product level không biết variant):
+
+- `App\Services\CartService::splitOptionPayload` (line 275) — ưu tiên
+  `option_value_id`, fallback `product_option_value_id`.
+- `App\Http\Requests\Web\CheckoutAddToCartRequest::withValidator` (line 40)
+  — `$hasValueId = !empty($opt['option_value_id']) || !empty($opt['product_option_value_id'])`.
+
+Sync với blade nếu đổi `$valueParam` thì update cả 2 caller. Nếu thêm caller
+mới (vd API endpoint), follow pattern.
+
+## Bug fixes add-to-cart flow (2026-06-05)
+
+3 bugs cộng dồn gây 500 hoặc silent corruption trên `/checkout/add-to-cart`:
+
+1. **`CartService::getItems()` (line 133)**: eager-load `'stock'` — relation
+   này KHÔNG tồn tại trên `ProductVariant`. Tên đúng là `productStock`.
+   Eloquent throw `RelationNotFoundException`. Sửa: `'productStock'`.
+2. **`CartService::checkStock()` (line 372)**: `$variant->stock` cùng bug.
+   Sửa: `$variant->productStock`. Thêm guard: stock null → return true
+   (data drift fallback, đồng bộ `ProductOptionService::buildVariantMatrix`).
+3. **Key mismatch variant role** — xem "Convention add-to-cart key" mục trên.
+
+`ZaloPay::__construct` từng đọc `storage/lib/zaloPay/public_key.pem` ngay khi
+instantiate. Class này inject vào `CheckoutPaymentService` → inject vào
+`CheckoutController` → mọi request checkout instantiate `ZaloPay` → file
+thiếu = 500 toàn bộ luồng (kể cả addToCart không hề dùng ZaloPay). Sửa:
+lazy-load qua `getPublicKey()`, throw `RuntimeException` chỉ khi
+`buildOrderData()` thực sự cần encrypt.
+
+## Shopee-style discount per-variant (refactor 2026-06-05)
+
+Schema cũ chỉ có `product_variant.price` (giá tuyệt đối). Để show struck
+price + badge -X% per-variant như Shopee, thêm cột:
+
+- `product_variant.regular_price` DECIMAL(15,2) nullable — giá niêm yết
+  (MSRP) per-variant; struck-through ref. NULL = chưa set, fallback
+  `product.price`. Migration `2026_06_05_000000`.
+- `product.max_variant_discount_percent` TINYINT UNSIGNED nullable —
+  denormalized aggregate MAX discount % across variants, dùng cho LIST
+  page (Shopee bait: "lên đến -X%"). Migration `2026_06_05_000001`.
+
+### Mô hình giá
+
+```
+regular_price (per-variant)  → struck-through (gạch ngang)
+price (per-variant)          → current selling
+discount % = (regular - price) / regular × 100
+```
+
+Hiển thị struck + badge CHỈ khi `price < regular_price`. Variant không sale
+(regular = price hoặc NULL) → ẩn struck + badge.
+
+### Flow data
+
+- Service `ProductOptionService::buildVariantMatrix` expose `regular_price`
+  + `resolveDefaultVariant` cùng field.
+- DTO `ProductDTO::$maxVariantDiscountPercent` (nullable int) đọc từ
+  `product.max_variant_discount_percent`.
+- Blade `web.product.index`:
+  - Inject `productBasePrice = $entity->price` xuống JS (fallback ref khi
+    `variant.regular_price` null).
+  - Render struck `#price-product-old` + current `#price-product` + badge
+    `#discount-badge` với initial value từ `defaultVariant.regular_price`.
+- JS `style.js updateDiscountBadge(variant)`:
+  - Ưu tiên `variant.regular_price`, fallback `productBasePrice`.
+  - `% = round((ref - price) / ref × 100)`.
+  - Show/hide struck + badge dynamically khi user pick variant.
+  - Gọi từ `applyVariant(variant)`.
+- Blade list `_product.blade.php`:
+  - Ưu tiên `$product->maxVariantDiscountPercent` khi hasVariants.
+  - Fallback `$special->discountPercent` cho product không variant.
+
+### Seed
+
+`SeedProductVariantsCommand`:
+- `regular_price = price × random(110-150%)` cho 80% variant, `= price`
+  cho 20% còn lại (test case không sale).
+- `backfillProductAggregates` thêm UPDATE statement compute
+  `max_variant_discount_percent` bằng `MAX(FLOOR((regular - price)/regular*100))
+  GROUP BY product_id`.
+- Truncate flow reset `max_variant_discount_percent = null`.
+
+### Việc còn nợ — discount
+
+- Observer `ProductVariantObserver::saved/deleted` cần recompute
+  `max_variant_discount_percent` khi admin update. Hiện chỉ seed compute.
+- Admin CMS form variant cần thêm field `regular_price`.
+
+## Data drift safety nets — variant matrix (2026-06-05)
+
+`ProductOptionService::buildVariantMatrix` fallback khi `$variant->productStock`
+null (data drift, eager-load fail, hoặc stock chưa tạo):
+
+```php
+$available = $stock ? (int) $stock->available : 999;
+$subtract  = $stock ? (bool) $stock->subtract : false;
+$has_stock = $stock !== null;
+```
+
+**TRƯỚC**: fallback `(0, true)` — coi như OOS. UI grey TẤT swatch ngay init
+khi seed/import data drift → user tưởng product hỏng.
+
+**SAU**: fallback `(999, false)` — coi như "không track stock", variant
+pickable. Stock thật ép tại `OrderService` khi tạo order. Pattern: UI
+optimistic, validation tại checkout. Field `has_stock` expose để JS detect.
+
+JS `style.js refreshAvailability`:
+- Đã chuyển sang **Shopee classic**: init = ALL enable, chỉ disable sau
+  khi user pick value đầu (`!hasSelection || optionAlreadySelected ||
+  isValueAvailable`). Bỏ "dead-end protection từ init" — gây false positive
+  khi data drift.
+- **`ALL_OOS` safety net** — detect mọi variant `subtract=true + available=0`
+  → bỏ qua OOS check, log warning console. Bảo vệ UX khi DB data sai.
+- `applyVariant()`: cũng respect `ALL_OOS` → button mua hàng không bị ẩn.
+- Button toggle guard: chỉ toggle khi cả `#button-cart` và `#button-contact`
+  cùng tồn tại (blade có thể chỉ render 1 button).
+
+JS debug helper:
+```js
+window.dumpVariants()  // console.table matrix + count rows có stock
+```
+
+## Image gallery slick — manual sync (refactor 2026-06-05)
+
+Slick `asNavFor` + `focusOnSelect` gây auto-scroll strip khi click/slickGoTo
+(= "nhảy từng cái"). Hover handler dùng src-mutation tránh điều này, nhưng
+click vẫn nhảy.
+
+Giải pháp: **BỎ `asNavFor` + `focusOnSelect`**, handle sync manual.
+
+```js
+$('.product-image-slider').slick({
+    slidesToShow: 1, fade: true, speed: 0,
+    // không asNavFor
+});
+$('.slider-nav-thumbnails').slick({
+    slidesToShow: 4, speed: 0,
+    // không asNavFor, không focusOnSelect
+});
+
+// Click thumb → slickGoTo main + manually toggle .slick-current trên strip
+$(document).on('click', '.slider-nav-thumbnails .slick-slide:not(.slick-cloned)', function () {
+    var idx = parseInt($(this).attr('data-slick-index'), 10);
+    $strip.find('.slick-slide').removeClass('slick-current slick-active');
+    $(this).addClass('slick-current slick-active');
+    $('.product-image-slider').slick('slickGoTo', idx);
+});
+```
+
+**Hover preview** (mutate src + class indicator):
+- mouseenter thumb → mutate `.slick-active img` src + add `.is-hover-active`.
+- mouseleave strip → KHÔNG dọn class, KHÔNG restore src. Thumb cuối giữ
+  `.is-hover-active` → CSS suppress `.slick-current` thật, hiện hover thumb
+  như "selected". Ảnh main đã match.
+- click → dọn cờ hover, slick commit `.slick-current` thật.
+
+CSS cần (`custom.css` 261/265/279):
+- `.is-hover-active` styled giống `.slick-current` (border + triangle).
+- `.is-hovering .slick-current:not(.is-hover-active)` → border transparent
+  (suppress real current khi đang hover).
+
+Trade-off: slick internal `currentSlide` không sync với hover state.
+Acceptable vì click commit chuẩn, arrow next/prev hiếm dùng cho gallery.
+
+## Cluster review Shopee-style (refactor 2026-06-04 → 2026-06-10)
+
+Refactor toàn diện bảng `review` legacy (id/product_id/user_id/ip/author/text/
+rating/email/is_publish) thành cluster 8 bảng đáp ứng Shopee UX: đa tiêu chí,
+media (ảnh + video), shop reply, helpful vote, tag, report, verified purchase.
+
+### Schema (migration `2026_06_04_000000` → `_000009`)
+
+```
+review (refactor)
+├─ +order_id, +product_variant_id, +title, +status (tinyint), +is_anonymous
+├─ +language_code, +helpful_count, +unhelpful_count, +reply_count, +media_count
+├─ +edit_count, +last_edited_at, +approved_at, +approved_by, +source, +user_agent
+├─ Status workflow thay is_publish: 0=pending 1=approved 2=rejected 3=hidden
+│  (is_publish vẫn giữ — backward compat; sync với status trong migration).
+├─ UNIQUE (order_id, product_id) — 1 order × 1 product = 1 review.
+└─ INDEX (product_id, status, helpful_count, deleted_at) — covering cho sort
+   default `-helpful_count` (migration `2026_06_10_000000`).
+
+review_criteria + review_criteria_description (i18n)
+└─ Seed 5 tiêu chí: quality / description_match / service / packaging / shipping
+   (mặc định active, vi+en). Admin có thể tắt is_active, KHÔNG xóa cứng (review_rating
+   FK RESTRICT).
+
+review_rating (pivot composite PK)
+└─ (review_id, review_criteria_id) → 1 review × 1 criteria = 1 rating. CASCADE
+   delete review, RESTRICT delete criteria.
+
+review_media (gộp ảnh + video — discriminator `type`)
+└─ Quota Shopee: 9 ảnh + 1 video / review (enforce ở Service, không phải DB).
+
+review_reply (self-ref `parent_reply_id`)
+└─ author_type: 0=customer, 1=shop, 2=admin. Depth max 2 (enforce app layer).
+
+review_helpful (UNIQUE review_id + user_id)
+└─ vote_type: 1=helpful, -1=unhelpful, 0=withdrawn. Visitor dùng user_id=0
+   + ip (chống spam yếu — middleware rate limit là chính).
+
+review_tag + _description + _pivot (3 bảng)
+└─ Seed 8 tag preset (great_quality, as_described, fast_delivery, …).
+   usage_count denormalize cập nhật qua observer attach/detach pivot.
+
+review_report
+└─ UNIQUE (review_id, reported_by). reason_code: spam/offensive/fake/
+   irrelevant/other. Admin queue qua status pending/resolved/rejected.
+
+product (aggregate cache thêm 5 cột)
+└─ review_count, rating_avg(decimal 3,2), rating_sum, rating_distribution(JSON
+   {"1":n,..,"5":n}), rating_updated_at. Observer incremental UPDATE thay vì
+   COUNT/AVG full mỗi lần.
+```
+
+### Convention chốt
+
+**FK type** — review.id INT signed (legacy AUTO_INCREMENT), product_variant_id
+BIGINT unsigned (cluster mới); pivot child dùng `integer('review_id')` (INT) +
+`unsignedBigInteger('review_criteria_id')`.
+
+**Cache tag**: `review_root`, `review_criteria`, `review_tag`, `reviews:{productId}`.
+Observer `forgetCacheTagged([reviews:{productId}])` khi review save/update — auto
+invalidate getCriteriaAverages + listForProduct first-page cache.
+
+**FK column naming** đầy đủ prefix tên bảng (`review_criteria_id`,
+`review_tag_id`, `product_variant_id` — KHÔNG `criteria_id`/`variant_id`).
+
+### Config + i18n
+
+`config/core/config.php` thêm block `review`:
+- `review.status` — pending(0)/approved(1)/rejected(2)/hidden(3). KHÔNG dùng
+  const trong Model, mọi nơi đọc qua `getCoreConfig('review.status.approved')`.
+- `review.policy` — public/login/purchase (3 mức ai được review).
+- `review.default_policy` = 'public' (default fallback).
+
+`review_report.status` — pending(0)/resolved(1)/rejected(2) tách block riêng.
+
+**Policy admin cấu hình qua DB**: key `setting('config_review_policy', ...)`.
+Service + Controller cùng đọc key này (tránh drift — bug chốt trong commit
+2026-06-08).
+
+`lang/vi/messages.php` block `review.*`:
+- `login_required`, `verified_purchase_required`, `already_submitted` — Service throw.
+- `review.save.{product_required,text_required,text_min,…}` — FormRequest messages.
+- `review.{review_id_required,review_not_found,vote_invalid,reason_required,…}` — common.
+
+KHÔNG hardcode tiếng Việt trong PHP code — luôn `trans('messages.review.*')`.
+
+### Tầng kiến trúc (Controller → Service → Repository → Model)
+
+```
+ReviewController (Web)
+├─ saveReview(ReviewSaveRequest)
+│  └─ gate `$this->productRepo->findReviewableProduct($id)` (lazyMap, không
+│     inject) — chặn product is_review=0.
+│  └─ ReviewService::submitReview(...)
+├─ vote(ReviewVoteRequest) auth — ReviewService::vote(...)
+├─ report(ReviewReportRequest) auth — ReviewService::report(...)
+└─ list($productId) — KHÔNG fetch product. Spatie filter/sort + paginator
+   wrap items thành ReviewDTO. Trả view _comment_list partial (HTML).
+
+ReviewService
+├─ submitReview() — orchestrate transaction 4 bảng:
+│   1. Verified purchase check (reviewRepo->findVerifiedOrderId)
+│   2. Policy gate (setting('config_review_policy', ...))
+│   3. Chống trùng (UNIQUE constraint DB + check trước cho UX message)
+│   4. Insert review root + review_rating + review_media + review_tag_pivot
+│   5. Throw \DomainException với trans() message khi vi phạm rule.
+├─ vote() — lockForUpdate review + upsert review_helpful + diff counter
+│   denormalize trên review row (helpful_count/unhelpful_count).
+├─ report() — updateOrCreate(review_id + reported_by) chống spam.
+└─ KHÔNG inject ProductRepositoryInterface — gate is_review đặt ở Controller
+   qua lazyMap auto-resolve.
+
+ReviewRepository (extends QueryableRepository + CacheableRepository)
+├─ allowedFilters: rating, has_media, has_text, tag (whereHas).
+├─ allowedSorts: `review.helpful_count`, `review.created_at`, `review.rating`
+│   (prefix `review.` để disambiguate JOIN — Spatie tự thêm WHERE table = `review`).
+│   defaultSort `-review.helpful_count`.
+├─ listForProduct() — closure modifier append `->forProduct($productId)` vào
+│   baseQuery().
+├─ withRelations() conditional: 'helpfuls' chỉ load khi user logged-in (filter
+│   user_id để DTO compute myVote không N+1).
+├─ getActiveCriteria/Tags — cached tag review_criteria/review_tag (1day/1h).
+├─ getCriteriaAverages($productId) — JOIN review_rating × review × criteria
+│   GROUP BY code. Cache tag review_root + reviews:{productId}.
+├─ findVerifiedOrderId() / hasReviewedFromOrder() — check ở orders_product.
+└─ forgetProductCache() — observer gọi sau save/delete.
+
+ReviewObserver
+├─ Trigger trên Review (đăng ký AppServiceProvider::boot).
+├─ created/updated/deleted — chỉ áp dụng delta khi status APPROVED.
+├─ applyDelta() — incremental UPDATE product (review_count, rating_sum,
+│   rating_avg, rating_distribution JSON_SET). KHÔNG re-aggregate full.
+└─ invalidate() — forgetProductCache mỗi delta. Try/catch swallow exception
+   (cache fail không phá save flow).
+
+ReviewDTO + 5 DTO con
+├─ ReviewDTO::fromModel(Review $r, ?int $currentUserId) — `myVote` đọc từ
+│   relation helpfuls đã eager-load filtered user_id.
+├─ ReviewCriteriaDTO / ReviewTagDTO / ReviewRatingDTO / ReviewMediaDTO /
+│   ReviewReplyDTO — Spatie Data v4, camelCase property.
+└─ Collection con DTO: `Illuminate\Support\Collection` + `#[DataCollectionOf]`
+   per CLAUDE.md convention.
+```
+
+### Routes (group prefix `/review`)
+
+```
+POST /review              review.saveReview  (public, gate Service)
+GET  /review/list/{id}    review.list        (AJAX partial)
+POST /review/vote         review.vote        (auth)
+POST /review/report       review.report      (auth)
+```
+
+Frontend gọi qua `routeArea('review.xxx')` — ExtendedRoute prefix `web.`
+auto-resolve.
+
+### Frontend AJAX (KHÔNG append URL product)
+
+Section `#review-section` chứa data-attr:
+`data-list-url`, `data-save-url`, `data-vote-url`, `data-report-url`,
+`data-csrf`, `data-product-id`. JS đọc từ đây — blade không generate URL lặp.
+
+State local in-memory (không sync URL/history):
+```js
+state = { filter: {rating, has_media, has_text, tag:[]}, sort, page }
+```
+
+7 partial trong `resources/views/web/product/structure/`:
+- `comment.blade.php` — entry point, @php resolve + 7 @include.
+- `_comment_summary.blade.php` — avg rating + distribution + criteria breakdown.
+- `_comment_filter.blade.php` — chips + sort dropdown (data-review-filter).
+- `_comment_list.blade.php` — review item loop, tự include _paging cuối.
+- `_comment_form.blade.php` — write form đa tiêu chí, dispatch UI theo policy.
+- `_comment_report.blade.php` — modal Bootstrap 4.
+- `_comment_styles.blade.php` — CSS scoped Shopee palette + skeleton + rating-fractional.
+- `_comment_script.blade.php` — IIFE module, IntersectionObserver lazy load.
+
+### Lazy load tối ưu (2026-06-10)
+
+`ProductController::index` KHÔNG gọi `listForProduct()` server-side (eager-load
+6 relation lồng × 500k+ row → slow first-load). Skeleton placeholder render
+ngay; JS `reload()` chạy khi IntersectionObserver detect `#review-section`
+gần viewport (rootMargin 300px) hoặc setTimeout 1.5s fallback.
+
+Giữ SSR (cheap + cached):
+- criteria, tags (1day/1h cache)
+- criteriaAverages (1h cache trên product_id)
+- hasReviewed, hasVerifiedPurchase (single-row index lookup)
+- reviewPolicy (setting cache)
+
+Effect: TTFB trang detail ~50-100ms thay vì 500-2000ms.
+
+### Half-star UX (FA 5.0.6 không có fa-star-half-alt)
+
+CSS overlay technique — 2 layer star stack, layer cam clipped theo
+`var(--rating-pct)` = rating × 20%. Class `.rating-fractional` + `.rf-bg`
+(xám full) + `.rf-fg` (cam overlay với overflow:hidden). Bullet-proof
+mọi FA version. Reusable qua CSS variable.
+
+Áp dụng: product header + review summary overview + criteria breakdown grid.
+
+### Variant pricing trong product header
+
+Product có variant: ẨN layout sale (struck/red) vì JS `applyVariant()` ghi
+đè `#price-product` SAU page load. Nếu render struck SSR + variant.price >
+$entity->price → user thấy "sale > regular" gây hiểu lầm. Blade check
+`@if ($entity->hasVariants) → single price` thay vì special layout.
+
+ProductDTO `rating`/`totalRating`/`ratingRounded` ưu tiên cache mới
+(`rating_avg`/`review_count`), fallback legacy nếu cache rỗng.
+
+### Seed commands review
+
+**`SeedReviewsCommand` (`reviews:seed`)**:
+- Default 100k, chunk=500 (chống OOM).
+- Bulk insert AUTO_INCREMENT — đọc lastInsertId() đầu batch, build child
+  rows với rid = first+i (KHÔNG explicit id va legacy backfill).
+- 2-pass: build $reviewRows + $perRowMeta → insert review → build child.
+- Phân phối realistic: 5★ 55% / 4★ 25% / 3★ 12% / 2★ 5% / 1★ 3%.
+- Max vote/review = 15. `unset()` + `gc_collect_cycles()` cuối mỗi batch.
+- `insertOrIgnore` everywhere cho child (defensive legacy backfill).
+- Cuối flow: 2 SQL bulk rebuild — review_tag.usage_count + product aggregate.
+- Cron `routes/console.php` hourly: `reviews:seed 500 --chunk=200`.
+
+**`SeedProductVariantsCommand` (`variants:seed`)**:
+- Flag `--full` sinh đầy đủ Cartesian Color × Size (tránh dead-end UX
+  "Hết hàng" giả khi user pick combo không tồn tại).
+- Default random subset (--min=2 --max=3) chỉ dùng stress test.
+
+**JS dead-end protection** (`style.js refreshAvailability`):
+- Bỏ short-circuit `!hasSelection || ...` — luôn check `isValueAvailable`
+  từ init. Color không có variant in-stock → disable ngay, user không pick
+  được dead-end.
+
+### Bug history đã giải
+
+1. Migration `review_*_description.deleted_at` — SoftDeletes nhưng column
+   không có → 1054. Fix: gỡ SoftDeletes 2 Description model.
+2. Duplicate PK '7-1' review_rating — explicit review.id va legacy backfill.
+   Fix: AUTO_INCREMENT + lastInsertId.
+3. `config_policy` vs `config_review_policy` drift — Service + Controller
+   key khác nhau. Fix: cả 3 tầng dùng `config_review_policy`.
+4. Spatie sort `created_at` not allowed — repo prefix `review.*` nhưng blade
+   gửi không prefix. Fix: đồng bộ token `review.helpful_count`.
+5. URL polluted `?sort=&filter=` ở product page khi filter review. Fix: AJAX
+   state local, không touch URL.
+6. JS price overwrite "sale > regular" giả khi variant.price > product.price.
+   Fix: ẩn struck layout cho product có variant.
+
+### Việc còn nợ — Review cluster
+
+- Admin CMS chưa có UI moderation (duyệt pending, xử lý report queue, ban
+  tag, edit criteria). Backend infra sẵn.
+- `review_reply` chưa có UI customer nested reply (chỉ shop). Schema sẵn.
+- `review_helpful` UNIQUE (review_id, user_id=0) collide cho visitor — chỉ
+  1 visitor toàn site có thể vote. Đổi UNIQUE (review_id, user_id, ip)
+  hoặc disable vote guest.
+
+## Convention thêm — `routeArea()` cho mọi URL
+
+Mọi URL trong blade dùng `routeArea('name', $params)` thay `route()` — helper
+ở Common.php tự prefix area (`web.`/`cms.`/`api.`) theo `getCurrentArea()`.
+ExtendedRoute đăng ký route KHÔNG prefix area; gọi qua routeArea mới resolve
+đúng. Pattern: auth.login, review.*, checkout.*.
+
+## Convention `lazyMap()` ở base Controller
+
+`App\Http\Controllers\Controller::lazyMap()` định nghĩa repo auto-resolve qua
+`__get()` — KHÔNG cần inject explicit ở constructor con. Map hiện: categoryRepo,
+zoneRepo, manufacturerRepo, filterRepo, menuRepo, menuValueRepo, productRepo.
+Controller con override `lazyMap()` để thêm (vd ProductController thêm
+userWishlistRepo).
+
+Truy cập: `$this->productRepo->...`. Base `__get($name)` Container::make
+interface mapping, cache singleton trong `$resolved[$name]` per request.

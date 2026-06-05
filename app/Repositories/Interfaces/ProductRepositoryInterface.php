@@ -13,6 +13,13 @@ interface ProductRepositoryInterface extends BaseRepositoryInterface
 
     public function getProductDetail(int $id): ?Product;
 
+    /**
+     * Lấy product theo id, BẮT BUỘC is_review = 1 (admin cho phép user
+     * gửi đánh giá). Dùng cho luồng review (ReviewController::saveReview).
+     * Trả null nếu product không tồn tại hoặc admin tắt review.
+     */
+    public function findReviewableProduct(int $id): ?Product;
+
     public function incrementViewed(int $id): void;
 
     public function getProductRelatedByProductId(int $id, int $limit = 4);

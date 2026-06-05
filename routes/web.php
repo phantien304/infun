@@ -2,17 +2,6 @@
 
 use App\Helpers\Facades\ExtendedRoute as Route;
 
-/*
-|--------------------------------------------------------------------------
-| Web Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| contains the "web" middleware group. Now create something great!
-|
-*/
-
 Route::get('/maintenance', ['as' => 'maintenance', 'uses' => 'MaintenanceController@index']);
 Route::get('/error-404', ['as' => 'error.404', 'uses' => 'ErrorController@index']);
 Route::get('/give-me-csrf', 'CsrfTokenController@index')->name('csrf.index');
@@ -28,7 +17,14 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
     Route::get('/khach-hang-danh-gia', 'StoreReviewController@getList')->name('storeReview.getList');
     Route::get('/thanh-phan', 'IngredientController@getList')->name('ingredient.getList');
     Route::get('/tags', 'TagController@getList')->name('tags.getList');
-    Route::post('/review', 'ReviewController@saveReview')->name('review.saveReview');
+    Route::prefix('review')->group(function () {
+        Route::post('/', 'ReviewController@saveReview')->name('review.saveReview');
+        Route::get('/list/{productId}', 'ReviewController@list')->name('review.list');
+        Route::middleware('auth')->group(function () {
+            Route::post('/vote', 'ReviewController@vote')->name('review.vote');
+            Route::post('/report', 'ReviewController@report')->name('review.report');
+        });
+    });
     Route::any('/order/search', 'OrderController@search')->name('order.search');
     Route::get('/lien-he', ['uses' => 'ContactController@index', 'as' => 'contact.index']);
     Route::post('/lien-he/send', ['uses' => 'ContactController@send', 'as' => 'contact.send']);

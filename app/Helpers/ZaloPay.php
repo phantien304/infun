@@ -13,8 +13,27 @@ class ZaloPay
 
     public function __construct()
     {
-        $this->_publicKey = file_get_contents(storage_path('lib/zaloPay/public_key.pem'));
+        // Lazy-load public key — KHÔNG đọc file ở constructor vì class này
+        // được DI inject vào CheckoutPaymentService → CheckoutController, mọi
+        // request checkout (kể cả addToCart không hề dùng ZaloPay) sẽ
+        // instantiate. File thiếu = 500 toàn bộ luồng checkout. Lazy-load
+        // qua getPublicKey() chỉ đọc khi encrypt thực sự cần.
         $this->_uid = $this->getTimestamp();
+    }
+
+    private function getPublicKey(): string
+    {
+        if ($this->_publicKey !== null) {
+            return $this->_publicKey;
+        }
+        $path = storage_path('lib/zaloPay/public_key.pem');
+        if (! is_file($path)) {
+            throw new \RuntimeException(
+                "ZaloPay public key not found at {$path}. "
+                . 'Tải file từ ZaloPay merchant portal và đặt vào storage/lib/zaloPay/public_key.pem.'
+            );
+        }
+        return $this->_publicKey = (string) file_get_contents($path);
     }
 
     public function verifyCallback($params = [])
@@ -88,7 +107,7 @@ class ZaloPay
     {
         $order = $this->newCreateOrderData($params);
         $order['userip'] = array_get($params, 'userip', '127.0.0.1');
-        openssl_public_encrypt($params['paymentcodeRaw'], $encrypted, $this->_publicKey);
+        openssl_public_encrypt($params['paymentcodeRaw'], $encrypted, $this->getPublicKey());
         $order['paymentcode'] = base64_encode($encrypted);
         $order['mac'] = ZaloPayMacGenerator::quickPay($order, $params['paymentcodeRaw']);
         return $order;

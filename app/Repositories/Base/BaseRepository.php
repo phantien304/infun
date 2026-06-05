@@ -9,11 +9,14 @@ use Illuminate\Foundation\Application;
 abstract class BaseRepository implements BaseRepositoryInterface
 {
     protected $model;
+
     public function __construct(protected Application $app)
     {
         $this->makeModel();
     }
+
     abstract public function model(): string;
+
     public function makeModel()
     {
         $model = $this->app->make($this->model());
@@ -22,20 +25,26 @@ abstract class BaseRepository implements BaseRepositoryInterface
         }
         return $this->model = $model;
     }
+
     public function resetModel()
     {
         return $this->makeModel();
     }
 
-    public function getDetail(int $id) {}
+    public function getDetail(int $id)
+    {
+    }
+
     public function paginate($limit = 15)
     {
         return $this->model->paginate($limit);
     }
+
     public function getParams()
     {
         return request()->except(['json']);
     }
+
     public function getDate($date, $format = 'Y-m-d')
     {
         try {
@@ -45,6 +54,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
             return Carbon::now()->format($format);
         }
     }
+
     public function convertFormatDate($date, $fromFormat = 'd/m/Y', $toFormat = 'Y-m-d')
     {
         try {

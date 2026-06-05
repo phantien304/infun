@@ -130,7 +130,7 @@ class CartService
 
         $variants = $variantIds
             ? ProductVariant::with([
-                'stock',
+                'productStock',
                 'description',
                 'productVariantAttributes.optionValue.description',
             ])->whereIn('id', $variantIds)->get()->keyBy('id')
@@ -272,7 +272,12 @@ class CartService
             $role = (int) ($roles[$optionId] ?? getCoreConfig('option.role_custom_field'));
 
             if ($role === getCoreConfig('option.role_variant')) {
-                $values = $entry['product_option_value_id'] ?? null;
+                // Blade `_option.blade.php` emit key `option_value_id` cho
+                // variant role (xem $valueParam = $isVariant ? 'option_value_id'
+                // : 'product_option_value_id'). Đọc nhầm key sẽ ra mảng rỗng
+                // → resolveVariantId trả null → cart add ở product level
+                // không biết variant nào → giá sai + SKU sai khi tạo order.
+                $values = $entry['option_value_id'] ?? ($entry['product_option_value_id'] ?? null);
                 if (is_array($values)) {
                     foreach ($values as $v) {
                         if ((int) $v > 0) {
@@ -369,9 +374,13 @@ class CartService
         }
 
         if ($variant) {
-            $stock = $variant->stock;
+            $stock = $variant->productStock;
+            // Stock NULL = data drift (variant chưa có row product_stock). Cho
+            // qua cùng pattern với ProductOptionService::buildVariantMatrix
+            // (coi như không track stock) — không chặn add-to-cart vì lý do
+            // schema. Stock thực sẽ được verify khi tạo order.
             if (! $stock) {
-                return false;
+                return true;
             }
             $available = (int) $stock->on_hand - (int) $stock->reserved;
 

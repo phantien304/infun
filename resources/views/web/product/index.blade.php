@@ -1,6 +1,12 @@
 @php
     $special = $entity->productSpecial;
     $priceFinal = $defaultVariant['price'] ?? ($special?->pricePromotion ?: $entity->price);
+    // Giá tham chiếu cho discount Shopee-style:
+    //  - Có variant: regular = product.price (MSRP/niêm yết), current = variant.price.
+    //  - Không có variant: regular = special.priceRegular (= product.price khi ngữ cảnh
+    //    special tính từ đó), current = special.pricePromotion.
+    // JS dùng `productBasePrice` để compute discount khi user pick variant.
+    $basePriceForDiscount = (float) $entity->price;
 @endphp
 @section('script_header')
     <script type="text/javascript">
@@ -10,6 +16,7 @@
         var variantGallery = {!! json_encode($variantGallery ?? []) !!};
         var urlUserWishlist = '{{ route('account.userWishlist') }}';
         var priceProduct = {{ $priceFinal }};
+        var productBasePrice = {{ $basePriceForDiscount }};
         var urlListReview = '{!! routeArea('product.getListReview', ['product_id' => $entity->id, 'pageIndex' => 1]) !!}';
     </script>
 @stop
@@ -61,27 +68,75 @@
                     </div>
                     <div class="col-md-6 col-sm-12 col-xs-12 mb-md-0 mb-sm-5">
                         <div class="detail-info pr-30 pl-30">
-                            @if ($special && $special->discountPercent)
-                                <span class="stock-status out-stock">Tiết kiệm -{{ $special->discountPercent }}%</span>
-                            @endif
+                            {{-- Badge "Tiết kiệm" Shopee-style:
+                                 - Product có variant: tính từ product.price (regular) ↔ variant.price
+                                   (current). JS updateDiscountBadge() update khi user pick variant.
+                                 - Không variant: tính từ special.priceRegular ↔ special.pricePromotion.
+                                 Initial value lấy từ defaultVariant.price (nếu có) hoặc special. --}}
+                            @php
+                                // Reference price: variant.regular_price (per-variant) ưu tiên,
+                                // fallback product.price. Đồng bộ với JS updateDiscountBadge.
+                                $currentPrice = $defaultVariant['price'] ?? ($special?->pricePromotion ?? 0);
+                                $refPrice = $defaultVariant['regular_price'] ?? $basePriceForDiscount;
+                                $initDiscount = ($refPrice > 0 && $currentPrice > 0 && $currentPrice < $refPrice)
+                                    ? (int) round(($refPrice - $currentPrice) / $refPrice * 100)
+                                    : 0;
+                            @endphp
+                            <span class="stock-status out-stock" id="discount-badge"
+                                  style="{{ $initDiscount > 0 ? '' : 'display:none;' }}">
+                                Tiết kiệm -<span id="discount-badge-value">{{ $initDiscount }}</span>%
+                            </span>
                             <h1>{{ $entity->name }}</h1>
-                            <div class="d-flex mt-2 mb-20" style="font-size: 20px;">
-                                <div itemtype="http://data-vocabulary.org/Review-aggregate" itemscope="" itemprop="review"
-                                    style="display: block;">
-                                    <img src="/web/images/stars-{!! $entity->ratingRounded !!}.png"
-                                        style="height: 25px; vertical-align: top;"
-                                        alt="{!! $entity->totalRating !!} đánh giá" />&nbsp;
-                                    <span itemprop="rating">{!! $entity->ratingRounded !!}</span>/5&nbsp;
+                            @php
+                                // Rating block — CSS overlay technique (bullet-proof với mọi FA version),
+                                // hỗ trợ half-star bằng cách render 2 layer star xám + cam clipped theo %.
+                                // Site đang dùng FA 5.0.6 — không có `fa-star-half-alt` → phải dùng overlay.
+                                $ratingFloat = (float) $entity->rating;
+                                $ratingPct   = max(0, min(100, $ratingFloat * 20));   // 0..5 → 0..100%
+                            @endphp
+                            <div class="d-flex flex-wrap mt-2 mb-20" style="font-size: 16px; align-items: center; gap: 10px;">
+                                <div itemtype="http://data-vocabulary.org/Review-aggregate" itemscope itemprop="review"
+                                     class="d-inline-flex align-items-center" style="gap: 6px;">
+                                    <span class="rating-stars" style="position: relative; display: inline-block; font-size: 18px; line-height: 1; letter-spacing: 2px;">
+                                        {{-- Layer xám full 5 sao --}}
+                                        <span style="color: #d4d4d4;">
+                                            <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i>
+                                        </span>
+                                        {{-- Layer cam overlay, clip theo width = rating × 20% --}}
+                                        <span style="position: absolute; top: 0; left: 0; width: {{ $ratingPct }}%; color: #ee4d2d; overflow: hidden; white-space: nowrap;">
+                                            <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i>
+                                        </span>
+                                    </span>
+                                    <span itemprop="rating" style="font-weight: 500;">{{ number_format($ratingFloat, 1) }}</span>
+                                    <span style="color: #999;">/5</span>
                                     @if ($entity->totalRating)
-                                        <span itemprop="count">({!! $entity->totalRating !!})</span>
+                                        <span itemprop="count" style="color: #757575;">({{ number_format($entity->totalRating) }})</span>
                                     @endif
                                 </div>
-                                <div class="price-wraper">
-                                    &nbsp;|&nbsp;
-                                    @if ($special && $special->pricePromotion > 0)
+                                <div class="price-wraper d-inline-flex align-items-center" style="gap: 8px;">
+                                    <span style="color: #d4d4d4;">|</span>
+                                    {{-- Product có variant: render struck product.price + variant.price
+                                         (current) + JS updateDiscount khi pick variant. Struck CHỈ hiện
+                                         khi variant.price < product.price (tránh struck < red). --}}
+                                    @if ($entity->hasVariants)
+                                        @php
+                                            $currency = getConfigDb('config_currency');
+                                            $currentPrice = $defaultVariant['price'] ?? $entity->price;
+                                            // Struck: ưu tiên variant.regular_price; fallback product.price.
+                                            $struckRef = $defaultVariant['regular_price'] ?? $basePriceForDiscount;
+                                            $showStruck = $struckRef > 0 && $currentPrice > 0 && $currentPrice < $struckRef;
+                                        @endphp
+                                        <b class="text-secondary text-decoration-line-through" id="price-product-old"
+                                           style="{{ $showStruck ? '' : 'display:none;' }}">
+                                            {{ number_format($struckRef) . $currency }}
+                                        </b>
+                                        <b class="text-danger" id="price-product">
+                                            {{ $currentPrice > 0 ? number_format($currentPrice) . $currency : getModuleConfig('product.text_contact') }}
+                                        </b>
+                                    @elseif ($special && $special->pricePromotion > 0 && $special->pricePromotion < $entity->price)
                                         <b class="text-secondary text-decoration-line-through">
                                             {{ $special->priceRegularLabel }}
-                                        </b>&nbsp;
+                                        </b>
                                         <b class="text-danger" id="price-product">
                                             {{ $special->pricePromotionLabel }}
                                         </b>
@@ -130,13 +185,15 @@
                                     value="1" min="1" style="height: 42px">
                                 @if (getConfigDb('config_stock_checkout'))
                                     @if ($entity->isCustom)
-                                        <button id="consult-sign" class="button btn-secondary button-add-to-cart mt-2 me-2">
+                                        <button id="consult-sign" class="button btn-secondary button-add-to-cart mt-2 me-2"
+                                            data-url="{{ routeArea('checkout.consultSign') }}">
                                             <i class="fas fa-adjust"></i>&nbsp;Tư vấn ngay
                                         </button>
                                     @endif
                                     @if ($entity->isAddCart)
                                         @if ($entity->quantity > 0)
-                                            <button id="button-cart" class="button btn-brand button-add-to-cart mt-2 me-2">
+                                            <button id="button-cart" class="button btn-brand button-add-to-cart mt-2 me-2"
+                                                data-url="{{ routeArea('checkout.addToCart') }}">
                                                 <i class="fa fa-shopping-cart"></i>&nbsp;Mua hàng
                                             </button>
                                         @else
@@ -148,7 +205,8 @@
                                         @endif
                                     @endif
                                 @else
-                                    <button id="button-cart" class="button btn-brand button-add-to-cart mt-2 me-2">
+                                    <button id="button-cart" class="button btn-brand button-add-to-cart mt-2 me-2"
+                                        data-url="{{ routeArea('checkout.addToCart') }}">
                                         <i class="fa fa-shopping-cart"></i>&nbsp;Mua hàng
                                     </button>
                                 @endif

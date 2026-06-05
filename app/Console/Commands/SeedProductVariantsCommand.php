@@ -42,10 +42,11 @@ use Illuminate\Support\Facades\Schema;
 class SeedProductVariantsCommand extends Command
 {
     protected $signature = 'variants:seed
-        {--chunk=500 : Số product mỗi batch xử lý}
+        {--chunk=100 : Số product mỗi batch xử lý}
         {--percent=100 : % product được gắn variant (0–100)}
-        {--min=2 : Số variant tối thiểu mỗi product}
-        {--max=3 : Số variant tối đa mỗi product}
+        {--min=2 : Số variant tối thiểu mỗi product (chỉ áp dụng khi KHÔNG --full)}
+        {--max=3 : Số variant tối đa mỗi product (chỉ áp dụng khi KHÔNG --full)}
+        {--full : Sinh ĐẦY ĐỦ Cartesian (mọi tổ hợp Color × Size). Khuyến nghị khi test UX variant availability — tránh false "hết hàng" do combo không tồn tại}
         {--with-custom-fields=0 : % product nhận 1-2 option custom field (text/email/phone/textarea/radio/select). 0 = skip}
         {--truncate : Xóa cluster variant + custom field declaration trước khi seed}';
 
@@ -496,9 +497,10 @@ class SeedProductVariantsCommand extends Command
 
         // Reset cờ aggregate trên product để backfill tính lại từ đầu.
         DB::table('product')->update([
-            'has_variants'      => 0,
-            'min_variant_price' => null,
-            'max_variant_price' => null,
+            'has_variants'                 => 0,
+            'min_variant_price'            => null,
+            'max_variant_price'            => null,
+            'max_variant_discount_percent' => null,
         ]);
     }
 
@@ -535,7 +537,11 @@ class SeedProductVariantsCommand extends Command
                 continue;
             }
 
-            $count  = rand($min, $max);
+            // --full: lấy mọi tổ hợp (tránh dead-end UX "Hết hàng" giả). Mặc định
+            // ngược lại pick random subset cho phép test data drift / out-of-stock.
+            $count  = $this->option('full')
+                ? (count($colorValueIds) * count($sizeValueIds))
+                : rand($min, $max);
             $combos = $this->pickCombinations($colorValueIds, $sizeValueIds, $count);
             if (empty($combos)) {
                 continue;
@@ -570,8 +576,14 @@ class SeedProductVariantsCommand extends Command
                     $sizeOptionId  => $sizeValueId,
                 ]);
 
-                // Random ±15%, clamp tối thiểu 1k để tránh giá âm/0 khi base nhỏ.
+                // price: random ±15% base, clamp 1k chống giá âm/0.
+                // regular_price: 10–50% cao hơn price → discount badge -9% đến -33%
+                // realistic. Khoảng 20% variant set regular = price (không sale)
+                // để test case struck + badge ẩn.
                 $variantPrice = max(1000, (int) round($basePrice * (rand(85, 115) / 100)));
+                $regularPrice = rand(1, 100) <= 20
+                    ? $variantPrice
+                    : (int) round($variantPrice * (rand(110, 150) / 100));
                 $onHand = rand(1, 200);
 
                 $variants[] = [
@@ -580,6 +592,7 @@ class SeedProductVariantsCommand extends Command
                     'sku'                 => 'V-' . $product->id . '-' . str_pad((string) ($idx + 1), 2, '0', STR_PAD_LEFT),
                     'attribute_signature' => $sig,
                     'price'               => $variantPrice,
+                    'regular_price'       => $regularPrice,
                     'points'              => 0,
                     'weight'              => null,
                     'image'               => $imageByColorValueId[$colorValueId],
@@ -694,6 +707,23 @@ class SeedProductVariantsCommand extends Command
             ) v ON v.product_id = p.id
             SET p.min_variant_price = v.mn,
                 p.max_variant_price = v.mx
+        ');
+
+        // MAX discount %: tính trên những variant có regular_price > price.
+        // GREATEST nhằm phòng trường hợp data lỗi (regular < price) — bỏ qua
+        // bằng FLOOR(0). Round half-up cho khớp UI.
+        DB::statement('
+            UPDATE product p
+            INNER JOIN (
+                SELECT product_id,
+                       MAX(FLOOR((regular_price - price) / regular_price * 100)) AS pct
+                FROM product_variant
+                WHERE deleted_at IS NULL
+                  AND regular_price IS NOT NULL
+                  AND regular_price > price
+                GROUP BY product_id
+            ) d ON d.product_id = p.id
+            SET p.max_variant_discount_percent = d.pct
         ');
     }
 }

@@ -37,7 +37,13 @@ class CheckoutAddToCartRequest extends FormRequest
                 }
                 $type = $opt['type'] ?? '';
                 $value = $opt['value'] ?? null;
-                $hasValueId = ! empty($opt['product_option_value_id']);
+                // Blade `_option.blade.php` emit `option_value_id` cho variant
+                // role, `product_option_value_id` cho custom field role
+                // (xem $valueParam = $isVariant ? ...). Validator phải accept
+                // CẢ HAI key — variant role required mà chỉ check
+                // product_option_value_id sẽ luôn fail dù user đã pick.
+                $hasValueId = ! empty($opt['option_value_id'])
+                           || ! empty($opt['product_option_value_id']);
 
                 if (in_array($type, ['text', 'textarea', 'email', 'phone'], true) && empty($value)) {
                     $v->errors()->add("option.$key.parent", sprintf(trans('messages.TextRequiredInput'), $opt['name'] ?? ''));

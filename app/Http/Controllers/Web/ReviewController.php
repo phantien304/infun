@@ -1,59 +1,103 @@
 <?php
 
-namespace App\Http\Controllers\Client\InfunStudio;
+namespace App\Http\Controllers\Web;
 
+use App\Data\Output\ReviewCriteriaDTO;
+use App\Data\Output\ReviewDTO;
+use App\Data\Output\ReviewTagDTO;
 use App\Http\Controllers\Controller;
-use App\Model\Entities\Product;
-use App\Repositories\Client\InfunStudio\ReviewRepository;
-use App\Repositories\Cms\ProductRepository;
-use Illuminate\Support\Facades\DB;
+use App\Http\Requests\Web\ReviewReportRequest;
+use App\Http\Requests\Web\ReviewSaveRequest;
+use App\Http\Requests\Web\ReviewVoteRequest;
+use App\Repositories\Interfaces\ReviewRepositoryInterface;
+use App\Services\Review\ReviewService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ReviewController extends Controller
 {
     public function __construct(
-        ReviewRepository $reviewRepository,
-        ProductRepository $productRepository
+        protected ReviewService $reviewService,
+        protected ReviewRepositoryInterface $reviewRepo
     ) {
-        parent::__construct();
-        $this->setRepository($reviewRepository);
-        $this->registerRepository($productRepository);
     }
 
-    public function saveReview()
+    public function saveReview(ReviewSaveRequest $request): JsonResponse
     {
-        $ip = getIpVisitor();
-        request()->merge(['ip' => $ip]);
-        $params = $this->getParams();
-        $this->getRepository()->getValidator();
-        $valid = $this->getRepository()->getValidator()->validateCreate($params);
-        if (!$valid) {
-            return errValidator($this->getRepository()->getValidator()->errors(), 200);
-        }
+        $validated = $request->validated();
 
-        $productId = array_get($params, 'product_id');
-        $product = Product::where('id', $productId)->where('is_review', 1)->first();
-        if (empty($product)) {
+        if (! $this->productRepo->findReviewableProduct((int) $validated['product_id'])) {
             return errNoValidator(trans('messages.ErrorAction'));
         }
 
-        DB::beginTransaction();
         try {
-            $this->getRepository()->create([
-                'product_id' => $productId,
-                'user_id' => getUserLoginId(),
-                'ip' => $ip,
-                'author' => array_get($params, 'author'),
-                'text' => array_get($params, 'text'),
-                'rating' => array_get($params, 'rating'),
-                'email' => array_get($params, 'email'),
-                'is_publish' => 0
+            $review = $this->reviewService->submitReview($validated + [
+                'ip'    => getIpVisitor(),
+                'media' => $request->file('media', []),
             ]);
-            DB::commit();
-            return successData(trans('messages.ReviewSuccess'));
-        } catch (\Exception $e) {
-            logError($e->getMessage());
-            DB::rollback();
+
+            return successData(
+                trans('messages.ReviewSuccess'),
+                ['review_id' => $review->id],
+            );
+        } catch (\DomainException $e) {
+            return errNoValidator($e->getMessage());
+        } catch (\Throwable $e) {
+            logError('ReviewController::saveReview ' . $e->getMessage());
+            return errNoValidator(trans('messages.ErrorAction'));
         }
-        return errNoValidator(trans('messages.ErrorAction'));
+    }
+
+    public function vote(ReviewVoteRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $userId = (int) getCurrentUserId();
+
+        try {
+            $result = $this->reviewService->vote(
+                (int) $validated['review_id'],
+                $userId,
+                (int) $validated['vote_type'],
+            );
+            return response()->json(['success' => true] + $result);
+        } catch (\Throwable $e) {
+            logError('ReviewController::vote ' . $e->getMessage());
+            return errNoValidator(trans('messages.ErrorAction'));
+        }
+    }
+
+    public function report(ReviewReportRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $userId = (int) getCurrentUserId();
+
+        try {
+            $this->reviewService->report(
+                (int) $validated['review_id'],
+                $userId,
+                $validated['reason_code'],
+                $validated['description'] ?? null,
+            );
+            return successNoData(trans('messages.ReportSubmitted'));
+        } catch (\Throwable $e) {
+            logError('ReviewController::report ' . $e->getMessage());
+            return errNoValidator(trans('messages.ErrorAction'));
+        }
+    }
+
+    public function list(int $productId, Request $request)
+    {
+        $reviews = $this->reviewRepo->listForProduct($productId, $request);
+        $userId  = (int) getCurrentUserId();
+
+        $reviews->setCollection(
+            $reviews->getCollection()->map(fn ($r) => ReviewDTO::fromModel($r, $userId ?: null)),
+        );
+
+        return view('web.product.structure._comment_list', [
+            'reviews'  => $reviews,
+            'criteria' => ReviewCriteriaDTO::collect($this->reviewRepo->getActiveCriteria()),
+            'tags'     => ReviewTagDTO::collect($this->reviewRepo->getActiveTags()),
+        ]);
     }
 }

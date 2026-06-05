@@ -188,15 +188,19 @@ ul li.splide__slide:hover {
 .radio-choose-v2 .out-of-stock,
 .checkbox-choose-v2 .out-of-stock,
 .radio-child-choose .out-of-stock,
-.select-child-choose .out-of-stock {
+.select-child-choose .out-of-stock,
+.input-option .form-check.out-of-stock {
     opacity: 0.45;
     position: relative;
+    cursor: not-allowed !important;
 }
 
 .radio-choose-v2 .out-of-stock label,
-.checkbox-choose-v2 .out-of-stock label {
+.checkbox-choose-v2 .out-of-stock label,
+.input-option label.out-of-stock-label {
     cursor: not-allowed !important;
     color: #999;
+    pointer-events: none;
 }
 
 /* Text-only swatch (no-image): nền xám + viền dashed + strikethrough.

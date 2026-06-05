@@ -29,6 +29,17 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->logSql();
+        $this->registerObservers();
+    }
+
+    /**
+     * Đăng ký observer — Review observer cập nhật aggregate cache trên product
+     * (review_count, rating_avg, rating_sum, rating_distribution) khi review
+     * đổi status approved hoặc rating value.
+     */
+    protected function registerObservers(): void
+    {
+        \App\Models\Entities\Review::observe(\App\Observers\ReviewObserver::class);
     }
     protected function logSql()
     {

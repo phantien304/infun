@@ -40,6 +40,7 @@ class ProductDTO extends Data
         public bool $hasVariants,
         public ?float $minVariantPrice,
         public ?float $maxVariantPrice,
+        public ?int $maxVariantDiscountPercent,
         public ?int $isAddCart,
         public ?int $isCustom,
         public ?int $isReview,
@@ -57,6 +58,9 @@ class ProductDTO extends Data
         public ?ProductSpecialDTO $productSpecial,
         public array $matchedFilterNames,
         public int $ratingRounded,
+        public float $ratingAvg,
+        public int $reviewCount,
+        public array $ratingDistribution,
         public string $weightUnit,
         public array $gallery,
         public array $linkSaleCustom,
@@ -106,12 +110,21 @@ class ProductDTO extends Data
             height: $product->height,
             subtract: $product->subtract,
             minimum: $product->minimum,
-            rating: $product->rating,
-            totalRating: $product->total_rating,
+            // Legacy `rating` + `total_rating` cột không còn được cập nhật bởi
+            // cluster review mới (observer chỉ ghi rating_avg/review_count). Ưu
+            // tiên aggregate cache mới, fallback legacy nếu cache rỗng.
+            rating: (float) ($product->rating_avg ?? 0) > 0
+                ? (float) $product->rating_avg
+                : (float) ($product->rating ?? 0),
+            totalRating: (int) ($product->review_count ?? 0) > 0
+                ? (int) $product->review_count
+                : (int) ($product->total_rating ?? 0),
             viewed: $product->viewed,
             hasVariants: (bool) ($product->has_variants ?? false),
             minVariantPrice: isset($product->min_variant_price) ? (float) $product->min_variant_price : null,
             maxVariantPrice: isset($product->max_variant_price) ? (float) $product->max_variant_price : null,
+            maxVariantDiscountPercent: isset($product->max_variant_discount_percent)
+                ? (int) $product->max_variant_discount_percent : null,
             isAddCart: $product->is_add_cart,
             isCustom: $product->is_custom,
             isReview: $product->is_review,
@@ -128,7 +141,17 @@ class ProductDTO extends Data
             manufacturer: isset($manufacturer) ? ManufacturerDTO::fromModel($manufacturer) : null,
             productSpecial: isset($productSpecial) ? ProductSpecialDTO::fromModel($productSpecial, (float) $product->price) : null,
             matchedFilterNames: $matchedFilterNames,
-            ratingRounded: (int) round((float) $product->rating),
+            // ratingRounded ưu tiên rating_avg (cluster review mới), fallback legacy.
+            ratingRounded: (int) round(
+                (float) ($product->rating_avg ?? 0) > 0
+                    ? (float) $product->rating_avg
+                    : (float) ($product->rating ?? 0)
+            ),
+            ratingAvg: (float) ($product->rating_avg ?? 0),
+            reviewCount: (int) ($product->review_count ?? 0),
+            ratingDistribution: is_string($product->rating_distribution ?? null)
+                ? (json_decode($product->rating_distribution, true) ?: [])
+                : (array) ($product->rating_distribution ?? []),
             weightUnit: $weightUnit,
             gallery: $gallery,
             linkSaleCustom: $linkSaleCustom,

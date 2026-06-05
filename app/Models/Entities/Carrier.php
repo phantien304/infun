@@ -13,7 +13,7 @@ class Carrier extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
-    protected static $destroyRelations = ['carrierOrderStatus'];
+    protected static array $destroyRelations = ['carrierOrderStatus'];
 
     public function carrierOrderStatus()
     {

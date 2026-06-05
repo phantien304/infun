@@ -3,7 +3,6 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\Product;
-use App\Models\Entities\ProductImage;
 use App\Models\Entities\ProductRelated;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
@@ -143,6 +142,18 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 ->find($id),
             getCoreConfig('time.cache')
         );
+    }
+
+    public function findReviewableProduct(int $id): ?Product
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return $this->resetModel()
+            ->where('id', $id)
+            ->where('is_review', 1)
+            ->first();
     }
 
     public function incrementViewed(int $id): void

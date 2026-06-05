@@ -64,6 +64,7 @@ return new class extends Migration
                 $t->string('name', 100);
                 $t->string('hint', 255)->nullable();
                 $t->timestamps();
+                $t->softDeletes();    // parent (review_criteria) có softDelete
 
                 $t->unique(['review_criteria_id', 'language_code'], 'uniq_criteria_desc_locale');
 

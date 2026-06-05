@@ -10,7 +10,18 @@
                     <img src="{{ $product->thumbnail(300, 300) }}" alt="{{ $product->name }}" class="hover-img">
                 </a>
             </div>
-            @if ($special && $special->discountPercent)
+            {{-- Badge discount (Shopee-style):
+                 - Product có variant: ưu tiên MAX discount across variants
+                   (denormalized `max_variant_discount_percent`) — bait MAX
+                   discount, đúng UX Shopee list. List page chỉ load
+                   cardRelations (không có productVariants), nên dùng aggregate
+                   sẵn ở product table.
+                 - Không variant: fallback special->discountPercent. --}}
+            @if ($product->hasVariants && $product->maxVariantDiscountPercent > 0)
+                <div class="product-badges product-badges-position product-badges-mrg">
+                    <span class="sale">-{{ $product->maxVariantDiscountPercent }}%</span>
+                </div>
+            @elseif ($special && $special->discountPercent)
                 <div class="product-badges product-badges-position product-badges-mrg">
                     <span class="sale">-{{ $special->discountPercent }}%</span>
                 </div>

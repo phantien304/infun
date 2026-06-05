@@ -15,7 +15,7 @@ class Orders extends Base implements Auditable
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected $auditExclude = ['fee', 'updated_at'];
-    protected static $destroyRelations = [
+    protected static array $destroyRelations = [
         'ordersCancels',
         'ordersHistories',
         'ordersProducts',

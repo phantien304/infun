@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Repositories\Interfaces\SettingRepositoryInterface;
 use Illuminate\Support\Facades\Cache;
 
-class ConfigDbService extends BaseService
+class ConfigDbService
 {
     protected string $keyCache;
 

@@ -157,7 +157,7 @@ class CheckoutController extends Controller
                 $product->description->name ?? ''
             ),
             'total_cart_header' => session()->get('total_cart_header'),
-            'link_cart'         => route('checkout.cart'),
+            'link_cart'         => routeArea('checkout.cart'),
         ]);
     }
 

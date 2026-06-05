@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Entities\Option;
 use App\Models\Entities\Product;
 use Illuminate\Support\Collection;
 
@@ -214,21 +213,29 @@ class ProductOptionService
             ksort($attributes);
 
             $stock = $variant->productStock;
-            $available = $stock ? (int) $stock->available : 0;
-            $subtract = $stock ? (bool) $stock->subtract : true;
+            // Stock NULL = chưa có row product_stock (data drift / seed thiếu /
+            // eager-load relation fail). KHÔNG fallback về (available=0,
+            // subtract=true) — rule đó sẽ làm UI grey toàn bộ swatch ngay từ
+            // init khi data có vấn đề. Thay bằng (available=999, subtract=false)
+            // = "không track tồn" → variant pickable, user vẫn add-to-cart
+            // được. Stock thực sẽ ép tại OrderService khi tạo order.
+            $available = $stock ? (int) $stock->available : 999;
+            $subtract = $stock ? (bool) $stock->subtract : false;
 
             $matrix[] = [
-                'id'         => (int) $variant->id,
-                'sku'        => $variant->sku,
-                'signature'  => $variant->attribute_signature,
-                'attributes' => $attributes,
-                'price'      => (float) $variant->price,
-                'image'      => $variant->image,
-                'is_default' => (bool) $variant->is_default,
-                'available'  => $available,
-                'subtract'   => $subtract,
-                'label'      => $variant->description?->label,
-                'note'       => $variant->description?->note,
+                'id'            => (int) $variant->id,
+                'sku'           => $variant->sku,
+                'signature'     => $variant->attribute_signature,
+                'attributes'    => $attributes,
+                'price'         => (float) $variant->price,
+                'regular_price' => $variant->regular_price !== null ? (float) $variant->regular_price : null,
+                'image'         => $variant->image,
+                'is_default'    => (bool) $variant->is_default,
+                'available'     => $available,
+                'subtract'      => $subtract,
+                'has_stock'     => $stock !== null,
+                'label'         => $variant->description?->label,
+                'note'          => $variant->description?->note,
             ];
         }
 
@@ -257,14 +264,15 @@ class ProductOptionService
         $stock = $default->productStock;
 
         return [
-            'id'         => (int) $default->id,
-            'price'      => (float) $default->price,
-            'image'      => $default->image,
-            'attributes' => $attributes,
-            'available'  => $stock ? (int) $stock->available : 0,
-            'sku'        => $default->sku,
-            'label'      => $default->description?->label,
-            'note'       => $default->description?->note,
+            'id'            => (int) $default->id,
+            'price'         => (float) $default->price,
+            'regular_price' => $default->regular_price !== null ? (float) $default->regular_price : null,
+            'image'         => $default->image,
+            'attributes'    => $attributes,
+            'available'     => $stock ? (int) $stock->available : 0,
+            'sku'           => $default->sku,
+            'label'         => $default->description?->label,
+            'note'           => $default->description?->note,
         ];
     }
 }

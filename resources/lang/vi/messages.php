@@ -1,4 +1,5 @@
 <?php
+
 return [
     'ErrorCoupon' => 'Cảnh báo: Mã giảm giá (coupon) không hợp lệ, đã quá hạn hoặc giới hạn sử dụng cho đơn hàng này.',
     'ErrorVoucher' => 'Cảnh báo: Mã quà tặng (voucher) không tồn tại hoặc bạn đã sử dụng hết số dư.',
@@ -96,6 +97,30 @@ return [
     'TokenInvalid' => 'Liên kết lỗi, vui lòng kiểm tra lại.',
     'UpdateSuccess' => 'Cập nhật thành công',
     'ReviewSuccess' => 'Đánh giá sản phẩm thành công',
+    'ReportSubmitted' => 'Báo cáo đã được gửi. Cảm ơn bạn!',
+    'review' => [
+        'login_required'         => 'Vui lòng đăng nhập để gửi đánh giá.',
+        'purchase_required'      => 'Bạn cần mua sản phẩm này trước khi đánh giá.',
+        'already_submitted'      => 'Bạn đã đánh giá sản phẩm này rồi.',
+        'save' => [
+            'product_required'   => 'Thiếu sản phẩm cần đánh giá.',
+            'product_not_found'  => 'Sản phẩm không tồn tại.',
+            'text_required'      => 'Vui lòng nhập nội dung đánh giá.',
+            'text_min'           => 'Nội dung đánh giá quá ngắn (tối thiểu 5 ký tự).',
+            'text_max'           => 'Nội dung đánh giá quá dài (tối đa 2000 ký tự).',
+            'rating_required'    => 'Vui lòng chọn số sao đánh giá.',
+            'rating_between'     => 'Số sao đánh giá phải từ 1 đến 5.',
+            'media_max'          => 'Chỉ được đính kèm tối đa 10 file.',
+            'media_size_max'     => 'File đính kèm vượt quá dung lượng cho phép (30MB).',
+            'media_mimetypes'    => 'File đính kèm phải là ảnh hoặc video (jpg/png/webp/gif/mp4/mov/webm).',
+        ],
+        'review_id_required'      => 'Thiếu review_id.',
+        'review_not_found'        => 'Review không tồn tại.',
+        'vote_invalid'            => 'Giá trị vote không hợp lệ.',
+        'reason_required'         => 'Vui lòng chọn lý do báo cáo.',
+        'reason_invalid'          => 'Lý do báo cáo không hợp lệ.',
+        'description_max'         => 'Mô tả quá dài (tối đa 500 ký tự).',
+    ],
     'DeleteSuccess' => 'Xóa thành công',
     'CancelSuccess' => 'Hủy thành công',
     'DeleteFailed' => 'Có lỗi xảy ra khi xóa',

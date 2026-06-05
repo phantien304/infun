@@ -48,6 +48,7 @@ return new class extends Migration
                 $t->char('language_code', 5);
                 $t->string('name', 100);
                 $t->timestamps();
+                $t->softDeletes();    // parent (review_tag) có softDelete
 
                 $t->unique(['review_tag_id', 'language_code'], 'uniq_tag_desc_locale');
 

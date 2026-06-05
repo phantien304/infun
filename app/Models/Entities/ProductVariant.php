@@ -14,11 +14,12 @@ class ProductVariant extends Base
     public $timestamps = true;
 
     protected $casts = [
-        'price'       => 'float',
-        'weight'      => 'float',
-        'is_default'  => 'boolean',
-        'sort_order'  => 'integer',
-        'points'      => 'integer',
+        'price'         => 'float',
+        'regular_price' => 'float',
+        'weight'        => 'float',
+        'is_default'    => 'boolean',
+        'sort_order'    => 'integer',
+        'points'        => 'integer',
     ];
 
     public function product()

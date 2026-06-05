@@ -1,54 +1,80 @@
-<div class="comment-form">
-    <h4 class="mb-15">Viết đánh giá</h4>
-    <div class="row">
-        <div class="col-lg-12 col-md-12">
-            <form action="{!! routeArea('review.saveReview') !!}" method="post" id="ratingForm" enctype="multipart/form-data">
-                <div class="row">
-                    <div class="col-12 mb-10">
-                        <div class="form-group">
-                            <div class="rating">
-                                <input type="radio" id="star5" name="rating" value="5" />
-                                <label for="star5" title="Rocks!">5 stars</label>
-                                <input type="radio" id="star4" name="rating" value="4" />
-                                <label for="star4" title="Pretty good">4 stars</label>
-                                <input type="radio" id="star3" name="rating" value="3" />
-                                <label for="star3" title="Meh">3 stars</label>
-                                <input type="radio" id="star2" name="rating" value="2" />
-                                <label for="star2" title="Kinda bad">2 stars</label>
-                                <input type="radio" id="star1" name="rating" value="1" />
-                                <label for="star1" title="Sucks big time">1 star</label>
-                                <div id="rating" style="font-size: 13px;"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <input type="hidden" name="product_id" value="{{ $entity->id }}" />
-                    <div class="col-sm-6">
-                        <div class="form-group">
-                            <input class="form-control" name="author" id="author" type="text"
-                                placeholder="Họ tên (*)"
-                                value="@if (auth()->check()) {{ auth()->user()->full_name }} @endif">
-                            <div id="author" style="font-size: 13px;"></div>
-                        </div>
-                    </div>
-                    <div class="col-sm-6">
-                        <div class="form-group">
-                            <input class="form-control" name="email" id="email" type="email" placeholder="Email"
-                                value="@if (auth()->check()) {{ auth()->user()->email }} @endif">
-                            <div id="email" style="font-size: 13px;"></div>
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <div class="form-group">
-                            <textarea class="form-control w-100" name="text" id="text" cols="30" rows="9"
-                                placeholder="Nhận xét (*)"></textarea>
-                            <div id="text" style="font-size: 13px;"></div>
-                        </div>
+{{--
+    Review section — Shopee-style UX, render lần đầu server-side + AJAX cho
+    mọi tương tác (filter/sort/page/save/report/vote). Không append query
+    string vào URL product page.
+
+    Biến nhận từ controller (ProductController::index):
+      $entity            — Product (đã có ratingAvg, ratingDistribution, reviewCount)
+      $reviews           — LengthAwarePaginator<ReviewDTO> page đầu
+      $criteria          — Collection<ReviewCriteriaDTO> 5 tiêu chí
+      $tags              — Collection<ReviewTagDTO> chip preset (top 8)
+      $criteriaAverages  — array<code => float>
+      $hasReviewed       — bool: user đã review từ order đã giao chưa
+      $reviewPolicy      — string policy admin cấu hình
+      $hasVerifiedPurchase — bool
+
+    AJAX endpoint:
+      GET routeArea('review.list', productId) — trả partial _comment_list.
+      POST routeArea('review.saveReview')
+      POST routeArea('review.vote')
+      POST routeArea('review.report')
+
+    Sort token theo repo: review.helpful_count / review.created_at / review.rating
+    (prefix bảng để disambiguate JOIN trong QueryableRepository).
+--}}
+
+@php
+    $reviewCount         = $entity->reviewCount ?? ($entity->review_count ?? 0);
+    $ratingAvg           = (float) ($entity->ratingAvg ?? ($entity->rating_avg ?? 0));
+    $distribution        = $entity->ratingDistribution ?? ($entity->rating_distribution ?? null);
+    $distribution        = is_string($distribution) ? json_decode($distribution, true) : ($distribution ?? []);
+    $criteria            = $criteria ?? collect();
+    $tags                = $tags ?? collect();
+    $criteriaAverages    = $criteriaAverages ?? [];
+    $reviews             = $reviews ?? null;
+    $hasReviewed         = $hasReviewed ?? false;
+    $reviewPolicy        = $reviewPolicy ?? getCoreConfig('review.default_policy');
+    $hasVerifiedPurchase = $hasVerifiedPurchase ?? false;
+
+    // State filter ban đầu — tất cả đặt trong section data-attribute để JS đọc,
+    // KHÔNG append vào URL của product detail.
+    $initialFilter = ['rating' => null, 'has_media' => false, 'has_text' => false, 'tags' => []];
+    $initialSort   = '-review.helpful_count';
+@endphp
+
+<section class="review-shopee"
+         id="review-section"
+         data-product-id="{{ $entity->id }}"
+         data-list-url="{{ routeArea('review.list', $entity->id) }}"
+         data-save-url="{{ routeArea('review.saveReview') }}"
+         data-vote-url="{{ routeArea('review.vote') }}"
+         data-report-url="{{ routeArea('review.report') }}"
+         data-csrf="{{ csrf_token() }}">
+    @include('web.product.structure._comment_summary')
+    @include('web.product.structure._comment_filter')
+
+    {{-- Container động — LAZY LOAD qua AJAX (tối ưu A 2026-06-10).
+         Skeleton placeholder hiển thị trong khi JS fetch /review/list/{id}.
+         JS reload() chạy ngay khi DOMContentLoaded ở _comment_script. --}}
+    <div id="review-list-container">
+        <div class="review-skeleton">
+            @for ($i = 0; $i < 3; $i++)
+                <div class="rs-item">
+                    <div class="rs-avatar"></div>
+                    <div class="rs-body">
+                        <div class="rs-line rs-line--name"></div>
+                        <div class="rs-line rs-line--stars"></div>
+                        <div class="rs-line rs-line--text"></div>
+                        <div class="rs-line rs-line--text rs-line--short"></div>
                     </div>
                 </div>
-                <div class="form-group">
-                    <button type="submit" class="button button-contactForm">Đánh giá</button>
-                </div>
-            </form>
+            @endfor
         </div>
     </div>
-</div>
+
+    @include('web.product.structure._comment_form')
+    @include('web.product.structure._comment_report')
+</section>
+
+@include('web.product.structure._comment_styles')
+@include('web.product.structure._comment_script')

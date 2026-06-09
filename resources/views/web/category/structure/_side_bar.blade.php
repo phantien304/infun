@@ -132,8 +132,8 @@
                         <p class="price mb-0 mt-5">{{ $product->priceLabel }}</p>
                     @endif
                     <div class="product-rate">
-                        <img src="/web/images/stars-{{ (int) round($product->rating) }}.png"
-                            alt="{{ $product->totalRating }} đánh giá" />
+                        <img src="/web/images/stars-{{ (int) round($product->ratingAvg) }}.png"
+                            alt="{{ $product->reviewCount }} đánh giá" />
                     </div>
                 </div>
             </div>

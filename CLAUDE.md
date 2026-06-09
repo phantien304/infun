@@ -37,6 +37,128 @@ code cũ và code mới, đừng nhầm lẫn hai bên (xem mục "Cũ vs Mới"
   `Collection<Model>`; controller convert DTO sau khi đọc cache. DTO là pure transform
   trên model nên gọi sau cache không phá invariant.
 
+### Cache store decision — 3 cờ DB qua `CacheGate`
+
+Việc CHỌN driver cache (redis / file / bypass) KHÔNG đọc `CACHE_STORE` env,
+mà driven bởi 3 cờ trong bảng `setting` để admin bật/tắt runtime không cần
+deploy:
+
+| Cờ DB                  | Tác dụng                                                    |
+|------------------------|-------------------------------------------------------------|
+| `config_debug = 1`     | Bypass cache hoàn toàn — resolver chạy mỗi request. Trumps. |
+| `config_redis_cache=1` | Dùng store `redis` (hỗ trợ tag → flush nhóm OK).            |
+| `config_cache_file=1`  | Dùng store `file` (KHÔNG tag — tagged fallback non-tag).    |
+| Không cờ nào           | Bypass (an toàn cho local dev mới deploy).                  |
+
+Decision tập trung ở `App\Helpers\CacheGate::store()` trả `?Repository`.
+`null` = bypass. Mọi caller cache (trait `CacheableRepository`, middleware
+`CachePage`, trait `MenusClient`) đều đi qua gate này — KHÔNG đọc setting
+trực tiếp để tránh drift khi đổi luật.
+
+**Ngoại lệ duy nhất**: `ConfigDbService::getConfig()` PHẢI dùng `Cache::`
+facade mặc định (driver từ `.env`, thường `database`). Lý do: gate đọc
+setting → setting load qua ConfigDbService → nếu ConfigDbService đi qua
+gate sẽ recursion vô tận. Setting layer là bootstrap.
+
+`config_debug` cũng nên gate logging chi tiết (SQL log, view dump) ở các
+hot path khác — convention hiện tại nhất quán: "debug bật = mọi cache off".
+
+### Ngoại lệ — tài nguyên "load all toàn hệ thống"
+
+5 tài nguyên load mọi page render (gắn vào view data common ở
+`Controller::render`) KHÔNG chịu debug bypass — chi phí 5 SELECT mỗi request
+không chấp nhận được kể cả dev mode:
+
+| Repo / nguồn          | Method               | Cache key                |
+|-----------------------|----------------------|--------------------------|
+| CategoryRepository    | `listAllCached`      | `cache.categories`       |
+| ManufacturerRepository| `listAllCached`      | `cache.manufacturers`    |
+| FilterRepository      | `listAllCached`      | `cache.filters`          |
+| ZoneRepository        | `listAllCached`      | `cache.zones`            |
+| MenusClient trait     | `getMenus`           | `cache.menu`             |
+
+Đường đi: 5 caller dùng `CacheableRepository::rememberSystem` (hoặc trực
+tiếp `CacheGate::systemStore()` cho MenusClient) thay vì `rememberCache`.
+`systemStore()` luôn trả `Repository`:
+
+- `config_redis_cache=1` → redis (kèm tag `GLOBAL_TAG`).
+- `config_cache_file=1`  → file.
+- Mặc định                → `Cache::store()` (driver từ `.env`, thường `database`).
+
+KHÔNG bao giờ trả null — `config_debug=1` cũng KHÔNG bypass. Dev đang debug
+business code (product, review...) thì các cache đó vẫn off qua `rememberCache`;
+taxonomy/menu giữ cache để dev mở trang còn nhanh.
+
+Invalidation tương ứng dùng `forgetSystem()` (CategoryRepository, ManufacturerRepository,
+FilterRepository, ZoneRepository, MenuRepository đã update). `CacheFlushObserver`
+đăng ký trong `$cacheMap` tự gọi `flushCache()` của repo → forget đúng store.
+Quan trọng: nếu một repo có cả cache thường VÀ cache system, `flushCache()` phải
+gọi cả `forgetCache` và `forgetSystem` cho đầy đủ.
+
+### Cache invalidation contract — observer-driven
+
+**Cache tạo dễ, xóa khó.** Mỗi cache trong repo PHẢI có trigger invalidate
+khi data nguồn mutate, nếu không user CMS sửa data xong vẫn thấy stale tới
+hết TTL (30 ngày mặc định trait).
+
+Convention:
+
+1. Mỗi repo dùng `CacheableRepository` trait PHẢI implement public method
+   `flushCache(): void`. Method tự biết flush tag/key nào. Vd
+   `ProductRepository::flushCache()` xoá tag `product_root` quét cả 4 cache
+   con (detail, latest, special_latest, related).
+
+2. Cache invalidation generic dùng `App\Observers\CacheFlushObserver` —
+   1 file, nhận `array $repoInterfaces` qua constructor, hook
+   `saved`/`deleted`/`restored`/`forceDeleted` rồi loop gọi
+   `app($iface)->flushCache()` cho từng interface. Exception bị nuốt
+   (logError) — cache fail KHÔNG được phá save flow.
+
+3. Mapping model → list repo interface TẬP TRUNG ở
+   `AppServiceProvider::registerObservers()` trong bảng `$cacheMap`. Mỗi
+   row: `Model::class => [Iface1::class, Iface2::class, ...]`. Loop
+   `$model::observe(new CacheFlushObserver($ifaces))` đăng ký 1 lượt.
+   Thêm cache mới = thêm 1 row vào bảng — không cần subclass observer.
+
+4. **Cluster có nhiều model con** (vd Product có ProductSpecial /
+   ProductVariant / ProductVariantSpecial / ProductImage / ProductCategory
+   con) — TẤT CẢ model con map về CÙNG list interface
+   `[ProductRepoInterface]` trong `$cacheMap`, bất kỳ thay đổi nào trong
+   cluster đều flush tag root. Trade-off scope-rộng vs correctness: chọn
+   correctness.
+
+5. **Cross-entity invalidation**: relation đổi → cả 2 cache phải xoá. Khai
+   báo list interface nhiều phần tử, KHÔNG cần subclass observer. Vd
+   `Category::class => [CategoryRepoInterface, ProductRepoInterface]` —
+   Category save → flush cả categories cache LẪN product cache (vì
+   product card hiển thị tên category). Pattern áp dụng cho
+   Category/Manufacturer/Filter/FilterValue.
+
+6. **Custom observer (logic riêng, không qua generic)**: chỉ 2 trường hợp
+   hiện tại:
+   - `ReviewObserver` — cập nhật aggregate product (review_count,
+     rating_avg, ...) bằng incremental UPDATE + flush cache.
+   - `SettingObserver` — clear `ConfigDbService` cache + nếu key đổi là 1
+     trong 3 cờ `config_debug/config_redis_cache/config_cache_file` thì gọi
+     `CacheGate::flushAll()` wipe redis (tránh orphan khi driver flip).
+   Custom = chỉ khi generic không đủ. Đa số case khác chỉ cần 1 row trong
+   `$cacheMap`.
+
+7. **Drift đã biết**: `DB::table()->update()` mass (vd seed command, CLI
+   bulk import) KHÔNG fire Eloquent observer → cache stale. Phải tự gọi
+   `app($repoInterface)->flushCache()` cuối job. Đã áp ở SeedReviewsCommand
+   (forgetProductCache); SeedProductsCommand chưa làm — TODO.
+
+8. **Limit của tag trên file store**: file driver không hỗ trợ tag → mọi
+   `forgetCacheTagged()` no-op khi admin chọn `config_cache_file = 1`.
+   Cache stale tới TTL hoặc `php artisan cache:clear`. Khuyến cáo
+   production dùng redis.
+
+Khi thêm cache mới:
+- Bước 1: Thêm `flushCache()` vào repo (hoặc method per-id `flushXxxCache(int $id)`).
+- Bước 2: Thêm 1 row vào `$cacheMap` ở `AppServiceProvider::registerObservers()`.
+- Bước 3: Test: save model → đọc lại cache → phải miss.
+
 ## DTO — tầng output
 
 - DTO ở `app/Data/Output/*DTO`, dùng Spatie Laravel Data v4 (`extends Data`).
@@ -85,22 +207,39 @@ code cũ và code mới, đừng nhầm lẫn hai bên (xem mục "Cũ vs Mới"
 
 ## Giá hiệu lực (effective price)
 
-- Định nghĩa: `effective_price = COALESCE(special.price, product.price)`, trong đó
-  `special` là row `product_special` priority cao nhất đang active (đúng `user_group_id`,
-  date trong `[date_start, date_end]`).
-- 2 scope trên `Product` model:
-  - `scopeEffectivePriceBetween(?int $min, ?int $max)` — filter giá hiệu lực trong
-    khoảng. Truyền `null` cho 1 đầu để bỏ ràng buộc tương ứng.
-  - `scopeOrderByEffectivePrice(string $dir)` — sort theo giá hiệu lực.
-- 2 scope đều dùng chung SQL fragment từ `protected static effectivePriceExpression()`:
-  correlated subquery scalar `SELECT ps.price ... ORDER BY priority DESC LIMIT 1`,
-  wrap trong `COALESCE(..., product.price)`. Filter & sort luôn nhất quán cùng 1 nguồn.
-- **Bắt buộc có index** trên `product_special`:
-  `(product_id, user_group_id, priority, date_start, date_end)`. Không có index = N×M
-  table scan, list sản phẩm treo.
-- Tận dụng relation `Product::productSpecial()` (đã là `hasOne ofMany` với `priority MAX`
-  + `dateStartToEnd` + `getUserGroupId()`) để eager-load row đại diện cho DTO; KHÔNG
-  query thủ công lại logic này ở repo.
+- Định nghĩa (2 nhánh):
+  - **Simple product** (`product.has_variants = 0`): `effective_price =
+    COALESCE(active product_special.price, product.price)`. Special là row
+    `product_special` priority cao nhất đang active (đúng `user_group_id`,
+    date trong `[date_start, date_end]`).
+  - **Variant product** (`has_variants = 1`): `effective_price` per-variant =
+    `COALESCE(active product_variant_special.price, product_variant.price)`.
+    Range hiển thị / filter / sort = MIN/MAX aggregate qua các variant.
+    **product_special KHÔNG còn áp cho variant product** — Hướng B (xem
+    "Cluster variant special" bên dưới). DTO::formatPrice +
+    Product::effectivePriceExpression + CartService::resolvePrice đều skip
+    product_special cho nhánh variant.
+- 2 scope trên `Product` model (signature không đổi):
+  - `scopeEffectivePriceBetween(?int $min, ?int $max)` — filter range overlap
+    (LOW <= filter_max AND HIGH >= filter_min). Truyền `null` cho 1 đầu để
+    bỏ ràng buộc tương ứng.
+  - `scopeOrderByEffectivePrice(string $dir)` — sort. ASC dùng LOW
+    (min effective), DESC dùng HIGH (max effective) → tránh bias variant
+    về 1 đầu.
+- 2 scope đều dùng chung SQL fragment từ `protected static effectivePriceExpression(string $which)`:
+  CASE WHEN nhánh variant aggregate `SELECT MIN/MAX(COALESCE(variant_special, pv.price))`,
+  ELSE nhánh simple COALESCE product_special. Filter & sort luôn nhất quán
+  cùng 1 nguồn.
+- **Bắt buộc có index**:
+  - `product_special`: `(product_id, user_group_id, priority, date_start, date_end)`
+  - `product_variant_special`: `(product_variant_id, user_group_id, priority, date_start, date_end)` (= `idx_pvs_lookup`)
+  - `product_variant`: `product_id` (= `idx_product_variant_product`)
+  Thiếu index = N×M table scan, list sản phẩm treo.
+- Tận dụng relation:
+  - `Product::productSpecial()` (hasOne ofMany priority MAX + dateStartToEnd + userGroup) → DTO simple product.
+  - `ProductVariant::productVariantSpecial()` (cùng pattern, tên relation thể
+    hiện tên bảng `product_variant_special` theo convention dự án) → DTO + JS variant product.
+  KHÔNG query thủ công lại logic này ở repo / service.
 
 ## List / phân trang / sort / filter — `QueryableRepository`
 
@@ -945,6 +1084,129 @@ Hiển thị struck + badge CHỈ khi `price < regular_price`. Variant không sa
   `max_variant_discount_percent` khi admin update. Hiện chỉ seed compute.
 - Admin CMS form variant cần thêm field `regular_price`.
 
+## Cluster variant special (refactor 2026-06-06)
+
+Lý do tách bảng (Hướng B): `variant.regular_price` chỉ MSRP tĩnh để gạch
+ngang, không tả được time-bound + user_group + priority — đó là việc của
+`product_special`, nhưng applying product_special cho variant nghĩa là giảm
+% trên tất cả variants (vô nghĩa khi variant đã có giá tuyệt đối riêng).
+Giải: cluster mirror ở variant level.
+
+### Schema
+
+```
+product_variant_special (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    product_variant_id BIGINT UNSIGNED FK CASCADE,
+    product_id INT FK CASCADE,                  -- denormalize cho backfill aggregate
+    user_group_id INT UNSIGNED DEFAULT 1,
+    priority INT DEFAULT 0,
+    price DECIMAL(15,2) NOT NULL,               -- tuyệt đối, KHÔNG phải delta
+    date_start DATETIME NULL,
+    date_end DATETIME NULL,
+    timestamps + deleted_at
+)
+INDEX idx_pvs_lookup (product_variant_id, user_group_id, priority, date_start, date_end)
+INDEX idx_pvs_product (product_id, user_group_id)
+```
+
+Migration `2026_06_06_000000_create_product_variant_special_table.php`.
+
+### Mô hình giá variant (3 mảnh)
+
+```
+regular_price (variant)           → MSRP tĩnh, gạch ngang khi đang sale
+price (variant)                   → giá bán thường (no campaign)
+variant_special.price (campaign)  → override variant.price trong date range
+
+effective_price = COALESCE(variant_special.price, variant.price)
+strike_price    = regular_price (nếu > effective)
+                  hoặc variant.price (nếu special active và > effective)
+                  hoặc null (không có gì để strike)
+```
+
+Hai mức discount có thể xếp chồng: regular 1.500k → variant.price 1.200k →
+variant_special.price 800k → frontend show "800k" với "1.500k" gạch ngang
+và badge -47%.
+
+### Flow data
+
+- Service `ProductOptionService::resolveVariantPricing(ProductVariant)`
+  — gộp 1 chỗ logic compute `[effective_price, strike_price, special]`.
+  Dùng chung `buildVariantMatrix` + `resolveDefaultVariant` → không drift.
+- Service expose thêm 3 field per variant: `effective_price`, `strike_price`,
+  `special` (array {id, price, date_start, date_end} hoặc null cho countdown).
+- DTO `ProductDTO::formatPrice` → `resolveVariantRange`:
+  - Detail page (relation `productVariants.productVariantSpecial` đã load):
+    tính MIN/MAX effective per-variant trong PHP.
+  - List page card (KHÔNG load specials): fallback `min/max_variant_price`
+    denormalized (giá base, KHÔNG reflect productVariantSpecial). Trade-off
+    documented — card price hơi lệch khi đang chạy campaign, detail nhìn
+    vào sẽ đúng.
+- Repository `ProductRepository::detailRelations()` eager-load thêm
+  `productVariants.productVariantSpecial`.
+- Cart `CartService::resolvePrice(Product, ?Variant)`:
+  - Có variant: `COALESCE(productVariantSpecial, variant.price)`. KHÔNG đụng
+    productSpecial cho variant.
+  - Không variant: `COALESCE(productSpecial, product.price)`.
+- JS `style.js updateDiscountBadge(variant)`:
+  - `currentPrice = variant.effective_price ?? variant.price` (backward compat).
+  - `refPrice = variant.strike_price ?? legacy_calc_from_regular_price`.
+  - Show struck + badge khi current < ref.
+- JS `applyVariant(variant)`:
+  - `#price-product.html(formatPriceLabel(variant.effective_price))`.
+
+### SQL filter/sort (`Product::effectivePriceExpression`)
+
+Bindings: 6 placeholders. Thứ tự `[groupId, now, now, groupId, now, now]`:
+3 đầu cho `variant_special` subquery, 3 sau cho `product_special`. MySQL
+bind tất cả `?` trước khi CASE evaluate — KHÔNG short-circuit theo nhánh.
+
+```sql
+CASE
+  WHEN product.has_variants = 1 AND product.min_variant_price IS NOT NULL THEN
+    (SELECT MIN/MAX(COALESCE(
+        (SELECT pvs.price FROM product_variant_special pvs
+         WHERE pvs.product_variant_id = pv.id
+           AND pvs.user_group_id = ?
+           AND (pvs.date_start IS NULL OR pvs.date_start <= ?)
+           AND (pvs.date_end   IS NULL OR pvs.date_end   >  ?)
+           AND pvs.deleted_at IS NULL
+         ORDER BY pvs.priority DESC LIMIT 1),
+        pv.price))
+     FROM product_variant pv
+     WHERE pv.product_id = product.id AND pv.deleted_at IS NULL)
+  ELSE COALESCE(
+    (SELECT ps.price FROM product_special ps
+     WHERE ps.product_id = product.id
+       AND ps.user_group_id = ?
+       AND (ps.date_start IS NULL OR ps.date_start <= ?)
+       AND (ps.date_end   IS NULL OR ps.date_end   >= ?)
+     ORDER BY ps.priority DESC LIMIT 1),
+    product.price)
+END
+```
+
+Nhánh `variant_special` theo scope `dateStartToEnd` (`<=` start, `>` end strict).
+Nhánh `product_special` giữ `<=` / `>=` theo implementation cũ — drift đã
+documented, sửa kèm task unify riêng để tránh scope creep.
+
+### Việc còn nợ — variant special
+
+- Observer `ProductVariantSpecial::saved/deleted` chưa có. Cần recompute
+  `min_effective_variant_price` / `max_effective_variant_price` (cột mới sẽ
+  thêm) khi campaign start/end. Trước khi có cột này, list page card vẫn
+  show base range — chấp nhận trade-off.
+- Schedule job daily ban đầu/cuối campaign để invalidate cache `products:{id}`.
+  Hiện cache chỉ invalidate qua observer Product/Variant save.
+- Admin CMS form `product_variant_special` chưa có UI. Seed command cũng
+  chưa support — bổ sung khi dùng thật.
+- DTO `VariantSpecialDTO` nếu cần expose qua API. Hiện chỉ embed vào matrix
+  như array.
+- Drift toán tử `date_end` giữa nhánh variant (`>` strict) và nhánh simple
+  (`>=`) trong effectivePriceExpression — chọn 1 và sync khi unify drift
+  `dateStartToEnd` toàn project.
+
 ## Data drift safety nets — variant matrix (2026-06-05)
 
 `ProductOptionService::buildVariantMatrix` fallback khi `$variant->productStock`
@@ -1079,9 +1341,20 @@ product (aggregate cache thêm 5 cột)
 BIGINT unsigned (cluster mới); pivot child dùng `integer('review_id')` (INT) +
 `unsignedBigInteger('review_criteria_id')`.
 
-**Cache tag**: `review_root`, `review_criteria`, `review_tag`, `reviews:{productId}`.
-Observer `forgetCacheTagged([reviews:{productId}])` khi review save/update — auto
-invalidate getCriteriaAverages + listForProduct first-page cache.
+**Cache tag** lưu ở `config/core/config.php → cache.review` (convention dự án
+"mọi cache key/tag đều nằm trong core config", KHÔNG hardcode literal trong
+repo):
+
+- `cache.review.tag_root` → `'review_root'` — flush mọi review-related cache.
+- `cache.review.tag_criteria` → `'review_criteria'` — getActiveCriteria.
+- `cache.review.tag_tag` → `'review_tag'` — getActiveTags.
+- `cache.review.tag_product` → `'reviews:'` (prefix) — caller concat productId
+  để có tag per-product `reviews:{productId}`. Observer
+  `forgetCacheTagged([getCoreConfig('cache.review.tag_product').$productId])`
+  khi review save/update — auto invalidate getCriteriaAverages + listForProduct
+  first-page cache.
+- `cache.review.key_criteria_active` / `key_tag_top` / `key_criteria_avg` —
+  cache key prefix tương ứng cho 3 method trên.
 
 **FK column naming** đầy đủ prefix tên bảng (`review_criteria_id`,
 `review_tag_id`, `product_variant_id` — KHÔNG `criteria_id`/`variant_id`).
@@ -1296,3 +1569,95 @@ userWishlistRepo).
 
 Truy cập: `$this->productRepo->...`. Base `__get($name)` Container::make
 interface mapping, cache singleton trong `$resolved[$name]` per request.
+
+## Local infrastructure — Docker (2026-06-06)
+
+Redis chạy qua `docker-compose.yml` ở root project. Không cài Redis trên
+Windows native (không có bản chính chủ stable cho Windows); dùng Docker để
+đồng bộ với production AWS (ElastiCache for Redis = managed Redis cluster,
+cùng wire protocol).
+
+### Workflow
+
+```
+# Lần đầu
+docker compose up -d              # start redis + redis-insight ngầm
+docker compose ps                 # verify running + healthy
+
+# Hàng ngày
+docker compose up -d              # idempotent — start nếu chưa chạy
+docker compose stop               # dừng (giữ container + volume)
+docker compose down               # xoá container (giữ volume → data còn)
+docker compose down -v            # xoá luôn volume — RESET cache + AOF
+
+# Debug
+docker compose exec redis redis-cli        # vào CLI: PING, KEYS *, INFO
+docker compose logs -f redis               # tail log
+http://127.0.0.1:5540                      # Redis Insight UI
+```
+
+### Cấu hình
+
+- `redis:7-alpine` — image nhỏ, đủ cho dev.
+- `--maxmemory 256mb` + `allkeys-lru`: giới hạn RAM, evict LRU khi đầy.
+  Mục đích test data large (50k+ product cache) chạm trần để quan sát
+  eviction → đúng case cần thấy ở dev.
+- `--appendonly yes`: AOF persistence, restart container không mất cache.
+  Production ElastiCache có managed snapshot riêng, flag này chỉ local.
+- Database 0 = Laravel session/queue, Database 1 = cache (xem
+  `config/database.php` → connection `cache`). Tách DB → `php artisan
+  cache:clear` không đụng session.
+
+### Laravel wiring (`.env`)
+
+```
+CACHE_STORE=redis
+REDIS_CLIENT=predis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=null
+REDIS_CACHE_CONNECTION=cache
+```
+
+`predis/predis` (pure-PHP) cài qua composer — KHÔNG cần extension. XAMPP
+php82 không có sẵn `phpredis` native. Đổi `REDIS_CLIENT=phpredis` khi
+production build extension được.
+
+```
+composer require predis/predis
+php artisan config:clear
+php artisan cache:clear
+```
+
+### Test connection
+
+```
+php artisan tinker
+> Cache::store('redis')->put('hello', 'world', 60); Cache::store('redis')->get('hello');
+= "world"
+> Redis::ping()
+= true
+```
+
+### Map sang AWS
+
+| Local (docker compose) | AWS equivalent |
+|---|---|
+| `redis` service | ElastiCache for Redis (Cluster Mode Disabled cho 1 node, hoặc Cluster Mode Enabled cho shard) |
+| `redis_data` volume | ElastiCache snapshots + AOF managed |
+| `redis-insight` | ElastiCache Console + CloudWatch metrics, hoặc tự deploy Redis Insight container trên ECS |
+| `--maxmemory` flag | Tham số `maxmemory-policy` ở ElastiCache parameter group |
+| `127.0.0.1:6379` | ElastiCache primary endpoint (TLS port 6380 nếu bật in-transit encryption) |
+
+Production: đổi `REDIS_HOST=xxx.cache.amazonaws.com`, set
+`REDIS_CLIENT=phpredis` (cài extension trong container PHP-FPM), giữ
+nguyên code Laravel.
+
+### Việc còn nợ — infrastructure
+
+- Bổ sung `mysql` service vào docker-compose để chạy hoàn toàn trong
+  Docker, bỏ XAMPP. Hiện app vẫn trỏ XAMPP MySQL.
+- Bổ sung `php-fpm` + `nginx` service cho parity với production (XAMPP +
+  Apache khác stack production).
+- Healthcheck cho composer install + migrate ở Dockerfile khi PR
+  containerize hoàn toàn.

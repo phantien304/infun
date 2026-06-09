@@ -1,0 +1,76 @@
+# Local infrastructure cho dự án `infun` — chạy bằng Docker Desktop trên
+# Windows. Cùng cấu trúc translate trực tiếp sang AWS:
+#   - redis              → AWS ElastiCache for Redis (managed)
+#   - redis-insight      → AWS ElastiCache có Memory DB Console riêng, không
+#                          cần chạy GUI ở production (chỉ debug local).
+#
+# Cách dùng:
+#   docker compose up -d              # start ngầm
+#   docker compose ps                 # xem service đang chạy
+#   docker compose logs -f redis      # tail log redis
+#   docker compose exec redis redis-cli   # vào CLI test PING/keys
+#   docker compose down               # stop + remove containers (volume giữ)
+#   docker compose down -v            # xoá luôn volume (mất data cache)
+#
+# Truy cập:
+#   Redis            : 127.0.0.1:6379
+#   Redis Insight UI : http://127.0.0.1:5540   (browser)
+
+services:
+  # ----------------------------------------------------------------------
+  # Redis 7 (Alpine) — cache + session + queue cho Laravel.
+  # ----------------------------------------------------------------------
+  # `--appendonly yes`: bật AOF persistence, khôi phục data sau khi
+  # container restart. Phù hợp dev (không mất cache khi reboot máy).
+  # Production AWS ElastiCache có RDB+AOF managed riêng — flag này chỉ ở
+  # local.
+  #
+  # `--maxmemory 256mb` + `allkeys-lru` evict policy: giới hạn RAM redis
+  # dùng cho local, evict key cũ nhất khi đầy. Test data large (50k+
+  # product cache) sẽ chạm trần — đúng case muốn quan sát eviction
+  # behaviour.
+  redis:
+    image: redis:7-alpine
+    container_name: infun-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "256mb"
+      - --maxmemory-policy
+      - "allkeys-lru"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------------
+  # Redis Insight — GUI debug, browse keys, run command, xem memory map.
+  # ----------------------------------------------------------------------
+  # Optional. Tắt bằng `docker compose up -d redis` (chỉ start redis).
+  # Lần đầu vào http://127.0.0.1:5540 → "Add Redis Database" → host =
+  # `redis` (tên service trong network) hoặc `host.docker.internal`,
+  # port 6379. KHÔNG dùng 127.0.0.1 vì insight chạy trong container
+  # khác, 127.0.0.1 của nó là chính nó.
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: infun-redis-insight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis_insight_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  redis_insight_data:

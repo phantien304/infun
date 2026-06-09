@@ -44,4 +44,15 @@ class PaymentRepository extends QueryableRepository implements PaymentRepository
                 ->first()
         );
     }
+
+    /**
+     * Xoá cache listAll. Per-code cache (`findByCode`) KHÔNG xoá được nếu
+     * không enum codes — chấp nhận stale tới TTL. Để fine-grained hơn, gọi
+     * `forgetCache(setting('cache.payments') . $code)` trước khi save model
+     * payment cụ thể.
+     */
+    public function flushCache(): void
+    {
+        $this->forgetCache(setting('cache.payments'));
+    }
 }

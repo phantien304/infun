@@ -22,6 +22,12 @@ class BlogCategoryRepository extends QueryableRepository implements BlogCategory
             fn() => $this->listAll()
         );
     }
+
+    public function flushCache(): void
+    {
+        $this->forgetCache(getCoreConfig('cache.blog_categories'));
+    }
+
     protected function withRelations(): array
     {
         return [

@@ -16,6 +16,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "owen-it/laravel-auditing": "14.0",
+        "predis/predis": "*",
         "spatie/laravel-data": "^4.23",
         "spatie/laravel-query-builder": "^6.4"
     },

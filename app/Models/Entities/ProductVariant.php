@@ -52,4 +52,30 @@ class ProductVariant extends Base
     {
         return $this->hasOne(ProductVariantDescription::class, 'product_variant_id', 'id')->forLocale();
     }
+
+    public function productVariantSpecials()
+    {
+        return $this->hasMany(ProductVariantSpecial::class, 'product_variant_id', 'id');
+    }
+
+    /**
+     * Special đại diện cho variant — priority cao nhất trong số đang active
+     * (dateStartToEnd + đúng user_group_id). Mirror Product::productSpecial.
+     *
+     * Tên relation phản ánh tên bảng `product_variant_special` theo convention
+     * dự án (CLAUDE.md "tên relation thể hiện tên bảng, ngoại trừ description").
+     *
+     * Eager-load cùng productVariants ở detailRelations để DTO + JS đọc
+     * `effective_price = COALESCE(productVariantSpecial.price, variant.price)`
+     * mà không N+1. Trong filter/sort list thì dùng correlated subquery của
+     * Product::effectivePriceExpression — không eager-load relation này.
+     */
+    public function productVariantSpecial()
+    {
+        return $this->hasOne(ProductVariantSpecial::class, 'product_variant_id', 'id')->ofMany(
+            ['priority' => 'max'],
+            fn ($q) => $q->dateStartToEnd()
+                ->where('user_group_id', getUserGroupId())
+        );
+    }
 }

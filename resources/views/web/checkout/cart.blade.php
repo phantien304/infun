@@ -5,7 +5,7 @@
     <meta property="og:rich_attachment" content="true" />
     <meta property="og:type" content="article" />
     <meta property="article:publisher" content="{!! getConfigDb('config_facebook') !!}" />
-    <meta property="og:url" itemprop="url" content="{!! route('checkout.cart') !!}" />
+    <meta property="og:url" itemprop="url" content="{!! routeArea('checkout.cart') !!}" />
     <meta property="og:image" itemprop="thumbnailUrl" content="{!! thumbnail(getConstant('DEFAULT'), 800, 354) !!}" />
     <meta property="og:image:width" content="800" />
     <meta property="og:image:height" content="354" />
@@ -15,7 +15,7 @@
     @include('web.share.structure._meta_common')
     <!-- Twitter Card -->
     <meta name="twitter:card" value="summary" />
-    <meta name="twitter:url" content="{!! route('checkout.cart') !!}" />
+    <meta name="twitter:url" content="{!! routeArea('checkout.cart') !!}" />
     <meta name="twitter:title" content="{!! $titleSeo !!}" />
     <meta name="twitter:description" content="{!! $descriptionSeo !!}" />
     <meta name="twitter:image" content="{!! thumbnail(getConstant('DEFAULT'), 800, 354) !!}" />
@@ -111,7 +111,8 @@
                                                     value="{{ $product['quantity'] }}" size="2" class="form-control">
                                                 &nbsp;&nbsp;<input type="image" src="/client/images/applys.png"
                                                     alt="Cập nhật" title="Cập nhật">
-                                                &nbsp;&nbsp;<a href="{{ $product['remove'] }}"><i
+                                                &nbsp;&nbsp;<a
+                                                    href="{{ routeArea('checkout.cart', ['remove' => $product['key']]) }}"><i
                                                         class="fi-rs-trash text-danger"></i></a>
                                             </td>
                                             <td class="price" data-title="Đơn Giá">
@@ -133,7 +134,7 @@
                             <a href="{{ url('/') }}" class="btn" title="Tiếp tục mua hàng">
                                 <i class="fi-rs-arrow-left mr-10"></i>Tiếp tục mua hàng
                             </a>
-                            <a href="{{ route('checkout.index') }}" class="btn" title=" Tiến hành thanh toán">
+                            <a href="{{ routeArea('checkout.index') }}" class="btn" title=" Tiến hành thanh toán">
                                 Tiến hành thanh toán
                                 <i class="fi-rs-sign-out ml-15"></i>
                             </a>
@@ -162,12 +163,12 @@
                                 <div class="divider-2 mb-10"></div>
                                 <div class="list-group">
                                     @php
-                                        $addressCustomer = getCoreConfig('cookie.user.address');
+                                        $addressCustomer = setting('cookie.user.address');
                                         if (getCookie($addressCustomer)) {
-                                            $address = json_decode(getCookie($addressCustomer), true);
+                                            $address = json_decode(getCookie($addressCustomer), true) ?: [];
                                             foreach ($address as $item) {
-                                                if ($item['is_default']) {
-                                                    echo $item['full_address'];
+                                                if (!empty($item['is_default'])) {
+                                                    echo $item['full_address'] ?? '';
                                                     break;
                                                 }
                                             }

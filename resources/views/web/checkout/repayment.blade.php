@@ -67,25 +67,43 @@
                                     <div class="row product-items last">
                                         @php $products = $entity->ordersProducts;@endphp
                                         @foreach ($products as $product)
+                                            @php
+                                                // Product có thể đã bị xoá / hết hiệu lực (eager-load dateAvailable
+                                                // ở OrderRepository::getOrderForUser) → fallback "#" cho URL +
+                                                // ảnh placeholder. Relation `description` (KHÔNG còn
+                                                // `productDescription` sau refactor cluster).
+                                                $productEntity = $product->product ?? null;
+                                                $productDescription = $productEntity?->description;
+                                                $productUrl = '#';
+                                                if ($productEntity && $productDescription) {
+                                                    $productUrl = buildUrl(
+                                                        resolveSlug($productDescription->slug ?? null, $product->name),
+                                                        getModuleConfig('url.product'),
+                                                        (int) $productEntity->id,
+                                                    );
+                                                }
+                                                $productImage = $productEntity?->image ?? '';
+                                                $thumbUrl = thumbnail($productImage, 60, 60);
+                                            @endphp
                                             <div class="col-xl-12 col-lg-12 product-cols first">
                                                 <div class="product-block">
                                                     <div class="image d-flex justify-content-center align-self-center">
-                                                        @if (isset($product->product->productDescription))
-                                                            <a href="{!! $product->product->productDescription->getUrlClient() !!}"
+                                                        @if ($productDescription)
+                                                            <a href="{!! $productUrl !!}"
                                                                 title="{!! $product->name !!}">
-                                                                <img src="{!! $product->product->getImageClient(60, 60) !!}"
+                                                                <img src="{!! $thumbUrl !!}"
                                                                     alt="{!! $product->name !!}">
                                                             </a>
                                                         @else
-                                                            <img src="{!! $product->product->getImageClient(60, 60) !!}"
+                                                            <img src="{!! $thumbUrl !!}"
                                                                 alt="{!! $product->name !!}">
                                                         @endif
                                                     </div>
                                                     <div class="product-meta">
                                                         <div class="left">
                                                             <h3 class="name">
-                                                                @if (isset($product->product->productDescription))
-                                                                    <a href="{!! $product->product->productDescription->getUrlClient() !!}"
+                                                                @if ($productDescription)
+                                                                    <a href="{!! $productUrl !!}"
                                                                         title="{!! $product->name !!}">
                                                                         {!! $product->name !!}
                                                                     </a>
@@ -96,22 +114,38 @@
                                                             <div class="cart-option">
                                                                 @if (count($product->ordersProductOptions))
                                                                     @foreach ($product->ordersProductOptions as $opt)
-                                                                        @php $child = unserialize($opt->children);@endphp
+                                                                        @php
+                                                                            // Schema mới luôn ghi variation = 2
+                                                                            // (CreateOrderService) — block variation == 1
+                                                                            // dưới đây chỉ phục vụ order legacy còn lưu
+                                                                            // children serialize. Dữ liệu hỏng có thể
+                                                                            // throw → wrap try/catch để không phá page.
+                                                                            $child = [];
+                                                                            if ((int) $opt->variation === 1 && filled($opt->children)) {
+                                                                                try {
+                                                                                    $unserialized = @unserialize((string) $opt->children, ['allowed_classes' => false]);
+                                                                                    if (is_array($unserialized)) {
+                                                                                        $child = $unserialized;
+                                                                                    }
+                                                                                } catch (\Throwable) {
+                                                                                    $child = [];
+                                                                                }
+                                                                            }
+                                                                        @endphp
                                                                         <p>- {{ $opt->name }}
                                                                             : {{ $opt->value }}
-                                                                            @if ($opt->variation == 1)
+                                                                            @if ($opt->variation == 1 && filled($child))
                                                                                 @php
                                                                                     $optChildValue = [];
                                                                                     $optChildName = '';
                                                                                 @endphp
                                                                                 @foreach ($child as $chd)
                                                                                     @php
-                                                                                        $optChildName = $chd['name'];
-                                                                                        $optChildValue[] =
-                                                                                            $chd['value'];
+                                                                                        $optChildName = $chd['name'] ?? $optChildName;
+                                                                                        $optChildValue[] = $chd['value'] ?? '';
                                                                                     @endphp
                                                                                 @endforeach
-                                                                                - {!! $optChildName . ': ' . implode(', ', $optChildValue) !!}
+                                                                                - {!! $optChildName . ': ' . implode(', ', array_filter($optChildValue)) !!}
                                                                             @endif
                                                                         </p>
                                                                     @endforeach

@@ -19,17 +19,17 @@ class UserGroup extends Base
         return $this->hasMany(UserGroupDescription::class, 'user_group_id', 'id');
     }
 
-    public function rewards()
+    public function productRewards()
     {
         return $this->hasMany(ProductReward::class, 'user_group_id', 'id');
     }
 
-    public function specials()
+    public function productSpecials()
     {
         return $this->hasMany(ProductSpecial::class, 'user_group_id', 'id');
     }
 
-    public function discounts()
+    public function productDiscounts()
     {
         return $this->hasMany(ProductDiscount::class, 'user_group_id', 'id');
     }

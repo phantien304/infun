@@ -200,10 +200,10 @@
                                         @php
                                             $addressCustomer = setting('cookie.user.address');
                                             if (getCookie($addressCustomer)) {
-                                                $address = json_decode(getCookie($addressCustomer), true);
+                                                $address = json_decode(getCookie($addressCustomer), true) ?: [];
                                                 foreach ($address as $item) {
-                                                    if ($item['is_default']) {
-                                                        echo $item['full_address'];
+                                                    if (!empty($item['is_default'])) {
+                                                        echo $item['full_address'] ?? '';
                                                         break;
                                                     }
                                                 }

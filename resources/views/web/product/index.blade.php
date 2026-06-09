@@ -51,7 +51,7 @@
         {"@@context":"http://schema.org","@@type":"BreadcrumbList","itemListElement": {!! json_encode($breadcrumbSchema, JSON_UNESCAPED_UNICODE) !!}}
     </script>
     <script type="application/ld+json">
-        {"@@context":"https://schema.org/","@@type":"Product","url":"{!! $entity->url !!}","image":"{!! $entity->thumbnail(540, 540) !!}","name":"{!! $titleSeo !!}","description":"{!! $descriptionSeo !!}","sku":"{!! $entity->sku !!}","aggregateRating":{"@@type":"AggregateRating","ratingValue":"{!! $entity->rating !!}","reviewCount":"{!! $entity->totalRating !!}"},"brand":{"@@type":"Brand","name":"{{ $entity->manufacturer?->name ?? getConfigDb('config_name') }}"},"offers":{"@@type":"Offer","url":"{!! $entity->url !!}","seller":{"@@type":"Organization","name":"{{ getConfigDb('config_name') }}","url":"{{ route('home') }}","telephone":"{{ getConfigDb('config_telephone') }}","email":"{{ getConfigDb('config_email') }}","address":"{{ getConfigDb('config_address') }}"},"itemCondition":"https://schema.org/NewCondition","availability":"https://schema.org/InStock","priceValidUntil":"{!! $entity->dateAvailable !!}","priceCurrency":"VND","price":{!! $priceFinal !!}}}
+        {"@@context":"https://schema.org/","@@type":"Product","url":"{!! $entity->url !!}","image":"{!! $entity->thumbnail(540, 540) !!}","name":"{!! $titleSeo !!}","description":"{!! $descriptionSeo !!}","sku":"{!! $entity->sku !!}","aggregateRating":{"@@type":"AggregateRating","ratingValue":"{!! $entity->ratingAvg !!}","reviewCount":"{!! $entity->reviewCount !!}"},"brand":{"@@type":"Brand","name":"{{ $entity->manufacturer?->name ?? getConfigDb('config_name') }}"},"offers":{"@@type":"Offer","url":"{!! $entity->url !!}","seller":{"@@type":"Organization","name":"{{ getConfigDb('config_name') }}","url":"{{ route('home') }}","telephone":"{{ getConfigDb('config_telephone') }}","email":"{{ getConfigDb('config_email') }}","address":"{{ getConfigDb('config_address') }}"},"itemCondition":"https://schema.org/NewCondition","availability":"https://schema.org/InStock","priceValidUntil":"{!! $entity->dateAvailable !!}","priceCurrency":"VND","price":{!! $priceFinal !!}}}
     </script>
     <script type="application/ld+json">
         {"@@context":"http://schema.org","@@type":"WebSite","name":"{!! getConfigDb('config_name') !!}","url":"{!! getConfigDb('config_domain') !!}"}
@@ -78,39 +78,44 @@
                                 // fallback product.price. Đồng bộ với JS updateDiscountBadge.
                                 $currentPrice = $defaultVariant['price'] ?? ($special?->pricePromotion ?? 0);
                                 $refPrice = $defaultVariant['regular_price'] ?? $basePriceForDiscount;
-                                $initDiscount = ($refPrice > 0 && $currentPrice > 0 && $currentPrice < $refPrice)
-                                    ? (int) round(($refPrice - $currentPrice) / $refPrice * 100)
-                                    : 0;
+                                $initDiscount =
+                                    $refPrice > 0 && $currentPrice > 0 && $currentPrice < $refPrice
+                                        ? (int) round((($refPrice - $currentPrice) / $refPrice) * 100)
+                                        : 0;
                             @endphp
                             <span class="stock-status out-stock" id="discount-badge"
-                                  style="{{ $initDiscount > 0 ? '' : 'display:none;' }}">
+                                style="{{ $initDiscount > 0 ? '' : 'display:none;' }}">
                                 Tiết kiệm -<span id="discount-badge-value">{{ $initDiscount }}</span>%
                             </span>
                             <h1>{{ $entity->name }}</h1>
                             @php
-                                // Rating block — CSS overlay technique (bullet-proof với mọi FA version),
-                                // hỗ trợ half-star bằng cách render 2 layer star xám + cam clipped theo %.
-                                // Site đang dùng FA 5.0.6 — không có `fa-star-half-alt` → phải dùng overlay.
-                                $ratingFloat = (float) $entity->rating;
-                                $ratingPct   = max(0, min(100, $ratingFloat * 20));   // 0..5 → 0..100%
+                                $ratingFloat = (float) $entity->ratingAvg;
+                                $ratingPct = max(0, min(100, $ratingFloat * 20)); // 0..5 → 0..100%
                             @endphp
-                            <div class="d-flex flex-wrap mt-2 mb-20" style="font-size: 16px; align-items: center; gap: 10px;">
+                            <div class="d-flex flex-wrap mt-2 mb-20"
+                                style="font-size: 16px; align-items: center; gap: 10px;">
                                 <div itemtype="http://data-vocabulary.org/Review-aggregate" itemscope itemprop="review"
-                                     class="d-inline-flex align-items-center" style="gap: 6px;">
-                                    <span class="rating-stars" style="position: relative; display: inline-block; font-size: 18px; line-height: 1; letter-spacing: 2px;">
+                                    class="d-inline-flex align-items-center" style="gap: 6px;">
+                                    <span class="rating-stars"
+                                        style="position: relative; display: inline-block; font-size: 18px; line-height: 1; letter-spacing: 2px;">
                                         {{-- Layer xám full 5 sao --}}
                                         <span style="color: #d4d4d4;">
-                                            <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i>
+                                            <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
+                                                class="fa fa-star"></i><i class="fa fa-star"></i>
                                         </span>
                                         {{-- Layer cam overlay, clip theo width = rating × 20% --}}
-                                        <span style="position: absolute; top: 0; left: 0; width: {{ $ratingPct }}%; color: #ee4d2d; overflow: hidden; white-space: nowrap;">
-                                            <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i>
+                                        <span
+                                            style="position: absolute; top: 0; left: 0; width: {{ $ratingPct }}%; color: #ee4d2d; overflow: hidden; white-space: nowrap;">
+                                            <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
+                                                class="fa fa-star"></i><i class="fa fa-star"></i>
                                         </span>
                                     </span>
-                                    <span itemprop="rating" style="font-weight: 500;">{{ number_format($ratingFloat, 1) }}</span>
+                                    <span itemprop="rating"
+                                        style="font-weight: 500;">{{ number_format($ratingFloat, 1) }}</span>
                                     <span style="color: #999;">/5</span>
-                                    @if ($entity->totalRating)
-                                        <span itemprop="count" style="color: #757575;">({{ number_format($entity->totalRating) }})</span>
+                                    @if ($entity->reviewCount)
+                                        <span itemprop="count"
+                                            style="color: #757575;">({{ number_format($entity->reviewCount) }})</span>
                                     @endif
                                 </div>
                                 <div class="price-wraper d-inline-flex align-items-center" style="gap: 8px;">
@@ -124,10 +129,11 @@
                                             $currentPrice = $defaultVariant['price'] ?? $entity->price;
                                             // Struck: ưu tiên variant.regular_price; fallback product.price.
                                             $struckRef = $defaultVariant['regular_price'] ?? $basePriceForDiscount;
-                                            $showStruck = $struckRef > 0 && $currentPrice > 0 && $currentPrice < $struckRef;
+                                            $showStruck =
+                                                $struckRef > 0 && $currentPrice > 0 && $currentPrice < $struckRef;
                                         @endphp
                                         <b class="text-secondary text-decoration-line-through" id="price-product-old"
-                                           style="{{ $showStruck ? '' : 'display:none;' }}">
+                                            style="{{ $showStruck ? '' : 'display:none;' }}">
                                             {{ number_format($struckRef) . $currency }}
                                         </b>
                                         <b class="text-danger" id="price-product">
@@ -185,7 +191,8 @@
                                     value="1" min="1" style="height: 42px">
                                 @if (getConfigDb('config_stock_checkout'))
                                     @if ($entity->isCustom)
-                                        <button id="consult-sign" class="button btn-secondary button-add-to-cart mt-2 me-2"
+                                        <button id="consult-sign"
+                                            class="button btn-secondary button-add-to-cart mt-2 me-2"
                                             data-url="{{ routeArea('checkout.consultSign') }}">
                                             <i class="fas fa-adjust"></i>&nbsp;Tư vấn ngay
                                         </button>
@@ -274,7 +281,7 @@
                             @if ($entity->isReview)
                                 <li class="nav-item">
                                     <a class="nav-link" id="reviews-tab" data-bs-toggle="tab" href="#reviews">
-                                        Đánh giá ({!! $entity->totalRating ?? 0 !!})
+                                        Đánh giá ({!! $entity->reviewCount ?? 0 !!})
                                     </a>
                                 </li>
                             @endif

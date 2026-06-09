@@ -17,12 +17,20 @@ class FilterRepository extends QueryableRepository implements FilterRepositoryIn
         return Filter::class;
     }
 
+    /**
+     * Filters load mọi page render → `rememberSystem` luôn cache.
+     */
     public function listAllCached(): Collection
     {
-        return $this->rememberCache(
+        return $this->rememberSystem(
             setting('cache.filters'),
             fn () => $this->listAll()
         );
+    }
+
+    public function flushCache(): void
+    {
+        $this->forgetSystem(setting('cache.filters'));
     }
 
     protected function withRelations(): array

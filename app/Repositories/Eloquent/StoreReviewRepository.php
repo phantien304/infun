@@ -77,13 +77,27 @@ class StoreReviewRepository extends QueryableRepository implements StoreReviewRe
         );
     }
 
+    /**
+     * Invalidate cả featured + per-product caches.
+     *
+     * Featured là untagged → không thể flush không enum limit. Trade-off chấp
+     * nhận: featured stale 30 ngày max (TTL mặc định trait). Nếu cần đảm bảo
+     * featured fresh ngay sau admin set/unset featured flag, đẩy
+     * `featuredCacheKey()` lên rememberCacheTagged tag `store_reviews` rồi
+     * flushCache cũng xoá luôn — TODO khi thêm featured ở scale lớn.
+     */
+    public function flushCache(): void
+    {
+        $this->forgetCacheTagged([getCoreConfig('cache.store_reviews')]);
+    }
+
     protected function featuredCacheKey(int $limit): string
     {
-        return 'store_reviews_featured_' . $limit;
+        return getCoreConfig('cache.store_reviews_featured') . $limit;
     }
 
     protected function productCacheKey(int $productId, int $limit): string
     {
-        return implode('_', ['store_reviews_product', $productId, $limit]) . '_';
+        return implode('_', [getCoreConfig('cache.store_reviews_product'), $productId, $limit]) . '_';
     }
 }

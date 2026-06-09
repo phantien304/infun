@@ -2,7 +2,7 @@
 
 namespace App\Http\Supports;
 
-use Illuminate\Support\Facades\Cache;
+use App\Helpers\CacheGate;
 use Illuminate\Support\Str;
 
 trait MenusClient
@@ -20,17 +20,35 @@ trait MenusClient
     public function getMenus()
     {
         $cacheKey = getCoreConfig('cache.menu') . app()->getLocale();
-        $menus = [];
-        if (!Cache::has($cacheKey)) {
-            $menuData = $this->menuRepo->getMenuByPosition('top');
-            foreach ($menuData as $i => $item) {
-                list($pc, $mobile) = $this->genTree($item);
-                $menus[$i] = ['pc' => $pc, 'mobile' => $mobile];
-            }
-            Cache::add($cacheKey, $menus);
+        // `systemStore()` luôn trả Repository — KHÔNG bypass khi
+        // `config_debug=1`. Menu HTML pre-rendered là tài nguyên "load mọi
+        // page render" — không thể chấp nhận chi phí build mỗi request kể cả
+        // dev mode. Invalidation đi qua `CacheFlushObserver(Menu/MenuValue)`
+        // đăng ký ở `AppServiceProvider` → `MenuRepository::flushCache()` dùng
+        // cùng systemStore nên admin sửa menu vẫn fresh ngay.
+        $store = CacheGate::systemStore();
+
+        if (! $store->has($cacheKey)) {
+            $menus = $this->buildMenus();
+            $store->add($cacheKey, $menus);
             return $this->processMenuBeforeRender($menus);
         }
-        return $this->processMenuBeforeRender(Cache::get($cacheKey));
+        return $this->processMenuBeforeRender($store->get($cacheKey));
+    }
+
+    /**
+     * Build raw menu tree từ DB. Tách khỏi `getMenus()` để cả 2 nhánh
+     * cache/bypass chia sẻ logic build mà không lặp code.
+     */
+    protected function buildMenus(): array
+    {
+        $menus = [];
+        $menuData = $this->menuRepo->getMenuByPosition('top');
+        foreach ($menuData as $i => $item) {
+            list($pc, $mobile) = $this->genTree($item);
+            $menus[$i] = ['pc' => $pc, 'mobile' => $mobile];
+        }
+        return $menus;
     }
     protected function processMenuBeforeRender(array $menus): array
     {

@@ -22,6 +22,12 @@ class BlogTagRepository extends QueryableRepository implements BlogTagRepository
             fn() => $this->listAll()
         );
     }
+
+    public function flushCache(): void
+    {
+        $this->forgetCache(getCoreConfig('cache.blog_tags'));
+    }
+
     protected function withRelations(): array
     {
         return [

@@ -2,14 +2,18 @@
 
 namespace App\Repositories\Concerns;
 
-use Illuminate\Cache\TaggableStore;
-use Illuminate\Support\Facades\Cache;
+use App\Helpers\CacheGate;
 
 trait CacheableRepository
 {
     protected function rememberCache(string $key, \Closure $resolver, $ttl = null, bool $perLocale = true)
     {
-        return Cache::remember(
+        $store = CacheGate::store();
+        if (! $store) {
+            return $resolver();
+        }
+
+        return $store->remember(
             $this->resolveCacheKey($key, $perLocale),
             $ttl ?? now()->addDays(30),
             $resolver
@@ -18,11 +22,22 @@ trait CacheableRepository
 
     protected function rememberCacheTagged(array $tags, string $key, \Closure $resolver, $ttl = null, bool $perLocale = true)
     {
-        if (!$this->cacheSupportsTags()) {
-            return $this->rememberCache($key, $resolver, $ttl, $perLocale);
+        $store = CacheGate::store();
+        if (! $store) {
+            return $resolver();
         }
 
-        return Cache::tags($tags)->remember(
+        if (! CacheGate::supportsTags($store)) {
+            return $store->remember(
+                $this->resolveCacheKey($key, $perLocale),
+                $ttl ?? now()->addDays(30),
+                $resolver
+            );
+        }
+
+        $allTags = array_merge(CacheGate::globalTags(), $tags);
+
+        return $store->getStore()->tags($allTags)->remember(
             $this->resolveCacheKey($key, $perLocale),
             $ttl ?? now()->addDays(30),
             $resolver
@@ -31,25 +46,59 @@ trait CacheableRepository
 
     protected function forgetCache(string $key, bool $perLocale = true): void
     {
-        if (!$perLocale) {
-            Cache::forget($key);
+        $store = CacheGate::store();
+        if (! $store) {
+            return;
+        }
+
+        if (! $perLocale) {
+            $store->forget($key);
+
             return;
         }
         foreach (config('app.locales', [app()->getLocale()]) as $locale) {
-            Cache::forget($key . $locale);
+            $store->forget($key . $locale);
         }
     }
 
     protected function forgetCacheTagged(array $tags): void
     {
-        if ($this->cacheSupportsTags()) {
-            Cache::tags($tags)->flush();
+        $store = CacheGate::store();
+        if (! $store || ! CacheGate::supportsTags($store)) {
+            return;
         }
+        $allTags = array_merge(CacheGate::globalTags(), $tags);
+        $store->getStore()->tags($allTags)->flush();
     }
 
     protected function cacheSupportsTags(): bool
     {
-        return Cache::getStore() instanceof TaggableStore;
+        return CacheGate::supportsTags();
+    }
+
+    protected function rememberSystem(string $key, \Closure $resolver, $ttl = null, bool $perLocale = true)
+    {
+        $store = CacheGate::systemStore();
+
+        return $store->remember(
+            $this->resolveCacheKey($key, $perLocale),
+            $ttl ?? now()->addDays(30),
+            $resolver
+        );
+    }
+
+    protected function forgetSystem(string $key, bool $perLocale = true): void
+    {
+        $store = CacheGate::systemStore();
+
+        if (! $perLocale) {
+            $store->forget($key);
+
+            return;
+        }
+        foreach (config('app.locales', [app()->getLocale()]) as $locale) {
+            $store->forget($key . $locale);
+        }
     }
 
     private function resolveCacheKey(string $key, bool $perLocale): string

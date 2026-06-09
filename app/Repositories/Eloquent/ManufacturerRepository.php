@@ -19,9 +19,14 @@ class ManufacturerRepository extends QueryableRepository implements Manufacturer
 
     public function listAllCached(): Collection
     {
-        return $this->rememberCache(
+        return $this->rememberSystem(
             setting('cache.manufacturers'),
             fn () => $this->listAll()
         );
+    }
+
+    public function flushCache(): void
+    {
+        $this->forgetSystem(setting('cache.manufacturers'));
     }
 }

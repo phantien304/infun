@@ -608,7 +608,13 @@ $(document).ready(function () {
             if (!variant) return;
             if (typeof swapImg === 'undefined') swapImg = true;
 
-            $(PRICE_SELECTOR).html(formatPriceLabel(variant.price));
+            // effective_price = COALESCE(variantSpecial.price, variant.price)
+            // do server precompute trong ProductOptionService::buildVariantMatrix.
+            // Fallback variant.price khi field thiếu (data legacy chưa migrate).
+            var currentPrice = (typeof variant.effective_price === 'number')
+                ? variant.effective_price
+                : variant.price;
+            $(PRICE_SELECTOR).html(formatPriceLabel(currentPrice));
             updateDiscountBadge(variant);
 
             // Stock-aware buttons: dùng cùng id #button-cart / #button-contact
@@ -632,23 +638,38 @@ $(document).ready(function () {
 
         /**
          * Update struck-through price + discount badge (Shopee-style) per-variant.
-         * Reference price priority: variant.regular_price (per-variant MSRP) →
-         * productBasePrice (fallback global). Discount % tính từ ref ↔ price.
          *
-         * Hiện struck + badge CHỈ khi current < ref. Ngược lại ẩn cả hai (variant
-         * không sale / giá đắt hơn ref → không show discount giả).
+         * Reference price priority (server precompute trong
+         * ProductOptionService::resolveVariantPricing → field `strike_price`):
+         *  1. variant_special active → strike = variant.regular_price (nếu có)
+         *     hoặc variant.price (giá pre-campaign). Hai mức discount xếp chồng.
+         *  2. Không có special → strike = variant.regular_price (MSRP tĩnh).
+         *  3. Không có gì để strike → field null → ẩn struck + badge.
+         *
+         * Current price = variant.effective_price (= COALESCE(special, base)).
+         * Backward compat: nếu field thiếu thì fallback về logic cũ.
          */
         function updateDiscountBadge(variant) {
-            // Backward compat: caller cũ truyền number; nâng cấp truyền variant object.
             var currentPrice, refPrice;
+
             if (typeof variant === 'number') {
+                // Backward compat: caller cũ truyền number.
                 currentPrice = variant;
                 refPrice = typeof productBasePrice === 'number' ? productBasePrice : 0;
             } else if (variant && typeof variant === 'object') {
-                currentPrice = variant.price;
-                refPrice = (variant.regular_price && variant.regular_price > 0)
-                    ? variant.regular_price
-                    : (typeof productBasePrice === 'number' ? productBasePrice : 0);
+                currentPrice = (typeof variant.effective_price === 'number')
+                    ? variant.effective_price
+                    : variant.price;
+                if (typeof variant.strike_price === 'number') {
+                    refPrice = variant.strike_price;
+                } else if (variant.strike_price === null) {
+                    refPrice = 0; // server đã quyết định không strike
+                } else {
+                    // Legacy variant không có strike_price → tính từ regular.
+                    refPrice = (variant.regular_price && variant.regular_price > 0)
+                        ? variant.regular_price
+                        : (typeof productBasePrice === 'number' ? productBasePrice : 0);
+                }
             } else {
                 currentPrice = 0;
                 refPrice = 0;
@@ -931,6 +952,59 @@ $(document).ready(function () {
             $('#option-value-' + $el.data('option')).val($el.val());
         });
     })();
+    // Helpers add-to-cart — chia sẻ giữa #button-cart và #consult-sign.
+    function clearOptionErrors() {
+        $('.product-option .option-error').remove();
+        $('#product-quantity').html('');
+    }
+    // Render error ngay dưới block variant tương ứng, scroll vào tầm nhìn.
+    function renderOptionErrors(message) {
+        if (!message || typeof message !== 'object') return;
+        var $first = null;
+        for (var key in message) {
+            if (!Object.prototype.hasOwnProperty.call(message, key)) continue;
+            var entry = message[key];
+            if (key === 'quantity' && typeof entry === 'string') {
+                var $q = $('<span class="error text-danger option-error">' + entry + '</span>');
+                $('#product-quantity').html($q);
+                if (!$first) $first = $q;
+                continue;
+            }
+            var text = entry && entry.parent ? entry.parent : null;
+            if (!text) continue;
+            var $target = $('#option-' + key);
+            if (!$target.length) continue;
+            $target.siblings('.option-error').remove();
+            var $err = $('<span class="error text-danger option-error d-block mt-1">' + text + '</span>');
+            $target.after($err);
+            if (!$first) $first = $err;
+        }
+        if ($first && $first.length && $first.offset()) {
+            $('html, body').animate({ scrollTop: Math.max(0, $first.offset().top - 120) }, 200);
+        }
+    }
+    // Laravel default 422 errors → reshape về `message[optId].parent` để
+    // dùng chung renderer. Safety net khi FormRequest::failedValidation
+    // chưa được override (vd endpoint mới).
+    function reshapeLaravelErrors(errors) {
+        var out = {};
+        if (!errors || typeof errors !== 'object') return out;
+        for (var k in errors) {
+            if (!Object.prototype.hasOwnProperty.call(errors, k)) continue;
+            var msg = Array.isArray(errors[k]) ? errors[k][0] : errors[k];
+            var m = k.match(/^option\.([^.]+)\.parent$/);
+            if (m) { out[m[1]] = { parent: msg }; continue; }
+            if (k === 'quantity') { out.quantity = msg; continue; }
+        }
+        return out;
+    }
+    // Khi user pick variant/option, clear error cũ của option đó — UX
+    // tốt hơn là chờ user bấm lại button-cart mới biết.
+    $(document).on('click change', '.product-option input, .product-option select, .product-option textarea', function () {
+        var optionId = $(this).data('option');
+        if (optionId) $('#option-' + optionId).siblings('.option-error').remove();
+    });
+
     $(document).on('click', '#button-cart', function () {
         // URL từ data-url (routeArea generate phía blade) để tránh hardcode
         // sai khi app chạy dưới sub-path hoặc đổi route. Fallback giữ hardcoded
@@ -946,27 +1020,31 @@ $(document).ready(function () {
             dataType: 'json',
             beforeSend: function () {
                 $('#button-cart').attr("disabled", "disabled");
-                $('.product-info .col-xl-9 .text-danger').remove();
-                $('#product-quantity').html('');
+                clearOptionErrors();
             },
             success: function (json) {
-                $('.success, .warning, .attention, .information, .error').remove();
-                if (json['success'] === false) {
-                    for (i in json['message']) {
-                        if (json['message'][i]['parent']) {
-                            $('#option-' + i).after('<span class="error text-danger">' + json['message'][i]['parent'] + '</span>');
-                        }
-                    }
-                    if (json['message']['quantity']) {
-                        $('#product-quantity').html('<span class="error text-danger">' + json['message']['quantity'] + '</span>')
-                    }
+                $('.success, .warning, .attention, .information').remove();
+                if (json && json['success'] === false) {
+                    renderOptionErrors(json['message']);
                 }
-                if (json['success'] === true) {
+                if (json && json['success'] === true) {
                     $('#dialog-confirm').dialog("open");
                     $('#dialog-confirm').html(json['data']['success_2']);
                     $('#link-cart').html('<a href="' + json['data']['link_cart'] + '"/>');
                     $('#cart-total').html(json['data']['total_cart_header']);
                 }
+            },
+            // Safety net cho Laravel 422 default shape (khi FormRequest không
+            // override failedValidation). Cũng bắt 500/network để báo lại.
+            error: function (xhr) {
+                var json = xhr.responseJSON || {};
+                if (xhr.status === 422 && json.errors) {
+                    renderOptionErrors(reshapeLaravelErrors(json.errors));
+                } else if (json.message && typeof json.message === 'object') {
+                    renderOptionErrors(json.message);
+                }
+            },
+            complete: function () {
                 $('#button-cart').removeAttr("disabled");
             },
         });
@@ -983,25 +1061,27 @@ $(document).ready(function () {
             dataType: 'json',
             beforeSend: function () {
                 $('#consult-sign').attr("disabled", "disabled");
-                $('.product-info .col-xl-9 .text-danger').remove();
-                $('#product-quantity').html('');
+                clearOptionErrors();
             },
             success: function (json) {
-                $('.success, .warning, .attention, .information, .error').remove();
-                if (json['success'] === false) {
-                    for (i in json['message']) {
-                        if (json['message'][i]['parent']) {
-                            $('#option-' + i).after('<span class="error text-danger">' + json['message'][i]['parent'] + '</span>');
-                        }
-                    }
-                    if (json['message']['quantity']) {
-                        $('#product-quantity').html('<span class="error text-danger">' + json['message']['quantity'] + '</span>')
-                    }
+                $('.success, .warning, .attention, .information').remove();
+                if (json && json['success'] === false) {
+                    renderOptionErrors(json['message']);
                 }
-                if (json['success'] === true) {
+                if (json && json['success'] === true) {
                     $('#dialog-consult-sign').dialog("open");
                     $('#dialog-consult-sign').html(json['data']['success_2']);
                 }
+            },
+            error: function (xhr) {
+                var json = xhr.responseJSON || {};
+                if (xhr.status === 422 && json.errors) {
+                    renderOptionErrors(reshapeLaravelErrors(json.errors));
+                } else if (json.message && typeof json.message === 'object') {
+                    renderOptionErrors(json.message);
+                }
+            },
+            complete: function () {
                 $('#consult-sign').removeAttr("disabled");
             },
         });

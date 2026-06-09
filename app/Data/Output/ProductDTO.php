@@ -34,8 +34,6 @@ class ProductDTO extends Data
         public ?float $height,
         public ?int $subtract,
         public ?int $minimum,
-        public ?float $rating,
-        public ?int $totalRating,
         public ?int $viewed,
         public bool $hasVariants,
         public ?float $minVariantPrice,
@@ -57,7 +55,6 @@ class ProductDTO extends Data
         public ?ManufacturerDTO $manufacturer,
         public ?ProductSpecialDTO $productSpecial,
         public array $matchedFilterNames,
-        public int $ratingRounded,
         public float $ratingAvg,
         public int $reviewCount,
         public array $ratingDistribution,
@@ -89,8 +86,6 @@ class ProductDTO extends Data
         $weightUnit = $product->relationLoaded('weightClass')
             ? (string) ($product->weightClass?->description?->unit ?? 'gram')
             : 'gram';
-        $linkSaleCustom = self::decodeJsonArray($product->link_sale_custom);
-
         return new self(
             id: $product->id,
             model: $product->model,
@@ -110,15 +105,6 @@ class ProductDTO extends Data
             height: $product->height,
             subtract: $product->subtract,
             minimum: $product->minimum,
-            // Legacy `rating` + `total_rating` cột không còn được cập nhật bởi
-            // cluster review mới (observer chỉ ghi rating_avg/review_count). Ưu
-            // tiên aggregate cache mới, fallback legacy nếu cache rỗng.
-            rating: (float) ($product->rating_avg ?? 0) > 0
-                ? (float) $product->rating_avg
-                : (float) ($product->rating ?? 0),
-            totalRating: (int) ($product->review_count ?? 0) > 0
-                ? (int) $product->review_count
-                : (int) ($product->total_rating ?? 0),
             viewed: $product->viewed,
             hasVariants: (bool) ($product->has_variants ?? false),
             minVariantPrice: isset($product->min_variant_price) ? (float) $product->min_variant_price : null,
@@ -141,20 +127,12 @@ class ProductDTO extends Data
             manufacturer: isset($manufacturer) ? ManufacturerDTO::fromModel($manufacturer) : null,
             productSpecial: isset($productSpecial) ? ProductSpecialDTO::fromModel($productSpecial, (float) $product->price) : null,
             matchedFilterNames: $matchedFilterNames,
-            // ratingRounded ưu tiên rating_avg (cluster review mới), fallback legacy.
-            ratingRounded: (int) round(
-                (float) ($product->rating_avg ?? 0) > 0
-                    ? (float) $product->rating_avg
-                    : (float) ($product->rating ?? 0)
-            ),
             ratingAvg: (float) ($product->rating_avg ?? 0),
             reviewCount: (int) ($product->review_count ?? 0),
-            ratingDistribution: is_string($product->rating_distribution ?? null)
-                ? (json_decode($product->rating_distribution, true) ?: [])
-                : (array) ($product->rating_distribution ?? []),
+            ratingDistribution: self::decodeJsonArray($product->rating_distribution ?? null),
             weightUnit: $weightUnit,
             gallery: $gallery,
-            linkSaleCustom: $linkSaleCustom,
+            linkSaleCustom: self::decodeJsonArray($product->link_sale_custom ?? null),
             content: Lazy::create(fn () => (string) ($desc->content ?? '')),
             tag: Lazy::create(fn () => (string) ($desc->tag ?? '')),
             metaTitle: Lazy::create(fn () => (string) ($desc->meta_title ?? '')),
@@ -221,9 +199,12 @@ class ProductDTO extends Data
         return $gallery;
     }
 
-    private static function decodeJsonArray(?string $raw): array
+    private static function decodeJsonArray(mixed $raw): array
     {
-        if (! filled($raw)) {
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (! filled($raw) || ! is_string($raw)) {
             return [];
         }
         $decoded = json_decode($raw, true);
@@ -251,8 +232,7 @@ class ProductDTO extends Data
         $currency = getConfigDb('config_currency');
 
         if (($product->has_variants ?? false) && ($product->min_variant_price ?? null) !== null) {
-            $min = (float) $product->min_variant_price;
-            $max = (float) ($product->max_variant_price ?? $min);
+            [$min, $max] = self::resolveVariantRange($product);
             if ($min <= 0 && $max <= 0) {
                 return getModuleConfig('product.text_contact');
             }
@@ -266,6 +246,27 @@ class ProductDTO extends Data
         return $price > 0
             ? number_format($price) . $currency
             : getModuleConfig('product.text_contact');
+    }
+
+    private static function resolveVariantRange(Product $product): array
+    {
+        if ($product->relationLoaded('productVariants') && $product->productVariants->isNotEmpty()) {
+            $effectives = $product->productVariants->map(function ($v) {
+                if ($v->relationLoaded('productVariantSpecial') && $v->productVariantSpecial) {
+                    return (float) $v->productVariantSpecial->price;
+                }
+                return (float) $v->price;
+            })->filter(fn ($p) => $p > 0);
+
+            if ($effectives->isNotEmpty()) {
+                return [(float) $effectives->min(), (float) $effectives->max()];
+            }
+        }
+
+        $min = (float) $product->min_variant_price;
+        $max = (float) ($product->max_variant_price ?? $min);
+
+        return [$min, $max];
     }
 
     private static function formatStock(Product $product): string

@@ -48,7 +48,7 @@ trait HasAdvancedScopes
             )
             ->where(
                 fn(Builder $q) => $q
-                    ->where("{$table}.date_end", '>', $now)
+                    ->where("{$table}.date_end", '>=', $now)
                     ->orWhereNull("{$table}.date_end")
             );
     }

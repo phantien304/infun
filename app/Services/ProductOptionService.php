@@ -222,20 +222,33 @@ class ProductOptionService
             $available = $stock ? (int) $stock->available : 999;
             $subtract = $stock ? (bool) $stock->subtract : false;
 
+            [$effectivePrice, $strikePrice, $special] = $this->resolveVariantPricing($variant);
+
             $matrix[] = [
-                'id'            => (int) $variant->id,
-                'sku'           => $variant->sku,
-                'signature'     => $variant->attribute_signature,
-                'attributes'    => $attributes,
-                'price'         => (float) $variant->price,
-                'regular_price' => $variant->regular_price !== null ? (float) $variant->regular_price : null,
-                'image'         => $variant->image,
-                'is_default'    => (bool) $variant->is_default,
-                'available'     => $available,
-                'subtract'      => $subtract,
-                'has_stock'     => $stock !== null,
-                'label'         => $variant->description?->label,
-                'note'          => $variant->description?->note,
+                'id'              => (int) $variant->id,
+                'sku'             => $variant->sku,
+                'signature'       => $variant->attribute_signature,
+                'attributes'      => $attributes,
+                'price'           => (float) $variant->price,
+                'regular_price'   => $variant->regular_price !== null ? (float) $variant->regular_price : null,
+                // Giá user thực sự trả khi mua variant này tại thời điểm hiện
+                // tại — special > variant.price. Frontend chỉ đọc field này
+                // để show #price-product, không cần biết special tồn tại.
+                'effective_price' => $effectivePrice,
+                // Giá tham chiếu strike-through (= MSRP nếu set, fallback
+                // variant.price khi đang trong campaign). Frontend show khi
+                // strike > effective. Null = không có gì để strike.
+                'strike_price'    => $strikePrice,
+                // Campaign info (id + dates) cho countdown / badge "Đang sale
+                // tới HH:MM". null = không có campaign active.
+                'special'         => $special,
+                'image'           => $variant->image,
+                'is_default'      => (bool) $variant->is_default,
+                'available'       => $available,
+                'subtract'        => $subtract,
+                'has_stock'       => $stock !== null,
+                'label'           => $variant->description?->label,
+                'note'            => $variant->description?->note,
             ];
         }
 
@@ -263,16 +276,65 @@ class ProductOptionService
 
         $stock = $default->productStock;
 
+        [$effectivePrice, $strikePrice, $special] = $this->resolveVariantPricing($default);
+
         return [
-            'id'            => (int) $default->id,
-            'price'         => (float) $default->price,
-            'regular_price' => $default->regular_price !== null ? (float) $default->regular_price : null,
-            'image'         => $default->image,
-            'attributes'    => $attributes,
-            'available'     => $stock ? (int) $stock->available : 0,
-            'sku'           => $default->sku,
-            'label'         => $default->description?->label,
-            'note'           => $default->description?->note,
+            'id'              => (int) $default->id,
+            'price'           => (float) $default->price,
+            'regular_price'   => $default->regular_price !== null ? (float) $default->regular_price : null,
+            'effective_price' => $effectivePrice,
+            'strike_price'    => $strikePrice,
+            'special'         => $special,
+            'image'           => $default->image,
+            'attributes'      => $attributes,
+            'available'       => $stock ? (int) $stock->available : 0,
+            'sku'             => $default->sku,
+            'label'           => $default->description?->label,
+            'note'            => $default->description?->note,
         ];
+    }
+
+    /**
+     * Tính ba mảnh hiển thị giá variant — gộp 1 chỗ để buildVariantMatrix +
+     * resolveDefaultVariant không drift logic:
+     *
+     *   effective_price = COALESCE(variantSpecial.price, variant.price)
+     *   strike_price    = giá để gạch ngang khi đang có giảm (variant.price
+     *                     khi special active; regular_price khi không có
+     *                     special; null khi không gạch ngang)
+     *   special         = ['id' => int, 'price' => float, 'date_end' => str|null]
+     *                     hoặc null
+     *
+     * Logic strike: chỉ trả giá tham chiếu nếu strike > effective. Tránh
+     * UI show "1.000.000đ" gạch ngang lên đè "1.000.000đ" giá hiện tại.
+     */
+    protected function resolveVariantPricing(\App\Models\Entities\ProductVariant $variant): array
+    {
+        $basePrice = (float) $variant->price;
+        $regular = $variant->regular_price !== null ? (float) $variant->regular_price : null;
+
+        $special = null;
+        $effective = $basePrice;
+        if ($variant->relationLoaded('productVariantSpecial') && $variant->productVariantSpecial) {
+            $vs = $variant->productVariantSpecial;
+            $effective = (float) $vs->price;
+            $special = [
+                'id'         => (int) $vs->id,
+                'price'      => $effective,
+                'date_end'   => $vs->date_end?->format('Y-m-d H:i:s'),
+                'date_start' => $vs->date_start?->format('Y-m-d H:i:s'),
+            ];
+        }
+
+        // Ưu tiên reference theo thứ tự: regular_price (MSRP) > variant.price
+        // (khi đang trong campaign). Chỉ trả nếu lớn hơn effective.
+        $strike = null;
+        if ($regular !== null && $regular > $effective) {
+            $strike = $regular;
+        } elseif ($special !== null && $basePrice > $effective) {
+            $strike = $basePrice;
+        }
+
+        return [$effective, $strike, $special];
     }
 }

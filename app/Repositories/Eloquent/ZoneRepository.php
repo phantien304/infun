@@ -8,7 +8,6 @@ use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\ZoneRepositoryInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Cache;
 
 class ZoneRepository extends QueryableRepository implements ZoneRepositoryInterface
 {
@@ -30,11 +29,24 @@ class ZoneRepository extends QueryableRepository implements ZoneRepositoryInterf
         return ['description'];
     }
 
+    /**
+     * Zones load mọi page render (dropdown chọn tỉnh ở checkout + popup địa
+     * chỉ) → `rememberSystem` luôn cache.
+     *
+     * `rememberSystem` mặc định `perLocale = true` đã tự append locale vào
+     * cuối key — không cần concat thủ công ở đây (double append → key
+     * `zones_vivi` thay vì `zones_vi`).
+     */
     public function listAllCached(): Collection
     {
-        return $this->rememberCache(
-            setting('cache.zones') . app()->getLocale(),
+        return $this->rememberSystem(
+            setting('cache.zones'),
             fn () => $this->listAll()
         );
+    }
+
+    public function flushCache(): void
+    {
+        $this->forgetSystem(setting('cache.zones'));
     }
 }

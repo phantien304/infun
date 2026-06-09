@@ -32,4 +32,9 @@ class CarrierRepository extends QueryableRepository implements CarrierRepository
                 ->get()
         );
     }
+
+    public function flushCache(): void
+    {
+        $this->forgetCache(setting('cache.carriers'));
+    }
 }

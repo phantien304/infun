@@ -133,6 +133,10 @@ class CartService
                 'productStock',
                 'description',
                 'productVariantAttributes.optionValue.description',
+                // Load productVariantSpecial để resolvePrice trả giá campaign
+                // khi active, không lấy variant.price tĩnh. Mirror logic detail
+                // page (ProductOptionService::resolveVariantPricing).
+                'productVariantSpecial',
             ])->whereIn('id', $variantIds)->get()->keyBy('id')
             : collect();
 
@@ -353,9 +357,23 @@ class CartService
         return null;
     }
 
+    /**
+     * Giá tính tiền cho 1 line cart:
+     *  - Có variant: COALESCE(variantSpecial.price, variant.price). Variant
+     *    KHÔNG dùng product_special (Hướng B, xem CLAUDE.md). Logic mirror
+     *    ProductOptionService::resolveVariantPricing để cart total + UI detail
+     *    page nhất quán — user click variant thấy 800k, vào cart cũng 800k.
+     *  - Không variant: COALESCE(productSpecial.price, product.price). Đường
+     *    đi cũ giữ nguyên cho simple product.
+     */
     protected function resolvePrice(Product $product, ?ProductVariant $variant): int
     {
         if ($variant) {
+            $vs = $variant->productVariantSpecial;
+            if ($vs) {
+                return (int) $vs->price;
+            }
+
             return (int) $variant->price;
         }
 

@@ -17,12 +17,21 @@ class CategoryRepository extends QueryableRepository implements CategoryReposito
         return Category::class;
     }
 
+    /**
+     * Categories load mọi page render (Controller::render gắn vào common view
+     * data) → dùng `rememberSystem` để luôn cache kể cả khi `config_debug=1`.
+     */
     public function listAllCached(): Collection
     {
-        return $this->rememberCache(
+        return $this->rememberSystem(
             setting('cache.categories'),
             fn () => $this->listAll()
         );
+    }
+
+    public function flushCache(): void
+    {
+        $this->forgetSystem(setting('cache.categories'));
     }
 
     protected function withRelations(): array

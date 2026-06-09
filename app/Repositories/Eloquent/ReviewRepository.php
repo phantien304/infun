@@ -110,8 +110,8 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
     public function getActiveCriteria(): Collection
     {
         return $this->rememberCacheTagged(
-            ['review_criteria'],
-            'review_criteria.active',
+            [getCoreConfig('cache.review.tag_criteria')],
+            getCoreConfig('cache.review.key_criteria_active'),
             fn () => ReviewCriteria::active()->with('description')->get(),
             now()->addDay(),
         );
@@ -120,22 +120,18 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
     public function getActiveTags(int $limit = 8): Collection
     {
         return $this->rememberCacheTagged(
-            ['review_tag'],
-            "review_tag.top.{$limit}",
+            [getCoreConfig('cache.review.tag_tag')],
+            getCoreConfig('cache.review.key_tag_top').$limit,
             fn () => ReviewTag::active()->with('description')->limit($limit)->get(),
             now()->addHour(),
         );
     }
 
-    /**
-     * AVG rating per criterion cho 1 product. Trả [code => float].
-     * Cache theo product_id, invalidate qua observer khi review save/delete.
-     */
     public function getCriteriaAverages(int $productId): array
     {
         return $this->rememberCacheTagged(
-            ['review_root', "reviews:{$productId}"],
-            "review.criteria_avg.{$productId}",
+            [getCoreConfig('cache.review.tag_root'), getCoreConfig('cache.review.tag_product').$productId],
+            getCoreConfig('cache.review.key_criteria_avg').$productId,
             function () use ($productId) {
                 $rows = DB::table('review_rating as rr')
                     ->join('review as r', 'r.id', '=', 'rr.review_id')
@@ -192,6 +188,16 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
 
     public function forgetProductCache(int $productId): void
     {
-        $this->forgetCacheTagged(["reviews:{$productId}"]);
+        $this->forgetCacheTagged([getCoreConfig('cache.review.tag_product').$productId]);
+    }
+
+    /**
+     * Flush toàn bộ cache review (tag root). Dùng từ observer khi admin
+     * sửa criteria / tag list (vd thêm criteria mới → mọi product's averages
+     * cần re-compute) hoặc khi bulk import review.
+     */
+    public function flushCache(): void
+    {
+        $this->forgetCacheTagged([getCoreConfig('cache.review.tag_root')]);
     }
 }

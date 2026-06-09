@@ -10,13 +10,6 @@
                     <img src="{{ $product->thumbnail(300, 300) }}" alt="{{ $product->name }}" class="hover-img">
                 </a>
             </div>
-            {{-- Badge discount (Shopee-style):
-                 - Product có variant: ưu tiên MAX discount across variants
-                   (denormalized `max_variant_discount_percent`) — bait MAX
-                   discount, đúng UX Shopee list. List page chỉ load
-                   cardRelations (không có productVariants), nên dùng aggregate
-                   sẵn ở product table.
-                 - Không variant: fallback special->discountPercent. --}}
             @if ($product->hasVariants && $product->maxVariantDiscountPercent > 0)
                 <div class="product-badges product-badges-position product-badges-mrg">
                     <span class="sale">-{{ $product->maxVariantDiscountPercent }}%</span>
@@ -34,7 +27,7 @@
             @endif
         </div>
 
-        @if ($product->manufacturer && $product->manufacturer->image)
+        @if ($product->manufacturer && $product->manufacturer?->image)
             <div class="align-self-center d-block d-lg-none">
                 <div class="img-manufacture justify-content-center">
                     <img alt="{{ $product->manufacturer->name }}" src="{{ $product->manufacturer->thumbnail(90, 43) }}"
@@ -72,10 +65,10 @@
 
             <div class="product-rate-cover">
                 <div class="product-rate d-inline-block">
-                    <img src="/client/images/stars-{{ (int) round($product->rating) }}.png"
-                        alt="{{ $product->totalRating }} đánh giá" />
+                    <img src="/client/images/stars-{{ (int) round($product->ratingAvg) }}.png"
+                        alt="{{ $product->reviewCount }} đánh giá" />
                 </div>
-                <span class="font-small ml-5 text-muted">({{ (int) round($product->rating) }})</span>
+                <span class="font-small ml-5 text-muted">({{ (int) round($product->ratingAvg) }})</span>
             </div>
 
             @if ($product->weight && $product->weight > 0)

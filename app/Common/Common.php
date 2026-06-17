@@ -3,7 +3,6 @@
 use App\Helpers\Facades\ChannelLog;
 use App\Helpers\Facades\CustomStorage;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Route;
 
 function errValidator($error, $code = 422)
 {
@@ -185,39 +184,19 @@ function getCurrentArea()
     if (app()->runningInConsole()) {
         return 'batch';
     }
-    if (isCms()) {
-        return 'cms';
-    }
-    if (isApi()) {
-        return 'api';
+    $route = request()->route();
+    if ($route) {
+        return $route->getAction('area') ?: 'web';
     }
     return 'web';
 }
 function isCms()
 {
-    return request()->routeIs('cms.*');
+    return getCurrentArea() === 'cms';
 }
 function isApi()
 {
-    return request()->routeIs('api.*');
-}
-function routeArea(?string $name, $params = [])
-{
-    if (str_starts_with($name, 'http')) {
-        return $name;
-    }
-    $area = getCurrentArea();
-    $targetName = $name;
-    if (!str_contains($name, $area . '.')) {
-        $targetName = $area . '.' . $name;
-    }
-    if (Route::has($targetName)) {
-        return route($targetName, $params);
-    }
-    if (Route::has($name)) {
-        return route($name, $params);
-    }
-    return url($name);
+    return getCurrentArea() === 'api';
 }
 function getTmpUploadDir($file = null)
 {

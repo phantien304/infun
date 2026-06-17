@@ -5,9 +5,8 @@ namespace App\Services\Checkout;
 /**
  * Container chia sẻ state giữa các service trong 1 request checkout:
  *  - cart items đã enrich (từ CartService::getItems)
- *  - coupon đã resolve (từ CouponRepository)
- *  - voucher đã resolve (từ VoucherRepository)
- *  - order id sau khi tạo (để sub-step ghi history/coupon_history/...)
+ *  - appliedCoupons đã resolve (từ CouponService::applyCodes)
+ *  - order id sau khi tạo (để sub-step ghi coupon_history/voucher_history/...)
  *
  * Service nhận context qua tham số method thay vì shared property, để dễ test.
  * Đây chỉ là dumb DTO (mutable) — không có business logic.
@@ -16,9 +15,17 @@ class CheckoutContext
 {
     public array $items = [];
 
-    public array $coupon = [];
+    /**
+     * Shopee-style multi-coupon — array kết quả CouponService::applyCodes,
+     * mỗi entry `{coupon: Coupon, discount: int, type: int}`.
+     *
+     * @var array<int, array{coupon: \App\Models\Entities\Coupon, discount: int, type: int}>
+     */
+    public array $appliedCoupons = [];
 
-    public array $voucher = [];
+    public bool $hasFreeshipCoupon = false;
+
+    public int $totalCouponDiscount = 0;
 
     public ?int $orderId = null;
 
@@ -31,16 +38,11 @@ class CheckoutContext
         return $this;
     }
 
-    public function setCoupon(array $coupon): static
+    public function setAppliedCoupons(array $applied, bool $hasFreeship, int $totalDiscount): static
     {
-        $this->coupon = $coupon;
-
-        return $this;
-    }
-
-    public function setVoucher(array $voucher): static
-    {
-        $this->voucher = $voucher;
+        $this->appliedCoupons = $applied;
+        $this->hasFreeshipCoupon = $hasFreeship;
+        $this->totalCouponDiscount = $totalDiscount;
 
         return $this;
     }

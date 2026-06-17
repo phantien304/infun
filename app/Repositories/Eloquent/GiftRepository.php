@@ -1,0 +1,58 @@
+<?php
+
+namespace App\Repositories\Eloquent;
+
+use App\Models\Entities\Gift;
+use App\Repositories\Base\QueryableRepository;
+use App\Repositories\Concerns\CacheableRepository;
+use App\Repositories\Interfaces\GiftRepositoryInterface;
+use Illuminate\Support\Collection;
+
+class GiftRepository extends QueryableRepository implements GiftRepositoryInterface
+{
+    use CacheableRepository;
+
+    public function model(): string
+    {
+        return Gift::class;
+    }
+
+    public function listActive(): Collection
+    {
+        return $this->rememberCache(
+            getCoreConfig('gift.cache.key_active'),
+            fn () => $this->resetModel()
+                ->newQuery()
+                ->active()
+                ->with([
+                    'items.product.description',
+                    'items.variant.description',
+                    'triggerProducts',
+                ])
+                ->orderByDesc('sort_order')
+                ->orderBy('id')
+                ->get(),
+            getCoreConfig('time.cache'),
+            tags: [getCoreConfig('gift.cache.tag_root')],
+        );
+    }
+
+    public function findActiveById(int $giftId): ?Gift
+    {
+        if ($giftId <= 0) {
+            return null;
+        }
+
+        return $this->resetModel()
+            ->newQuery()
+            ->active()
+            ->where('id', $giftId)
+            ->with(['items.product.description', 'items.variant.description', 'triggerProducts'])
+            ->first();
+    }
+
+    public function flushCache(): void
+    {
+        $this->forgetCacheTagged([getCoreConfig('gift.cache.tag_root')]);
+    }
+}

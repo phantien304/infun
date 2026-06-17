@@ -4,13 +4,11 @@ namespace App\Models\Entities;
 
 use App\Models\Base\Base;
 use App\Models\Traits\HasTranslation;
-use App\Models\Traits\HasUrlAttributes;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Banner extends Base
 {
     use SoftDeletes;
-    use HasUrlAttributes;
     use HasTranslation;
     protected $table = 'banner';
     protected $primaryKeyAutoIncrement = 'id';

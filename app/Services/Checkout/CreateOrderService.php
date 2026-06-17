@@ -6,25 +6,24 @@ use App\Models\Entities\CouponHistory;
 use App\Models\Entities\OrdersProduct;
 use App\Models\Entities\OrdersProductOption;
 use App\Models\Entities\OrdersTotal;
-use App\Models\Entities\Product;
 use App\Models\Entities\ProductStock;
-use App\Models\Entities\VoucherHistory;
+use App\Models\Entities\StockMovement;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Tạo order + ghi sub-tables (orders_product, orders_product_option,
- * orders_total, coupon_history, voucher_history, user_reward) trong 1 transaction.
+ * Build an order + write its sub-tables (orders_product, orders_product_option,
+ * orders_total, coupon_history, voucher_history, user_reward) in a single
+ * transaction.
  *
- * Port logic từ trait CreateOrder cũ — KHÔNG bao DB::beginTransaction() lồng
- * nhau như trait cũ. 1 transaction duy nhất bao toàn bộ. Caller chỉ cần gọi
- * `create($ctx, $params, $totalData)` rồi đọc `$ctx->orderId`.
- *
- * Subtract stock: cluster variant mới có ProductStock — trừ on_hand qua
- * UPDATE atomic (giữ optimistic lock đơn giản; refactor sau với StockService
- * khi cần concurrency cao). Simple product (has_variants=false) trừ
- * product.quantity như cũ.
+ * Subtract stock: post unify_simple_product_stock migration every cart line
+ * carries a product_variant_id (default variants are created for simple
+ * products), so subtractStock takes one path through product_stock guarded by
+ * inventory_policy. Variants whose policy is BACKORDER are allowed to drive
+ * on_hand negative — that negative is the "bán khống" backlog admins act on.
+ * A legacy fallback to product.quantity exists for cart lines that pre-date
+ * the migration; it will be removed once the legacy columns are dropped.
  */
 class CreateOrderService
 {
@@ -47,11 +46,33 @@ class CreateOrderService
             $this->writeOrderItems($ctx, $order->id);
             $this->writeOrderTotals($order->id, $totalData);
             $this->writeCouponHistory($ctx);
-            $this->writeVoucherHistory($ctx, $totalData);
+            $this->writeNewVouchers($order->id, $total);
+            $this->writeGifts($order->id);
             $this->writeUserReward($ctx);
 
             return $order->id;
         });
+    }
+
+    /**
+     * Persist voucher (gift card) Shopee-style — insert voucher_history rows
+     * status=applied. Sau payment success, observer / payment callback flip
+     * status=confirmed + cộng vào redeemed_balance.
+     */
+    protected function writeNewVouchers(int $orderId, int $orderTotal): void
+    {
+        app(\App\Services\Cart\VoucherService::class)->recordOrderVouchers($orderId, $orderTotal);
+    }
+
+    /**
+     * Persist gift picks vào order_gift + increment gift.used_count.
+     * Delegate hoàn toàn cho GiftService (đã wrap logic + idempotent).
+     * Trong cùng DB transaction với buildOrderRow / writeOrderItems → rollback
+     * sạch nếu bất kỳ bước nào fail.
+     */
+    protected function writeGifts(int $orderId): void
+    {
+        app(\App\Services\Cart\GiftService::class)->recordOrderGifts($orderId);
     }
 
     protected function buildOrderRow(CheckoutContext $ctx, array $params, int $total, string $uniqid): array
@@ -78,8 +99,10 @@ class CreateOrderService
             'payment_code'      => $params['payment_code'] ?? '',
             'carrier_code'      => $params['carrier_code'] ?? '',
             'comment'           => $params['comment'] ?? '',
-            'voucher'           => $ctx->voucher['code'] ?? null,
-            'coupon'            => $ctx->coupon['code'] ?? null,
+            // Cột legacy denormalized — dữ liệu KM thật nằm ở coupon_history /
+            // voucher_history. Giữ cột (ghi null) để không đổi shape insert.
+            'voucher'           => null,
+            'coupon'            => null,
             'reward'            => null,
             'width_class_id'    => getConfigDb('config_length_class_id'),
             'width'             => $shipping['width'] ?? 0,
@@ -99,13 +122,15 @@ class CreateOrderService
     }
 
     /**
-     * Ghi orders_product + orders_product_option cho từng item. Trừ tồn theo
-     * 2 nhánh: variant → product_stock, simple → product.quantity.
+     * Write orders_product + orders_product_option for each line and
+     * decrement stock. Post-unify the stock path is a single branch
+     * through product_stock (see subtractStock); the order_id is forwarded
+     * so the audit row in stock_movement can point back to the order.
      */
     protected function writeOrderItems(CheckoutContext $ctx, int $orderId): void
     {
         foreach ($ctx->items as $item) {
-            $this->subtractStock($item);
+            $this->subtractStock($item + ['order_id' => $orderId]);
 
             // Cluster variant: cột product_variant_id link 1 row order ↔ 1
             // variant cụ thể (migration 2026_05_31_000000). Cho phép NULL với
@@ -143,22 +168,85 @@ class CreateOrderService
         }
     }
 
+    /**
+     * Decrement stock for one order line. Single path post-unify, no
+     * legacy fallback:
+     *
+     *  1. The cart pipeline always sets a variant id — CartService
+     *     resolves the default variant for simple products. A missing id
+     *     here means a data error, not "simple product"; log and skip
+     *     instead of silently touching product.quantity (the source of
+     *     the earlier drift bug).
+     *  2. Lock the product_stock row (FOR UPDATE) so two concurrent
+     *     checkouts cannot both read the same on_hand and oversell.
+     *  3. UNTRACKED → no-op. The row exists only to keep the pipeline
+     *     uniform; on_hand has no business meaning.
+     *  4. DENY      → decrement; on_hand may go to 0 but never below.
+     *                 (CartService::checkStock has already gated this;
+     *                 the lock protects against TOCTOU under load.)
+     *  5. BACKORDER → decrement freely. on_hand may go negative — that
+     *                 negative is the backorder backlog admins act on.
+     *                 Audit row records type=sale_backorder so admins
+     *                 can filter the log for "bán khống" sales.
+     *  6. Append a stock_movement row in every tracked case so on_hand
+     *     can be rebuilt from the log on data-corruption suspicion.
+     */
     protected function subtractStock(array $item): void
     {
         $variantId = $item['product_variant_id'] ?? null;
         $qty = (int) $item['quantity'];
 
-        if ($variantId) {
-            ProductStock::where('product_variant_id', $variantId)
-                ->where('warehouse_id', ProductStock::DEFAULT_WAREHOUSE_ID)
-                ->update(['on_hand' => DB::raw('on_hand - '.$qty)]);
-
+        if (! $variantId) {
+            // Data error — the cart line escaped resolveVariantId. Surface
+            // it via the log instead of silently bumping product.quantity.
+            logError(sprintf(
+                'subtractStock: order line for product %s has no product_variant_id; stock not decremented',
+                $item['id'] ?? 'unknown',
+            ));
             return;
         }
 
-        Product::where('id', $item['id'])
-            ->where('subtract', 1)
-            ->update(['quantity' => DB::raw('quantity - '.$qty)]);
+        $warehouseId = (int) getCoreConfig('stock.default_warehouse_id');
+
+        $stock = ProductStock::where('product_variant_id', $variantId)
+            ->where('warehouse_id', $warehouseId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $stock) {
+            logError(sprintf(
+                'subtractStock: no product_stock row for variant %d; stock not decremented',
+                $variantId,
+            ));
+            return;
+        }
+
+        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
+        if ($policy === (int) getCoreConfig('stock.policy.untracked')) {
+            return;
+        }
+
+        $newOnHand = (int) ($stock->on_hand ?? 0) - $qty;
+        $stock->on_hand = $newOnHand;
+        $stock->version = (int) ($stock->version ?? 0) + 1;
+        $stock->save();
+
+        $isBackorder = $newOnHand < 0
+            && $policy === (int) getCoreConfig('stock.policy.backorder');
+
+        StockMovement::create([
+            'product_variant_id' => $variantId,
+            'warehouse_id'       => $warehouseId,
+            'type'               => $isBackorder
+                ? (string) getCoreConfig('stock.movement_type.sale_backorder')
+                : (string) getCoreConfig('stock.movement_type.sale'),
+            'quantity_change'    => -$qty,
+            'on_hand_after'      => $newOnHand,
+            'reference_type'     => 'order',
+            'reference_id'       => $item['order_id'] ?? null,
+            'user_id'            => (int) getCurrentUserId() ?: null,
+            'note'               => $isBackorder ? 'Sale exceeded on_hand — backorder backlog' : null,
+        ]);
     }
 
     protected function writeOrderTotals(int $orderId, array $totalData): void
@@ -176,30 +264,34 @@ class CreateOrderService
 
     protected function writeCouponHistory(CheckoutContext $ctx): void
     {
-        if (empty($ctx->coupon) || ! $ctx->orderId) {
+        if (! $ctx->orderId) {
             return;
         }
-        CouponHistory::create([
-            'coupon_id' => $ctx->coupon['coupon_id'],
-            'order_id'  => $ctx->orderId,
-            'amount'    => $ctx->coupon['discount'],
-        ]);
-    }
 
-    protected function writeVoucherHistory(CheckoutContext $ctx, array $totalData): void
-    {
-        if (empty($ctx->voucher) || ! $ctx->orderId) {
+        // Phase 4 Shopee multi-coupon: insert 1 row/applied. Status `used`
+        // ngay vì order vừa tạo qua transaction = đã commit. Observer order
+        // status sau này flip thành `cancelled` nếu user huỷ.
+        if (! empty($ctx->appliedCoupons)) {
+            $statusUsed = (int) getCoreConfig('coupon.history_status.used');
+            $userId = (int) getCurrentUserId() ?: null;
+
+            foreach ($ctx->appliedCoupons as $entry) {
+                $coupon = $entry['coupon'];
+                CouponHistory::create([
+                    'coupon_id' => (int) $coupon->id,
+                    'order_id'  => $ctx->orderId,
+                    'user_id'   => $userId,
+                    'amount'    => (int) $entry['discount'],
+                    'status'    => $statusUsed,
+                ]);
+                // Denormalize used_count += 1. Atomic UPDATE tránh race khi
+                // 2 user dùng song song lúc gần hết quota.
+                DB::table('coupon')
+                    ->where('id', $coupon->id)
+                    ->increment('used_count');
+            }
             return;
         }
-        $voucherLine = collect($totalData)->firstWhere('code', 'voucher');
-        if (! $voucherLine) {
-            return;
-        }
-        VoucherHistory::create([
-            'voucher_id' => $ctx->voucher['id'],
-            'order_id'   => $ctx->orderId,
-            'amount'     => $voucherLine['value'],
-        ]);
     }
 
     protected function writeUserReward(CheckoutContext $ctx): void

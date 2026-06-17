@@ -22,16 +22,6 @@ class CheckoutAddToCartRequest extends FormRequest
         ];
     }
 
-    /**
-     * Validate option payload — required + format (email/phone) cho custom
-     * field; variant role thì always-required (semantically: product có variant
-     * mà không chọn variant = không xác định SKU, cart sẽ rơi vào nhánh
-     * `product_variant_id = null` → giá sai). Không tin tưởng cờ `required`
-     * trong DB cho variant — admin có thể set 0 do quên.
-     *
-     * Errors gắn key `option.{id}.parent` để style.js render đúng vị trí
-     * (`$('#option-' + id).after(...)`).
-     */
     public function withValidator($validator): void
     {
         $validator->after(function ($v) {

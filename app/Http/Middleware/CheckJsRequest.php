@@ -15,6 +15,6 @@ class CheckJsRequest
             return $next($request);
         }
         $data = app()->make(ConfigDbService::class)->getConfig();
-        return response()->view('cms.index', ['data' => $data]);
+        return response()->view('cms::index', ['data' => $data]);
     }
 }

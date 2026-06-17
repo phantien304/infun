@@ -337,6 +337,24 @@ return [
             'password' => 'Nhập mật khẩu',
             'confirm' => 'Nhập lại mật khẩu',
             'submit' => 'Đổi mật khẩu'
-        ]
+        ],
+        // Thông báo validation cho FormRequest auth (login / register /
+        // forgot / reset). KHÔNG hardcode tiếng Việt trong PHP — đọc qua
+        // trans('messages.auth.validation.*').
+        'validation' => [
+            'email_required'    => 'Vui lòng nhập email.',
+            'email_invalid'     => 'Email không hợp lệ.',
+            'email_exists'      => 'Email đã được sử dụng.',
+            'password_required' => 'Vui lòng nhập mật khẩu.',
+            'password_min'      => 'Mật khẩu phải có ít nhất 6 ký tự.',
+            'full_name_required' => 'Vui lòng nhập họ tên.',
+            'phone_required'    => 'Vui lòng nhập số điện thoại.',
+            'phone_invalid'     => 'Số điện thoại không hợp lệ.',
+            'confirm_required'  => 'Vui lòng nhập lại mật khẩu.',
+            'confirm_mismatch'  => 'Mật khẩu nhập lại không khớp.',
+        ],
+        // Thông báo flash khi login/register thất bại.
+        'login_failed'      => 'Email hoặc mật khẩu không đúng, hoặc tài khoản chưa được kích hoạt.',
+        'register_failed'   => 'Đăng ký không thành công. Vui lòng thử lại.',
     ]
 ];

@@ -3,13 +3,15 @@
 namespace App\Models\Entities;
 
 use App\Models\Base\Base;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class OptionValue extends Base
 {
+    use SoftDeletes;
     protected $table = 'option_value';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['productOptionValues'];
+    protected static array $destroyRelations = ['productOptionValues'];
 
     public function descriptions()
     {

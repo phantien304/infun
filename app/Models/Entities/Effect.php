@@ -11,7 +11,7 @@ class Effect extends Base
     protected $table = 'effect';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['ingredientEffects'];
+    protected static array $destroyRelations = ['ingredientEffects'];
 
     public function ingredientEffects()
     {

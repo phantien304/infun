@@ -29,14 +29,6 @@ class ZoneRepository extends QueryableRepository implements ZoneRepositoryInterf
         return ['description'];
     }
 
-    /**
-     * Zones load mọi page render (dropdown chọn tỉnh ở checkout + popup địa
-     * chỉ) → `rememberSystem` luôn cache.
-     *
-     * `rememberSystem` mặc định `perLocale = true` đã tự append locale vào
-     * cuối key — không cần concat thủ công ở đây (double append → key
-     * `zones_vivi` thay vì `zones_vi`).
-     */
     public function listAllCached(): Collection
     {
         return $this->rememberSystem(

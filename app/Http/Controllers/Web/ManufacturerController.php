@@ -2,56 +2,52 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Data\Output\ManufacturerDTO;
+use App\Data\Output\ProductDTO;
 use App\Http\Controllers\Controller;
-use App\Repositories\Client\InfunStudio\ManufacturerRepository;
-use App\Repositories\Client\InfunStudio\ProductRepository;
+use Illuminate\Database\Eloquent\Builder;
 
 class ManufacturerController extends Controller
 {
-    public function __construct(
-        ManufacturerRepository $manufacturerRepository,
-        ProductRepository $productRepository
-    ) {
-        parent::__construct();
-        $this->setRepository($manufacturerRepository);
-        $this->registerRepository($productRepository);
-        $this->_breadcrumbs = [
+    public function __construct()
+    {
+        $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
+            ['text' => trans('messages.breadcrumbs.list_product'), 'href' => route('product.getList'), 'separator' => false],
         ];
     }
 
-    public function index($id)
+    public function index($id = '')
     {
-        $entity = $this->getRepository()->getDetail($id);
-        if (empty($entity)) {
-            return $this->_to('error.404');
+        $id = (int) $id;
+        $entity = $this->manufacturerRepo->getManufacturerDetail($id);
+        if (! $entity) {
+            return $this->toUrl('error.404');
         }
 
-        $this->setBreadcrumb(['text' => $entity->name, 'href' => $entity->getUrlClient(), 'separator' => false]);
+        $manufacturer = ManufacturerDTO::from($entity);
+        $this->setBreadcrumb(['text' => $manufacturer->name, 'href' => $manufacturer->url, 'separator' => false]);
+        $this->processMetaSeo(
+            'buildForSeoByData',
+            (string) ($manufacturer->metaTitle ?: $manufacturer->name),
+            (string) $manufacturer->metaDescription,
+        );
 
-        $this->_processMetaSeo('_buildForSeoByData', $entity->getMetaTitle('name'), $entity->getMetaDescription('name'));
+        $productList = $this->productRepo->list(
+            null,
+            null,
+            fn (Builder $q) => $q->where('product.manufacturer_id', $id),
+        );
+        $productList->setCollection(
+            $productList->getCollection()->map(fn ($model) => ProductDTO::from($model))
+        );
 
-        $this->_processRequest($id);
-
-        $entities = $this->fetchRepository(ProductRepository::class)->getListForFrontend($this->getParams());
-
-        return $this->render('client.infunstudio.manufacturer.list', [
-            'entity' => $entity,
-            'entities' => $entities,
-        ]);
-    }
-
-    protected function _buildDataCommon()
-    {
-        $this->setViewData([
-            'products' => $this->getProductLatest(),
-        ]);
-    }
-
-    protected function _processRequest($id)
-    {
-        request()->merge([
-            'manufacturer_id_eq' => $id
+        return $this->render('web::manufacturer.list', [
+            'entity'         => $manufacturer,
+            'entities'       => $productList,
+            'latestProducts' => ProductDTO::collect($this->getProductLatest()),
+            'sortMenu'       => $this->productRepo->getSortMenu(),
+            'perPageMenu'    => $this->productRepo->getPerPageMenu(),
         ]);
     }
 }

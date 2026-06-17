@@ -90,11 +90,11 @@ class ChannelWriter
             $message .= '|Url:' . data_get($_SERVER, 'REQUEST_URI');
             $message .= '|Agent:' . data_get($_SERVER, 'HTTP_USER_AGENT');
         } else {
-            $command = Request::server('argv', null);
+            $command = $_SERVER['argv'] ?? null;
             if (is_array($command)) {
                 $command = implode(' ', $command);
             }
-            $message .= 'Command: ' . $command;
+            $message .= 'Command: ' . ($command ?? '');
         }
         $this->_requestInfo = $message;
         return $message;

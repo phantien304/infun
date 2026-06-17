@@ -11,10 +11,11 @@ use App\Jobs\OrderCreateSendEmailJob;
 use App\Jobs\OrderCreateSendEmailToAdminJob;
 use App\Models\Entities\OrdersStatus;
 use App\Repositories\Interfaces\CarrierRepositoryInterface;
-use App\Repositories\Interfaces\CouponRepositoryInterface;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\PaymentRepositoryInterface;
-use App\Repositories\Interfaces\VoucherRepositoryInterface;
+use App\Services\Cart\CouponService;
+use App\Services\Cart\GiftService;
+use App\Services\Cart\VoucherService;
 use App\Services\CartService;
 use App\Services\Checkout\CheckoutContext;
 use App\Services\Checkout\CheckoutPaymentService;
@@ -50,9 +51,10 @@ class CheckoutController extends Controller
         protected CheckoutPaymentService $paymentService,
         protected CarrierRepositoryInterface $carrierRepo,
         protected PaymentRepositoryInterface $paymentRepo,
-        protected CouponRepositoryInterface $couponRepo,
-        protected VoucherRepositoryInterface $voucherRepo,
         protected OrderRepositoryInterface $orderRepo,
+        protected CouponService $couponService,
+        protected GiftService $giftService,
+        protected VoucherService $voucherService,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -65,19 +67,41 @@ class CheckoutController extends Controller
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.checkout'), 'href' => route('checkout.index'), 'separator' => true]);
         $this->processMetaSeo('buildForSeoBySetting', 'seo_title_checkout', 'seo_description_checkout');
 
-        $ctx = $this->buildContext();
+        $ctx = $this->buildContext(hasShipping: true);
         [$error, $items] = $this->extractItems($ctx);
         $this->syncCartHeader($items);
         [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
 
-        return $this->render('web.checkout.index', [
-            'carriers'     => $this->carrierRepo->listAllCached(),
-            'payments'     => $this->paymentRepo->listAllCached(),
-            'error'        => $error,
-            'products'     => array_values($items),
-            'totalData'    => $totalData,
-            'total'        => $total,
-            'countProduct' => $this->cart->countItems(),
+        $coupons = $this->couponService->listForCart(
+            $items ?: [],
+            (int) $this->cart->getSubtotal(),
+            (int) getCurrentUserId() ?: null,
+            getUserGroupId() ?: null,
+            contextHasShipping: true,
+        );
+        $gifts = $this->giftService->listForCart($items ?: [], (int) $this->cart->getSubtotal());
+        $giftItems = $this->giftService->resolveGiftDisplayItems();
+        $userEmail = auth()->check() ? (string) auth()->user()->email : '';
+        $myVouchers = $userEmail !== ''
+            ? $this->voucherService->listMyVouchers($userEmail, (int) $this->cart->getSubtotal())
+            : collect();
+        $appliedVoucherCodes = $this->voucherService->getAppliedCodes();
+
+        return $this->render('web::checkout.index', [
+            'carriers'           => $this->carrierRepo->listAllCached(),
+            'payments'           => $this->paymentRepo->listAllCached(),
+            'error'              => $error,
+            'products'           => array_values($items),
+            'totalData'          => $totalData,
+            'total'              => $total,
+            'countProduct'       => $this->cart->countItems(),
+            'coupons'            => $coupons,
+            'appliedCouponCodes' => (array) session()->get('checkout.applied_coupons', []),
+            'couponContext'      => 'checkout',
+            'gifts'              => $gifts,
+            'giftItems'          => $giftItems,
+            'myVouchers'         => $myVouchers,
+            'appliedVoucherCodes' => $appliedVoucherCodes,
         ]);
     }
 
@@ -101,31 +125,55 @@ class CheckoutController extends Controller
             return redirect(route('checkout.cart'))->with('success', trans('messages.SuccessUpdateCart'));
         }
 
-        // Coupon / voucher set qua query string
-        if (filled(request()->get('coupon', ''))) {
-            return $this->applyCouponToSession(redirectRoute: 'checkout.cart');
-        }
-        if (filled(request()->get('voucher', ''))) {
-            return $this->applyVoucherToSession(redirectRoute: 'checkout.cart');
-        }
+        // Bỏ legacy `?coupon=` và `?voucher=` query path — Shopee modal
+        // (POST /checkout/coupons/apply) là entrypoint duy nhất. Bookmark
+        // chứa query coupon cũ sẽ silently bị ignore.
 
         $error = '';
         $items = [];
         $totalData = [];
         $total = 0;
+        $ctx = null;
         if ($this->cart->hasItems()) {
-            $ctx = $this->buildContext();
+            $ctx = $this->buildContext(hasShipping: false);
             [$error, $items] = $this->extractItems($ctx);
             [$totalData, $total] = $this->totalService->build($ctx, withShipping: false);
         }
         $this->syncCartHeader($items);
 
-        return $this->render('web.checkout.cart', [
-            'error'        => $error,
-            'products'     => array_values($items),
-            'totalData'    => $totalData,
-            'total'        => $total,
-            'countProduct' => $this->cart->countItems(),
+        $coupons = $this->couponService->listForCart(
+            $items ?: [],
+            (int) $this->cart->getSubtotal(),
+            (int) getCurrentUserId() ?: null,
+            getUserGroupId() ?: null,
+            contextHasShipping: false,
+        );
+
+        $effectiveCodes = $ctx
+            ? array_map(fn ($a) => (string) $a['coupon']->code, $ctx->appliedCoupons)
+            : [];
+
+        $gifts = $this->giftService->listForCart($items ?: [], (int) $this->cart->getSubtotal());
+        $giftItems = $this->giftService->resolveGiftDisplayItems();
+        $userEmail = auth()->check() ? (string) auth()->user()->email : '';
+        $myVouchers = $userEmail !== ''
+            ? $this->voucherService->listMyVouchers($userEmail, (int) $this->cart->getSubtotal())
+            : collect();
+        $appliedVoucherCodes = $this->voucherService->getAppliedCodes();
+
+        return $this->render('web::checkout.cart', [
+            'error'              => $error,
+            'products'           => array_values($items),
+            'totalData'          => $totalData,
+            'total'              => $total,
+            'countProduct'       => $this->cart->countItems(),
+            'coupons'            => $coupons,
+            'appliedCouponCodes' => $effectiveCodes,
+            'couponContext'      => 'cart',
+            'gifts'              => $gifts,
+            'giftItems'          => $giftItems,
+            'myVouchers'         => $myVouchers,
+            'appliedVoucherCodes' => $appliedVoucherCodes,
         ]);
     }
 
@@ -143,11 +191,18 @@ class CheckoutController extends Controller
             return errValidator(trans('messages.ErrorNotFoundProduct'), 200);
         }
 
-        $this->cart->add([
+        $result = $this->cart->tryAdd([
             'id'       => $product->id,
             'quantity' => $params['quantity'] ?? 1,
             'option'   => $params['option'] ?? [],
         ]);
+
+        if (! ($result['ok'] ?? false)) {
+            return errValidator(
+                $this->buildAddToCartError($product, $result),
+                200,
+            );
+        }
         $this->syncCartHeader();
 
         return successData('AddSuccess', [
@@ -157,8 +212,42 @@ class CheckoutController extends Controller
                 $product->description->name ?? ''
             ),
             'total_cart_header' => session()->get('total_cart_header'),
-            'link_cart'         => routeArea('checkout.cart'),
+            'link_cart'         => route('checkout.cart'),
         ]);
+    }
+
+    protected function buildAddToCartError($product, array $result): string
+    {
+        $name = $product->description->name ?? '';
+
+        if (($result['reason'] ?? '') === 'out_of_stock') {
+            $available = (int) ($result['available'] ?? 0);
+            $already   = (int) ($result['already_in_cart'] ?? 0);
+            $requested = (int) ($result['requested'] ?? 0);
+            $totalWanted = $already + $requested;
+
+            if ($available <= 0) {
+                return sprintf(trans('messages.ErrorStockProduct'), $name);
+            }
+            if ($already > 0) {
+                return sprintf(
+                    'Sản phẩm <b style="color: #d81800;">%s</b>: bạn đã có %d trong giỏ, yêu cầu thêm %d (tổng %d) nhưng kho chỉ còn %d.',
+                    $name,
+                    $already,
+                    $requested,
+                    $totalWanted,
+                    $available,
+                );
+            }
+            return sprintf(
+                'Sản phẩm <b style="color: #d81800;">%s</b>: bạn yêu cầu %d nhưng kho chỉ còn %d.',
+                $name,
+                $requested,
+                $available,
+            );
+        }
+
+        return trans('messages.ErrorNotFoundProduct');
     }
 
     public function consultSign(CheckoutAddToCartRequest $request)
@@ -282,7 +371,7 @@ class CheckoutController extends Controller
             return redirect(route('account.detailOrder', ['id' => $id]))->with('failed', trans('messages.ErrorAction'));
         }
 
-        return $this->render('web.checkout.repayment', [
+        return $this->render('web::checkout.repayment', [
             'payments' => $this->paymentRepo->listAllCached(),
             'error'    => '',
             'entity'   => $entity,
@@ -324,7 +413,7 @@ class CheckoutController extends Controller
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.checkout_success'), 'href' => route('checkout.success'), 'separator' => true]);
         $this->processMetaSeo('buildForSeoBySetting', 'seo_title_checkout_success', 'seo_description_checkout_success');
 
-        return $this->render('web.checkout.success', [
+        return $this->render('web::checkout.success', [
             'entity' => $entity,
         ]);
     }
@@ -335,7 +424,15 @@ class CheckoutController extends Controller
      * Build context cho 1 request checkout — gồm cart items, coupon, voucher
      * đã resolve. Mọi service downstream nhận context này thay vì tự query.
      */
-    protected function buildContext(): CheckoutContext
+    /**
+     * @param  bool  $hasShipping  Whether the current render path will
+     *   include a shipping fee in the running total. Forwarded to
+     *   CouponService::applyCodes so free-ship coupons stored in the
+     *   session don't appear as "applied" on the cart page where the
+     *   discount would be invisible. Default TRUE for safe behaviour at
+     *   callers that still build the context for the order-create path.
+     */
+    protected function buildContext(bool $hasShipping = true): CheckoutContext
     {
         $items = $this->cart->getItems();
         $subtotal = $this->cart->getSubtotal();
@@ -343,11 +440,28 @@ class CheckoutController extends Controller
         $ctx = new CheckoutContext();
         $ctx->setItems($items);
 
-        if (filled(session()->get('coupon'))) {
-            $ctx->setCoupon($this->couponRepo->resolveCoupon((string) session()->get('coupon'), $items, $subtotal));
-        }
-        if (filled(session()->get('voucher'))) {
-            $ctx->setVoucher($this->voucherRepo->resolveVoucher((string) session()->get('voucher')));
+        // Legacy session('coupon') + session('voucher') + resolveCoupon/resolveVoucher
+        // đã bỏ — flow Shopee multi-coupon là single source of truth. Voucher
+        // (gift card) sẽ refactor riêng ở phase voucher cluster.
+
+        // Shopee multi-coupon — re-resolve every request so the result
+        // reflects post-mutation cart state (e.g. user removed an item and
+        // dropped below the coupon's min_subtotal).
+        $codes = (array) session()->get('checkout.applied_coupons', []);
+        if (! empty($codes)) {
+            $applyResult = $this->couponService->applyCodes(
+                $codes,
+                $items,
+                (int) $subtotal,
+                (int) getCurrentUserId() ?: null,
+                getUserGroupId() ?: null,
+                contextHasShipping: $hasShipping,
+            );
+            $ctx->setAppliedCoupons(
+                $applyResult['applied'],
+                $applyResult['freeship'],
+                $applyResult['total_discount'],
+            );
         }
 
         return $ctx;
@@ -377,36 +491,6 @@ class CheckoutController extends Controller
         }
 
         return ['', $items];
-    }
-
-    protected function applyCouponToSession(string $redirectRoute)
-    {
-        $code = (string) request()->get('coupon');
-        $items = $this->cart->getItems();
-        $subtotal = $this->cart->getSubtotal();
-        $resolved = $this->couponRepo->resolveCoupon($code, $items, $subtotal);
-
-        if (empty($resolved)) {
-            return redirect(route($redirectRoute))->with('failed', trans('messages.ErrorCoupon'));
-        }
-
-        session()->put('coupon', $code);
-
-        return redirect(route($redirectRoute))->with('success', trans('messages.SuccessAddCoupon'));
-    }
-
-    protected function applyVoucherToSession(string $redirectRoute)
-    {
-        $code = (string) request()->get('voucher');
-        $resolved = $this->voucherRepo->resolveVoucher($code);
-
-        if (empty($resolved)) {
-            return redirect(route($redirectRoute))->with('failed', trans('messages.ErrorVoucher'));
-        }
-
-        session()->put('voucher', $code);
-
-        return redirect(route($redirectRoute))->with('success', trans('messages.SuccessAddVoucher'));
     }
 
     protected function syncCartHeader(?array $items = null): void

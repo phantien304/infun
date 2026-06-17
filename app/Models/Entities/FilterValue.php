@@ -9,7 +9,7 @@ class FilterValue extends Base
     protected $table = 'filter_value';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['productFilters'];
+    protected static array $destroyRelations = ['productFilters'];
 
     public function descriptions()
     {

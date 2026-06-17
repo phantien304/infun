@@ -1,14 +1,42 @@
 <?php
 
-namespace App\Jobs\Client\InfunStudio;
+namespace App\Jobs;
 
-class VerifyEmailJob extends BaseInfunStudioJob
+use App\Mail\Web\JobMailer;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+
+/**
+ * Gửi email xác thực tài khoản sau khi đăng ký (AuthService::register).
+ *
+ * Job convention mới (xem CLAUDE.md "Jobs"): implements ShouldQueue + 4 trait
+ * Laravel, inject JobMailer qua handle(). KHÔNG còn extends
+ * `BaseInfunStudioJob` / method `_handle()` legacy.
+ *
+ * Link xác thực = config_domain + url.verify_email + base64(code+'+'+email).
+ */
+class VerifyEmailJob implements ShouldQueue
 {
-    protected function _handle()
-    {
-        $params = $this->getParams();
-        $link = getConfigDb('config_domain') . getInfunStudioConfig('url.verify_email') . base64_encode($params[0] . '+' . $params[1]);
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
-        $this->getMailer()->verifyEmail($params[1], $link);
+    public function __construct(
+        public string $code,
+        public string $email,
+    ) {
+    }
+
+    public function handle(JobMailer $mailer): void
+    {
+        $domain = rtrim((string) (getConfigDb('config_domain') ?: config('app.url')), '/');
+        $path = ltrim((string) getModuleConfig('url.verify_email'), '/');
+        $link = $domain . '/' . $path . base64_encode($this->code . '+' . $this->email);
+
+        $mailer->verifyEmail($this->email, $link);
     }
 }

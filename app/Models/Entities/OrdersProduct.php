@@ -9,7 +9,7 @@ class OrdersProduct extends Base
     protected $table = 'orders_product';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $destroyRelations = ['ordersProductOptions'];
+    protected static array $destroyRelations = ['ordersProductOptions'];
 
     public function ordersProductOptions()
     {

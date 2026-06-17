@@ -111,8 +111,11 @@ a {
 .fix {
   overflow: hidden; }
 
-.hidden {
-  display: none; }
+/* .hidden { display: none; } */
+/* Disabled — conflict với Tailwind utility .hidden trong @layer utilities.
+   CSS Cascade rule: unlayered styles (như rule này) THẮNG mọi layered styles
+   bất chấp thứ tự load → Tailwind .lg\:flex bị override → menu desktop ẩn.
+   Tailwind .hidden replicate hành vi này nên không mất gì. */
 
 .clear {
   clear: both; }

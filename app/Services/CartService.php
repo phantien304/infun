@@ -5,58 +5,96 @@ namespace App\Services;
 use App\Models\Entities\Option;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductOption;
+use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
 use App\Models\Entities\ProductVariantAttribute;
 use Illuminate\Support\Facades\DB;
 
-/**
- * CartService — quản lý giỏ hàng theo schema cluster variant mới.
- *
- * Khác biệt so với Helpers\Cart legacy:
- *  - Lúc add: resolve combo (option_id => option_value_id) → product_variant_id
- *    qua bảng product_variant_attribute. Variant không tồn tại = invalid, từ chối.
- *  - Giá: đọc product_variant.price (absolute, KHÔNG còn delta '+'/'-').
- *    Fallback product.price khi product simple (has_variants = false).
- *  - Tồn: product_stock.on_hand - product_stock.reserved. Không còn cộng/trừ
- *    quantity của option_value_2.
- *  - Custom field (Option::ROLE_CUSTOM_FIELD): chỉ lưu user input để hiển thị +
- *    ghi xuống orders_product_option khi tạo order; KHÔNG ảnh hưởng giá/tồn/SKU.
- *
- * Session shape:
- *   cart[$key] = [
- *     'product_id'         => int,
- *     'product_variant_id' => ?int,
- *     'quantity'           => int,
- *     'variant_attributes' => [{option_id, option_value_id}],
- *     'custom_options'     => [{product_option_id, option_id, name, type, value, required}],
- *   ]
- *
- * Caller (CheckoutController / blade cart) chỉ dùng `getItems()` để lấy dữ liệu
- * đã enrich. `add/update/remove/clear` mutate session.
- */
 class CartService
 {
-    /** Cache items đã enrich trong 1 request — getItems() có thể bị gọi nhiều
-     *  lần (countProducts, hasStock, getSubtotal). */
-    protected ?array $cache = null;
+    protected ?array $resolvedItems = null;
 
-    /** Tổng hợp shipping tính lúc enrich items (width/height/length/weight tích
-     *  luỹ); ghi xuống session để CheckoutTotalService dùng ở bước tính phí ship. */
     protected array $shipping = ['width' => 0, 'height' => 0, 'length' => 0, 'weight' => 0];
 
-    public function add(array $payload): void
+    public function tryAdd(array $payload): array
     {
         $productId = (int) ($payload['id'] ?? 0);
         $quantity = max(1, (int) ($payload['quantity'] ?? 1));
         $optionPayload = (array) ($payload['option'] ?? []);
 
         if ($productId <= 0) {
-            return;
+            return ['ok' => false, 'reason' => 'invalid_product'];
         }
 
-        [$productVariantAttributes, $customOptions] = $this->splitOptionPayload($productId, $optionPayload);
+        [$productVariantAttributes, $customOptions] = $this->splitOptionPayload($optionPayload);
         $variantId = $this->resolveVariantId($productId, $productVariantAttributes);
 
+        $key = $this->makeKey($productId, $variantId, $customOptions);
+        $alreadyInCart = (int) (session()->get('cart.'.$key.'.quantity', 0));
+        $totalAfter = $alreadyInCart + $quantity;
+
+        if (! getConfigDb('config_stock_checkout')) {
+            $this->persistLine($productId, $variantId, $quantity, $productVariantAttributes, $customOptions);
+            return ['ok' => true, 'variant_id' => $variantId, 'quantity' => $quantity];
+        }
+
+        $product = Product::with(['defaultVariant.productStock'])->find($productId);
+        if (! $product) {
+            return ['ok' => false, 'reason' => 'invalid_product'];
+        }
+
+        $variant = $variantId
+            ? ProductVariant::with(['productStock'])->find($variantId)
+            : null;
+
+        if (! $this->checkStock($product, $variant, $totalAfter)) {
+            return [
+                'ok'              => false,
+                'reason'          => 'out_of_stock',
+                'available'       => $this->resolveAvailable($product, $variant),
+                'requested'       => $quantity,
+                'already_in_cart' => $alreadyInCart,
+            ];
+        }
+
+        $this->persistLine($productId, $variantId, $quantity, $productVariantAttributes, $customOptions);
+
+        return ['ok' => true, 'variant_id' => $variantId, 'quantity' => $quantity];
+    }
+
+    protected function resolveAvailable(Product $product, ?ProductVariant $variant): int
+    {
+        $stock = $variant?->productStock ?? $product->defaultVariant?->productStock;
+
+        if (! ($stock instanceof ProductStock)) {
+            return 0;
+        }
+
+        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
+        if (
+            $policy === (int) getCoreConfig('stock.policy.untracked')
+            || $policy === (int) getCoreConfig('stock.policy.backorder')
+        ) {
+            return PHP_INT_MAX;
+        }
+
+        $onHand   = (int) ($stock->on_hand ?? 0);
+        $reserved = (int) ($stock->reserved ?? 0);
+
+        return max(0, $onHand - $reserved);
+    }
+
+    /**
+     * Persist (or merge) one cart line. Shared by add() and tryAdd() so the
+     * two entry points stay in lock-step on session shape.
+     */
+    protected function persistLine(
+        int $productId,
+        ?int $variantId,
+        int $quantity,
+        array $variantAttributes,
+        array $customOptions,
+    ): void {
         $key = $this->makeKey($productId, $variantId, $customOptions);
 
         $existing = session()->get('cart.'.$key);
@@ -67,12 +105,12 @@ class CartService
                 'product_id'         => $productId,
                 'product_variant_id' => $variantId,
                 'quantity'           => $quantity,
-                'variant_attributes' => $productVariantAttributes,
+                'variant_attributes' => $variantAttributes,
                 'custom_options'     => $customOptions,
             ]);
         }
 
-        $this->cache = null;
+        $this->resolvedItems = null;
     }
 
     public function update(string $key, int $qty): void
@@ -82,22 +120,26 @@ class CartService
         } else {
             session()->forget('cart.'.$key);
         }
-        $this->cache = null;
+        $this->resolvedItems = null;
     }
 
     public function remove(string $key): void
     {
         session()->forget('cart.'.$key);
-        $this->cache = null;
+        $this->resolvedItems = null;
     }
 
     public function clear(): void
     {
         session()->forget('cart');
         session()->forget('total_cart_header');
-        session()->forget('coupon');
-        session()->forget('voucher');
-        $this->cache = null;
+        // reward: điểm thưởng user chọn áp vào đơn (CheckoutTotalService đọc
+        // session('reward')). Phải reset khi order xong để không rò sang đơn sau.
+        session()->forget('reward');
+        session()->forget('checkout.applied_coupons');
+        session()->forget('checkout.applied_gifts');
+        session()->forget('checkout.applied_vouchers');
+        $this->resolvedItems = null;
     }
 
     public function hasItems(): bool
@@ -107,18 +149,17 @@ class CartService
 
     public function getItems(): array
     {
-        if ($this->cache !== null) {
-            return $this->cache;
+        if ($this->resolvedItems !== null) {
+            return $this->resolvedItems;
         }
 
         $raw = session()->get('cart', []);
         if (empty($raw)) {
             session()->put('cart_shipping', $this->shipping);
 
-            return $this->cache = [];
+            return $this->resolvedItems = [];
         }
 
-        // Eager-load products + variants 1 lần để tránh N+1 ở foreach
         $productIds = collect($raw)->pluck('product_id')->unique()->all();
         $variantIds = collect($raw)->pluck('product_variant_id')->filter()->unique()->all();
 
@@ -126,6 +167,7 @@ class CartService
             'description',
             'productSpecial',
             'weightClass',
+            'defaultVariant.productStock',
         ])->whereIn('id', $productIds)->dateAvailable()->get()->keyBy('id');
 
         $variants = $variantIds
@@ -133,9 +175,10 @@ class CartService
                 'productStock',
                 'description',
                 'productVariantAttributes.optionValue.description',
-                // Load productVariantSpecial để resolvePrice trả giá campaign
-                // khi active, không lấy variant.price tĩnh. Mirror logic detail
-                // page (ProductOptionService::resolveVariantPricing).
+                // Metadata option (name/type) cho buildVariantDisplay — không
+                // eager-load thì $attr->option lazy-load mỗi attribute mỗi dòng
+                // giỏ (N+1) khi render cart/checkout.
+                'productVariantAttributes.option.description',
                 'productVariantSpecial',
             ])->whereIn('id', $variantIds)->get()->keyBy('id')
             : collect();
@@ -146,7 +189,6 @@ class CartService
         foreach ($raw as $key => $row) {
             $product = $products->get($row['product_id'] ?? 0);
             if (! $product) {
-                // Product bị xoá / hết hạn → dọn khỏi cart
                 $this->remove($key);
                 continue;
             }
@@ -156,7 +198,9 @@ class CartService
             $price = $this->resolvePrice($product, $variant);
             $stockOk = $this->checkStock($product, $variant, (int) $row['quantity']);
 
-            $name = $product->description->name ?? '';
+            $desc = $product->description;
+            $name = $desc->name ?? '';
+            $slug = resolveSlug($desc->slug ?? null, $name);
             $image = $product->image;
 
             $variantLabel = $this->buildVariantLabel($variant);
@@ -174,10 +218,10 @@ class CartService
                 'quantity'           => $quantity,
                 'minimum'            => $product->minimum,
                 'subtract'           => $product->subtract,
-                'stock'              => $stockOk,
+                'in_stock'           => $stockOk,
                 'price'              => $price,
                 'total'              => $price * $quantity,
-                'reward'             => 0, // ProductReward đọc riêng nếu cần — không gắn vào cart
+                'reward'             => 0,
                 'points'             => 0,
                 'weight'             => ($product->weight ?? 0) * $quantity,
                 'weight_class_id'    => $product->weight_class_id,
@@ -185,7 +229,7 @@ class CartService
                 'width'              => $product->width,
                 'height'             => $product->height,
                 'length_class_id'    => $product->length_class_id,
-                'url'                => method_exists($product, 'getUrlClient') ? $product->getUrlClient() : '#',
+                'url'                => buildUrl($slug, getModuleConfig('url.product'), $product->id),
                 'variant_label'      => $variantLabel,
                 'option'             => $variantDisplay,
                 'custom_options'     => $row['custom_options'] ?? [],
@@ -201,7 +245,7 @@ class CartService
 
         session()->put('cart_shipping', $this->shipping);
 
-        return $this->cache = $items;
+        return $this->resolvedItems = $items;
     }
 
     public function getSubtotal(): int
@@ -217,7 +261,7 @@ class CartService
     public function hasStock(): bool
     {
         foreach ($this->getItems() as $item) {
-            if (! $item['stock']) {
+            if (! $item['in_stock']) {
                 return false;
             }
         }
@@ -242,18 +286,7 @@ class CartService
         return null;
     }
 
-    /**
-     * Tách form payload thành 2 nhánh: (a) variant attributes — (option_id,
-     * option_value_id) để resolve variant; (b) custom_options — input user
-     * điền cho custom field.
-     *
-     * Form contract: `option[$outerId][option_id|product_option_value_id|value|type|...]`
-     * `$outerId` = product_option.id (custom field) hoặc option.id (variant). Để
-     * phân nhánh chuẩn cần đọc Option.role:
-     *  - ROLE_VARIANT  → đưa vào variant_attributes (cần option_id + option_value_id).
-     *  - ROLE_CUSTOM_FIELD → đưa vào custom_options.
-     */
-    protected function splitOptionPayload(int $productId, array $payload): array
+    protected function splitOptionPayload(array $payload): array
     {
         if (empty($payload)) {
             return [[], []];
@@ -313,18 +346,24 @@ class CartService
     }
 
     /**
-     * Resolve product_variant_id từ (product_id, [(option_id, option_value_id)]).
+     * Resolve product_variant_id from (product_id, [(option_id, option_value_id)]).
      *
-     * Strategy: với mỗi variant của product, đối chiếu tập attribute. Variant
-     * có cùng số attribute và mọi cặp khớp = match. Trả id; không match = null.
+     * Strategy: walk the product's variants, compare attribute sets. A
+     * variant with the same attribute count and every (option_id =>
+     * option_value_id) pair matching is a hit.
      *
-     * Trường hợp product không có variant (simple product) hoặc payload không
-     * có variant attribute nào → trả null, caller xử lý fallback giá product.
+     * Simple products (no payload attributes) used to return NULL and have
+     * every downstream caller branch on it. Post-unify migration, every
+     * product owns a default variant, so we look that one up and link the
+     * cart line to it — stock + audit then go through product_stock for
+     * every line uniformly. Falls back to NULL only if the default variant
+     * is genuinely missing (data drift; downstream code keeps the legacy
+     * product.quantity path as a safety net).
      */
     protected function resolveVariantId(int $productId, array $productVariantAttributes): ?int
     {
         if (empty($productVariantAttributes)) {
-            return null;
+            return $this->resolveDefaultVariantId($productId);
         }
 
         $needed = collect($productVariantAttributes)
@@ -358,6 +397,25 @@ class CartService
     }
 
     /**
+     * Lookup the default variant id for a product. Simple products own
+     * exactly one (is_default = 1) thanks to the unify migration; variant
+     * products usually have one too (the primary tuple admins flag is_default).
+     * Returns null only on data drift — caller falls back to legacy path.
+     */
+    protected function resolveDefaultVariantId(int $productId): ?int
+    {
+        $id = ProductVariant::query()
+            ->where('product_id', $productId)
+            ->whereNull('deleted_at')
+            ->orderByDesc('is_default')
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
+    /**
      * Giá tính tiền cho 1 line cart:
      *  - Có variant: COALESCE(variantSpecial.price, variant.price). Variant
      *    KHÔNG dùng product_special (Hướng B, xem CLAUDE.md). Logic mirror
@@ -385,31 +443,46 @@ class CartService
         return (int) $product->price;
     }
 
+    /**
+     * Decide whether `$quantity` more units of this product can enter the
+     * cart. Single source of truth: product_stock + inventory_policy.
+     *
+     * The check honours three policies (see core.stock.policy):
+     *  - DENY      → block once available drops below the requested qty
+     *  - BACKORDER → always green-light; admin sees the backlog via
+     *                stock_movement (`bán khống` semantics)
+     *  - UNTRACKED → always green-light; the row exists only to keep the
+     *                cart pipeline uniform
+     *
+     * Resolution order:
+     *  1. Variant carried on the cart line → its productStock.
+     *  2. Product's default variant → its productStock. Covers cart lines
+     *     for simple products that haven't been linked yet.
+     *
+     * No legacy product.quantity / product.subtract fallback. Per the
+     * pseudo-variant decision, every product MUST own a default variant
+     * + product_stock row (created by the unify migration). Anything
+     * missing that pair is a data error and the gate stays strict —
+     * silently falling back to legacy columns was the source of the
+     * earlier "available 30 but rejected" drift on product 46819.
+     */
     protected function checkStock(Product $product, ?ProductVariant $variant, int $quantity): bool
     {
         if (! getConfigDb('config_stock_checkout')) {
             return true;
         }
 
-        if ($variant) {
-            $stock = $variant->productStock;
-            // Stock NULL = data drift (variant chưa có row product_stock). Cho
-            // qua cùng pattern với ProductOptionService::buildVariantMatrix
-            // (coi như không track stock) — không chặn add-to-cart vì lý do
-            // schema. Stock thực sẽ được verify khi tạo order.
-            if (! $stock) {
-                return true;
-            }
-            $available = (int) $stock->on_hand - (int) $stock->reserved;
+        $stock = $variant?->productStock
+            ?? $product->defaultVariant?->productStock;
 
-            return $available >= $quantity;
+        if (! ($stock instanceof ProductStock)) {
+            // Missing stock row = unmigrated product. Block until admin
+            // backfills; refusing here surfaces the data issue instead of
+            // hiding it behind product.quantity.
+            return false;
         }
 
-        if (! $product->subtract) {
-            return true;
-        }
-
-        return (int) $product->quantity >= $quantity;
+        return $stock->canSell($quantity);
     }
 
     protected function buildVariantLabel(?ProductVariant $variant): string

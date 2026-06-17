@@ -22,7 +22,6 @@ class DetectArea
             $area = $route->getAction('area') ?: 'web';
 
             app('mystorage')->setCurrentArea($area);
-            app('channellog')->setCurrentArea($area);
 
             $request->attributes->set('area', $area);
         }

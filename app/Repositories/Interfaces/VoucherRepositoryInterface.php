@@ -2,14 +2,36 @@
 
 namespace App\Repositories\Interfaces;
 
+use App\Models\Entities\Voucher;
 use App\Repositories\Base\BaseRepositoryInterface;
+use Illuminate\Support\Collection;
 
 interface VoucherRepositoryInterface extends BaseRepositoryInterface
 {
     /**
-     * Resolve voucher code thành mảng thông tin để service tính tiền dùng.
-     * Trả [] nếu voucher hết hạn / đã dùng hết amount / chưa được kích hoạt
-     * (voucher gắn order phải qua trạng thái complete).
+     * [Legacy] Resolve voucher code thành mảng — giữ backward compat cho
+     * caller cũ. Code mới gọi `findByCode` + `VoucherService::validate`.
      */
     public function resolveVoucher(?string $code): array;
+
+    public function findByCode(string $code): ?Voucher;
+
+    /**
+     * Batch lookup nhiều code trong 1 query (tránh N+1 ở resolveApplied).
+     * Trả Collection keyBy 'code' để caller `->get($code)`.
+     *
+     * @param  array<int, string>  $codes
+     * @return Collection<string, Voucher>
+     */
+    public function findByCodes(array $codes): Collection;
+
+    /**
+     * Voucher gắn cho user (gửi tới email) — Shopee "Voucher của tôi" tab.
+     * Trả CẢ expired/fully_used để hiển thị state, service filter khi áp.
+     *
+     * @return Collection<int, Voucher>
+     */
+    public function listForEmail(string $email): Collection;
+
+    public function flushCache(): void;
 }

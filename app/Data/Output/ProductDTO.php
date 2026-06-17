@@ -5,6 +5,7 @@ namespace App\Data\Output;
 use App\Data\Concerns\HasThumbnail;
 use App\Data\Concerns\LazyData;
 use App\Models\Entities\Product;
+use App\Models\Entities\ProductStock;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Spatie\LaravelData\Data;
@@ -39,6 +40,11 @@ class ProductDTO extends Data
         public ?float $minVariantPrice,
         public ?float $maxVariantPrice,
         public ?int $maxVariantDiscountPercent,
+        // Aggregated availability signal — true when at least one variant
+        // (or the default variant for simple products) is sellable under
+        // its inventory_policy. Replaces the legacy `quantity > 0` check
+        // that blade pages used to gate the "Mua hàng" button.
+        public bool $inStock,
         public ?int $isAddCart,
         public ?int $isCustom,
         public ?int $isReview,
@@ -111,6 +117,7 @@ class ProductDTO extends Data
             maxVariantPrice: isset($product->max_variant_price) ? (float) $product->max_variant_price : null,
             maxVariantDiscountPercent: isset($product->max_variant_discount_percent)
                 ? (int) $product->max_variant_discount_percent : null,
+            inStock: self::resolveInStock($product),
             isAddCart: $product->is_add_cart,
             isCustom: $product->is_custom,
             isReview: $product->is_review,
@@ -269,14 +276,108 @@ class ProductDTO extends Data
         return [$min, $max];
     }
 
+    /**
+     * Resolve the headline stock label shown on product cards / detail pages.
+     *
+     * Source of truth: product_stock + inventory_policy. For variant
+     * products we surface the first sellable variant we find (one that
+     * canSell(1) under its policy). If every variant is out of stock we
+     * keep the stockStatus name / text_outstock label. The detail page's
+     * variant swatches show the granular per-variant numbers on click.
+     *
+     * For simple products we read the default variant's stock row.
+     *
+     * No legacy product.quantity branch. A missing stock row is treated
+     * as out-of-stock so the label stays consistent with what
+     * CartService::checkStock will allow.
+     */
     private static function formatStock(Product $product): string
     {
-        if ($product->quantity <= 0) {
+        if ($product->relationLoaded('productVariants') && $product->productVariants->isNotEmpty()) {
+            foreach ($product->productVariants as $variant) {
+                $stock = $variant->productStock ?? null;
+                if ($stock instanceof ProductStock && $stock->canSell(1)) {
+                    return self::stockLabelFromPolicy($product, $stock);
+                }
+            }
             return $product->stockStatus?->name
                 ?? getModuleConfig('product.text_outstock');
         }
+
+        $stock = $product->relationLoaded('defaultVariant')
+            ? $product->defaultVariant?->productStock
+            : null;
+
+        if (! ($stock instanceof ProductStock)) {
+            return $product->stockStatus?->name
+                ?? getModuleConfig('product.text_outstock');
+        }
+
+        return self::stockLabelFromPolicy($product, $stock);
+    }
+
+    /**
+     * Aggregate sellable signal across the product's variants.
+     *
+     * - Variant product: true if ANY variant can sell at least one unit
+     *   under its inventory_policy (BACKORDER / UNTRACKED always sellable;
+     *   DENY needs available > 0). Falls back to defaultVariant if the
+     *   full variant list isn't eager-loaded.
+     * - Simple product: just the default variant's check.
+     *
+     * Returns false when no stock data is loaded — matches the strict-deny
+     * behaviour of CartService::checkStock so the UI label and the cart
+     * gate stay in lock-step.
+     */
+    private static function resolveInStock(Product $product): bool
+    {
+        if ($product->relationLoaded('productVariants') && $product->productVariants->isNotEmpty()) {
+            foreach ($product->productVariants as $variant) {
+                $stock = $variant->productStock ?? null;
+                if (! ($stock instanceof ProductStock)) {
+                    continue;
+                }
+                if ($stock->canSell(1)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        $stock = $product->relationLoaded('defaultVariant')
+            ? $product->defaultVariant?->productStock
+            : null;
+
+        return $stock instanceof ProductStock && $stock->canSell(1);
+    }
+
+    private static function stockLabelFromPolicy(Product $product, ProductStock $stock): string
+    {
+        // NULL-safe: legacy rows may pre-date the inventory_policy column
+        // and would otherwise compare null against the enum values and
+        // slip to out-of-stock.
+        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
+        $available = max(0, (int) ($stock->on_hand ?? 0) - (int) ($stock->reserved ?? 0));
+
+        if ($policy === (int) getCoreConfig('stock.policy.untracked')) {
+            return getModuleConfig('product.text_instock');
+        }
+
+        if ($policy === (int) getCoreConfig('stock.policy.backorder') && $available <= 0) {
+            // Backorder ("bán khống"): keep the buy button live, but tell
+            // the user the item ships later. Label is config-driven so the
+            // store can swap it for "Đặt trước" / "Pre-order" / etc.
+            return getModuleConfig('product.text_backorder')
+                ?? 'Đặt trước - giao sau';
+        }
+
+        if ($available <= 0) {
+            return $product->stockStatus?->name
+                ?? getModuleConfig('product.text_outstock');
+        }
+
         if (getConfigDb('config_stock_display')) {
-            return (string) $product->quantity;
+            return (string) $available;
         }
         return getModuleConfig('product.text_instock');
     }

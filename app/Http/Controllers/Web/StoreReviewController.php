@@ -45,7 +45,7 @@ class StoreReviewController extends Controller
             $storeReviewDTO->metaDescription
         );
 
-        return $this->render('web.storeReview.index', [
+        return $this->render('web::storeReview.index', [
             'entity' => $storeReviewDTO
         ]);
     }
@@ -58,7 +58,7 @@ class StoreReviewController extends Controller
 
         $entities = StoreReviewDTO::collect($this->storeReviewRepo->list());
 
-        return $this->render('web.storeReview.list', [
+        return $this->render('web::storeReview.list', [
             'entities'    => $entities,
             'sortMenu'    => $this->storeReviewRepo->getSortMenu(),
             'perPageMenu' => $this->storeReviewRepo->getPerPageMenu(),

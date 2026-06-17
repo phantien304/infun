@@ -2,42 +2,57 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Data\Output\InformationDTO;
 use App\Http\Controllers\Controller;
-use App\Repositories\Client\InfunStudio\BannerRepository;
-use App\Repositories\Client\InfunStudio\InformationRepository;
+use App\Repositories\Interfaces\InformationRepositoryInterface;
 
+/**
+ * Trang nội dung tĩnh (giới thiệu / chính sách...). Route đi qua catch-all
+ * `/{slug?}` → HomeController::index → getControllerBySlug parse slug
+ * (`getModuleConfig('url.information')` = 'i') → forward về index($id).
+ *
+ * Refactor sang pattern mới (xem CLAUDE.md "Cũ vs Mới"):
+ *  - DI `InformationRepositoryInterface` (auto-bind ở AppServiceProvider).
+ *  - DTO `InformationDTO` thay raw model + method legacy `getUrlClient()`.
+ *  - `processMetaSeo` / `toUrl` thay `_processMetaSeo` / `_to`.
+ *  - relation `description` (đã `->forLocale()`) thay `informationDescription`.
+ */
 class InformationController extends Controller
 {
     public function __construct(
-        InformationRepository $informationRepository,
-        BannerRepository $bannerRepository
+        protected InformationRepositoryInterface $informationRepo,
     ) {
-        parent::__construct();
-        $this->setRepository($informationRepository);
-        $this->registerRepository($bannerRepository);
-        $this->_breadcrumbs = [
-            ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false]
+        $this->breadcrumbs = [
+            ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
         ];
     }
 
     public function index($id = '')
     {
-        $entity = $this->getRepository()->getDetail($id);
-        if (empty($entity) || !isset($entity->informationDescription)) {
-            return $this->_to('error.404');
+        $entity = $this->informationRepo->getDetail($id);
+        if (empty($entity) || empty($entity->description)) {
+            return $this->toUrl('error.404');
         }
-        $this->_updateViewed($entity);
 
-        $this->setBreadcrumb(['text' => $entity->informationDescription->title, 'href' => $entity->informationDescription->getUrlClient(), 'separator' => false]);
+        // Tăng view counter — guard vì không phải mọi schema `information` đều
+        // có cột `viewed`; lỗi đếm view KHÔNG được phá trang.
+        try {
+            $entity->increment('viewed');
+        } catch (\Throwable $exception) {
+            logError($exception->getMessage());
+        }
 
-        $this->_processMetaSeo(
-            '_buildForSeoByData',
-            $entity->informationDescription->getMetaTitle(),
-            $entity->informationDescription->getMetaDescription()
+        $informationDTO = InformationDTO::from($entity)->include('content');
+
+        $this->setBreadcrumb(['text' => $informationDTO->title, 'href' => $informationDTO->url, 'separator' => false]);
+        $this->processMetaSeo(
+            'buildForSeoByData',
+            $informationDTO->metaTitle ?: $informationDTO->title,
+            $informationDTO->metaDescription ?: $informationDTO->description,
         );
 
-        return $this->render('client.infunstudio.information.index', [
-            'entity' => $entity
+        return $this->render('web::information.index', [
+            'entity' => $informationDTO,
         ]);
     }
 }

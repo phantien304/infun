@@ -25,7 +25,7 @@ class HomeController extends Controller
     {
         if (empty($slug)) {
             $this->processMetaSeo('buildForSeoBySetting', 'seo_title_home', 'seo_description_home');
-            return $this->render('web.page.home', [
+            return $this->render('web::page.home', [
                 'banners' => $this->bannerRepo->getBannerByPage('home', 'top'),
                 'blogs' => BlogDTO::collect($this->blogRepo->getBlogLatest(4)),
                 'storeReviews' => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsFeatured()),

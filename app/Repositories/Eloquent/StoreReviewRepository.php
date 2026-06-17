@@ -65,15 +65,15 @@ class StoreReviewRepository extends QueryableRepository implements StoreReviewRe
 
     public function getStoreReviewsByProduct(int $productId, int $limit = 16)
     {
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.store_reviews')],
+        return $this->rememberCache(
             $this->productCacheKey($productId, $limit),
             fn () => $this->resetModel()
                 ->with($this->withRelations())
                 ->where('product_id', $productId)
                 ->orderBy('id', 'DESC')
                 ->limit($limit)
-                ->get()
+                ->get(),
+            tags: [getCoreConfig('cache.store_reviews')],
         );
     }
 

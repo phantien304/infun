@@ -12,7 +12,7 @@ class Option extends Base
     protected $table = 'option';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['optionValues', 'productOptions'];
+    protected static array $destroyRelations = ['optionValues', 'productOptions'];
 
     public function optionValues()
     {

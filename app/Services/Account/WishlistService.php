@@ -59,6 +59,15 @@ class WishlistService
         return $this->wishlistRepo->countForUser($userId);
     }
 
+    /**
+     * Đồng bộ lại badge wishlist trên header — gọi sau khi user vừa login
+     * (AuthService) để counter phản ánh đúng số wishlist của user mới.
+     */
+    public function refreshSessionCounter(): void
+    {
+        $this->syncSessionCounter();
+    }
+
     protected function syncSessionCounter(?int $count = null): void
     {
         $userId = (int) (getCurrentUserId() ?? 0);

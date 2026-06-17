@@ -3,12 +3,15 @@
 namespace App\Data\Output;
 
 use App\Data\Concerns\HasThumbnail;
+use App\Data\Concerns\LazyData;
 use App\Models\Entities\Category;
 use Spatie\LaravelData\Data;
+use Spatie\LaravelData\Lazy;
 
 class CategoryDTO extends Data
 {
     use HasThumbnail;
+    use LazyData;
 
     public function __construct(
         public int $id,
@@ -18,10 +21,11 @@ class CategoryDTO extends Data
         public ?string $icon,
         public string $title,
         public string $description,
+        public Lazy|string $content,
         public string $slug,
         public string $url,
-        public string $metaTitle,
-        public string $metaDescription,
+        public Lazy|string $metaTitle,
+        public Lazy|string $metaDescription,
     ) {
     }
 
@@ -40,10 +44,26 @@ class CategoryDTO extends Data
             icon: $category->icon,
             title: $title,
             description: (string) ($desc->description ?? ''),
+            content: Lazy::create(fn () => (string) ($desc->content ?? '')),
             slug: $slug,
             url: buildUrl($slug, getModuleConfig('url.category'), (int) $category->id),
-            metaTitle: (string) ($desc->meta_title ?? ''),
-            metaDescription: (string) ($desc->meta_description ?? ''),
+            metaTitle: Lazy::create(fn () => (string) ($desc->meta_title ?? '')),
+            metaDescription: Lazy::create(fn () => (string) ($desc->meta_description ?? '')),
         );
+    }
+
+    public function content(): string
+    {
+        return $this->resolveLazy($this->content);
+    }
+
+    public function metaTitle(): string
+    {
+        return $this->resolveLazy($this->metaTitle);
+    }
+
+    public function metaDescription(): string
+    {
+        return $this->resolveLazy($this->metaDescription);
     }
 }

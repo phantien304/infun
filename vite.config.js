@@ -8,18 +8,23 @@ export default defineConfig({
     plugins: [
         laravel({
             input: [
-                'resources/css/app.css',
-                'resources/js/app.js',
-                'resources/js/cms/app.jsx',
+                // Frontend (area=web) — Tailwind v4 build, theme + component
+                // bridge cho coexistence với Bootstrap legacy
+                // (xem resources/web/css/app.css).
+                'resources/web/css/app.css',
+                // CMS (area=cms) — React + antd + Tailwind.
+                'resources/cms/js/app.jsx',
             ],
             refresh: true,
         }),
         tailwindcss(),
         react(),
     ],
-     resolve: {
+    resolve: {
         alias: {
-            '@': path.resolve(__dirname, 'resources/js/cms'),
+            // `@` = entry CMS React. Sau reorganize area-first
+            // (resources/js/cms → resources/cms/js).
+            '@': path.resolve(__dirname, 'resources/cms/js'),
         },
     },
     server: {

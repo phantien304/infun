@@ -95,7 +95,7 @@ abstract class Controller
             return redirect()->to($url);
         }
         if (str_contains($url, '.')) {
-            $url = routeArea($url, $params);
+            $url = route($url, $params);
         }
         $r = redirect()->to($url)->with($params);
         $this->fireEvent('after_redirect', $r);

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\View;
 use File;
 use Illuminate\Support\Str;
 
@@ -25,8 +26,27 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->registerViewNamespaces();
         $this->logSql();
         $this->registerObservers();
+    }
+
+    /**
+     * Đăng ký Blade view namespace area-first:
+     *  - `web::layouts.main` → `resources/web/views/layouts/main.blade.php`
+     *  - `cms::posts.list`   → `resources/cms/views/posts/list.blade.php`
+     *
+     * Cấu trúc resources/{area}/{type} mirror public/{area}/{type} convention
+     * (vd public/web/css, resources/web/css). Namespace syntax `web::` /
+     * `cms::` thay cho dot-prefix cũ `web.` / `cms.` — Laravel 11 standard.
+     *
+     * Sau khi đăng ký, mọi caller phải dùng `web::xxx` / `cms::xxx`. Dot-prefix
+     * cũ KHÔNG còn resolve (đường path `resources/views/web/` đã bị move ra).
+     */
+    protected function registerViewNamespaces(): void
+    {
+        View::addNamespace('web', resource_path('web/views'));
+        View::addNamespace('cms', resource_path('cms/views'));
     }
 
     /**
@@ -53,6 +73,13 @@ class AppServiceProvider extends ServiceProvider
         // === Custom observers (logic riêng, không thuộc generic) ===
         \App\Models\Entities\Review::observe(\App\Observers\ReviewObserver::class);
         \App\Models\Entities\Setting::observe(\App\Observers\SettingObserver::class);
+
+        // Recompute denormalized aggregate (min/max_variant_price +
+        // max_variant_discount_percent) trên bảng product mỗi khi variant
+        // hoặc variant_special đổi. Co-exist với CacheFlushObserver bên
+        // dưới — Laravel chạy cả 2 observer cho cùng model.
+        \App\Models\Entities\ProductVariant::observe(\App\Observers\ProductVariantAggregateObserver::class);
+        \App\Models\Entities\ProductVariantSpecial::observe(\App\Observers\ProductVariantAggregateObserver::class);
 
         // === Generic cache invalidation ===
         // Map: model => [repoInterface, ...]. Mỗi repo trong list sẽ được
@@ -81,6 +108,21 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\Entities\Carrier::class => [\App\Repositories\Interfaces\CarrierRepositoryInterface::class],
             \App\Models\Entities\Payment::class => [\App\Repositories\Interfaces\PaymentRepositoryInterface::class],
 
+            // Coupon cluster — admin sửa coupon hoặc pivot SP/category → flush
+            // listActiveForUser cache. UserCoupon (save/unsave) KHÔNG cần
+            // cross-flush vì listSavedByUser không cache. CouponHistory cũng
+            // không cache (đếm trực tiếp mỗi quota check).
+            \App\Models\Entities\Coupon::class         => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
+            \App\Models\Entities\CouponProduct::class  => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
+            \App\Models\Entities\CouponCategory::class => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
+
+            // Gift cluster — Gift / GiftItem / GiftTriggerProduct save → flush
+            // listActive cache. OrderGift KHÔNG vào cacheMap vì là audit log
+            // append-only, không ảnh hưởng list.
+            \App\Models\Entities\Gift::class                => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
+            \App\Models\Entities\GiftItem::class            => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
+            \App\Models\Entities\GiftTriggerProduct::class  => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
+
             // Geography.
             \App\Models\Entities\Zone::class => [\App\Repositories\Interfaces\ZoneRepositoryInterface::class],
 
@@ -93,8 +135,24 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\Entities\StoreReview::class => [\App\Repositories\Interfaces\StoreReviewRepositoryInterface::class],
         ];
 
+        // KHÔNG dùng `Model::observe(new CacheFlushObserver(...))` — Laravel
+        // resolve observer by class name khi event fire, không lưu instance →
+        // container resolve fresh → fail Unresolvable dependency `array
+        // $repoInterfaces`. Dùng Event::listen với closure capture instance
+        // để bypass container resolve.
+        $prefix = defined('EVENT_MODEL_TYPE') ? getConstant('EVENT_MODEL_TYPE') : 'eloquent';
+        $events = ['saved', 'deleted', 'restored', 'forceDeleted'];
+
         foreach ($cacheMap as $modelClass => $repoInterfaces) {
-            $modelClass::observe(new \App\Observers\CacheFlushObserver($repoInterfaces));
+            $observer = new \App\Observers\CacheFlushObserver($repoInterfaces);
+            foreach ($events as $event) {
+                \Illuminate\Support\Facades\Event::listen(
+                    "{$prefix}.{$event}: {$modelClass}",
+                    function ($model) use ($observer, $event) {
+                        $observer->{$event}($model);
+                    },
+                );
+            }
         }
     }
 

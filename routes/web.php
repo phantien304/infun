@@ -2,13 +2,13 @@
 
 use App\Helpers\Facades\ExtendedRoute as Route;
 
-Route::get('/maintenance', ['as' => 'maintenance', 'uses' => 'MaintenanceController@index']);
-Route::get('/error-404', ['as' => 'error.404', 'uses' => 'ErrorController@index']);
+Route::get('/maintenance', 'MaintenanceController@index')->name('maintenance');
+Route::get('/error-404', 'ErrorController@index')->name('error.404');
 Route::get('/give-me-csrf', 'CsrfTokenController@index')->name('csrf.index');
 Route::post('/give-me-csrf', function () {
     return redirect()->route('home');
 });
-Route::post('file/upload', ['uses' => 'FileController@upload', 'as' => 'file.upload']);
+Route::post('file/upload', 'FileController@upload')->name('file.upload');
 Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function () {
     Route::get('/san-pham', 'ProductController@getList')->name('product.getList');
     Route::get('/khuyen-mai', 'ProductController@special')->name('product.special');
@@ -26,8 +26,8 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         });
     });
     Route::any('/order/search', 'OrderController@search')->name('order.search');
-    Route::get('/lien-he', ['uses' => 'ContactController@index', 'as' => 'contact.index']);
-    Route::post('/lien-he/send', ['uses' => 'ContactController@send', 'as' => 'contact.send']);
+    Route::get('/lien-he', 'ContactController@index')->name('contact.index');
+    Route::post('/lien-he/send', 'ContactController@send')->name('contact.send');
     Route::prefix('checkout')->group(function () {
         Route::middleware('auth')->group(function () {
             Route::get('repayment/{id?}', 'CheckoutController@repayment')->name('checkout.repayment');
@@ -39,11 +39,17 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder');
         Route::get('success', 'CheckoutController@success')->name('checkout.success');
         Route::get('shipping', 'CheckoutController@shipping')->name('checkout.shipping');
-        // IPN từ ZaloPay (server-to-server) — không nằm trong cache_page/auth.
-        // Endpoint phải trả JSON theo schema ZaloPay yêu cầu (xem
-        // CheckoutPaymentService::processCallback).
         Route::post('payment/call-back', 'CheckoutController@paymentCallBack')->name('checkout.paymentCallBack')->withoutMiddleware(['cache_page']);
         Route::get('/', 'CheckoutController@index')->name('checkout.index');
+        Route::get('coupons', 'CheckoutCouponController@list')->name('checkout.coupons');
+        Route::post('coupons/apply', 'CheckoutCouponController@apply')->name('checkout.couponsApply');
+        Route::post('coupons/save', 'CheckoutCouponController@save')->name('checkout.couponsSave');
+        Route::post('coupons/unsave', 'CheckoutCouponController@unsave')->name('checkout.couponsUnsave');
+        Route::post('coupons/remove', 'CheckoutCouponController@remove')->name('checkout.couponsRemove');
+        Route::post('gifts/pick', 'CheckoutGiftController@pick')->name('checkout.giftsPick');
+        Route::post('gifts/remove', 'CheckoutGiftController@remove')->name('checkout.giftsRemove');
+        Route::post('vouchers/apply', 'CheckoutVoucherController@apply')->name('checkout.vouchersApply');
+        Route::post('vouchers/remove', 'CheckoutVoucherController@remove')->name('checkout.vouchersRemove');
     });
     Route::prefix('resource')->group(function () {
         Route::get('zone', 'ResourceController@zone')->name('resource.zone');

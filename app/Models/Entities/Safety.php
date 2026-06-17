@@ -11,7 +11,7 @@ class Safety extends Base
     protected $table = 'safety';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['ingredientSafeties'];
+    protected static array $destroyRelations = ['ingredientSafeties'];
 
     public function ingredientSafeties()
     {

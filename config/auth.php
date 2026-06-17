@@ -1,6 +1,10 @@
 <?php
 
-use App\Models\User;
+// Guard `web` xác thực KHÁCH HÀNG e-commerce (bảng `user`, không phải `users`
+// scaffold mặc định). Phải trỏ provider tới App\Models\Entities\User để
+// Auth::attempt + auth()->user() trả đúng model có relations userPhone /
+// userAddress / type_register... (xem AuthController + AccountController).
+use App\Models\Entities\User;
 
 return [
 

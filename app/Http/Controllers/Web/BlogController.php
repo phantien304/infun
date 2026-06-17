@@ -25,7 +25,7 @@ class BlogController extends Controller
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
-            ['text' => trans('messages.breadcrumbs.list_blog'), 'href' => routeArea('blog.getList'), 'separator' => false],
+            ['text' => trans('messages.breadcrumbs.list_blog'), 'href' => route('blog.getList'), 'separator' => false],
         ];
     }
     public function index($id = '')
@@ -47,7 +47,7 @@ class BlogController extends Controller
             $blogDTO->metaDescription ?: $blogDTO->description
         );
 
-        return $this->render('web.blog.index', [
+        return $this->render('web::blog.index', [
             'entity' => $blogDTO,
         ]);
     }
@@ -58,7 +58,7 @@ class BlogController extends Controller
         $this->processRequest();
 
         $entities = $this->blogRepo->list();
-        return $this->render('web.blog.list', [
+        return $this->render('web::blog.list', [
             'entities' => BlogDTO::collect($entities),
             'sortMenu'    => $this->blogRepo->getSortMenu(),
             'perPageMenu' => $this->blogRepo->getPerPageMenu(),

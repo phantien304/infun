@@ -8,19 +8,6 @@ use Illuminate\Support\Collection;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Data;
 
-/**
- * Output DTO cho UI review section (Shopee-style).
- *
- * Nguồn dữ liệu:
- *   - Bảng review (root) + relations eager-load: reviewRatings, media, replies, tags.
- *   - myVote / hasMedia / hasText resolve qua param thứ 2 fromModel (user
- *     hiện tại) — tránh N+1 query khi render list.
- *
- * Convention DTO trong CLAUDE.md:
- *   - Property camelCase (reviewCount, helpfulCount).
- *   - Collection con: Illuminate\Support\Collection + #[DataCollectionOf].
- *   - Date xuất ra blade: Carbon raw (blade tự ->format khi hiển thị).
- */
 class ReviewDTO extends Data
 {
     public function __construct(
@@ -46,67 +33,61 @@ class ReviewDTO extends Data
         public int $myVote,
         public ?Carbon $createdAt,
         public ?string $createdAtHuman,
-        #[DataCollectionOf(ReviewRatingDTO::class)]
         public Collection $ratings,
-        #[DataCollectionOf(ReviewMediaDTO::class)]
         public Collection $media,
-        #[DataCollectionOf(ReviewReplyDTO::class)]
         public Collection $replies,
-        #[DataCollectionOf(ReviewTagDTO::class)]
         public Collection $tags,
     ) {
     }
 
-    public static function fromModel(Review $r, ?int $currentUserId = null): self
+    public static function fromModel(Review $review, ?int $currentUserId = null): self
     {
-        $user        = $r->user;
-        $displayName = (string) ($user->full_name ?? $r->author ?? 'Khách');
+        $user        = $review->user;
+        $displayName = (string) ($user->full_name ?? $review->author ?? 'Khách');
         $avatar      = $user?->avatar ? asset($user->avatar) : null;
 
-        // Variant label cho UX "Phân loại: Size M / Đỏ".
         $variantLabel = null;
-        if ($r->relationLoaded('productVariant') && $r->productVariant) {
-            $v = $r->productVariant;
-            $variantLabel = (string) ($v->description?->name ?? $v->sku ?? '');
+        if ($review->relationLoaded('productVariant') && $review->productVariant) {
+            $variant = $review->productVariant;
+            $variantLabel = (string) ($variant->description?->name ?? $variant->sku ?? '');
             if ($variantLabel === '') {
                 $variantLabel = null;
             }
         }
 
-        // My vote: cần query helpfuls đã eager-load + filter user hiện tại.
         $myVote = 0;
-        if ($currentUserId && $r->relationLoaded('reviewHelpfuls')) {
-            $mine = $r->reviewHelpfuls->firstWhere('user_id', $currentUserId);
+        if ($currentUserId && $review->relationLoaded('reviewHelpfuls')) {
+            $mine = $review->reviewHelpfuls->firstWhere('user_id', $currentUserId);
             $myVote = $mine ? (int) $mine->vote_type : 0;
         }
 
         return new self(
-            id:               (int) $r->id,
-            productId:        (int) $r->product_id,
-            productVariantId: $r->product_variant_id ? (int) $r->product_variant_id : null,
-            orderId:          $r->order_id ? (int) $r->order_id : null,
-            userId:           $r->user_id ? (int) $r->user_id : null,
-            author:           (string) ($r->author ?? ''),
+            id:               (int) $review->id,
+            productId:        (int) $review->product_id,
+            productVariantId: $review->product_variant_id ? (int) $review->product_variant_id : null,
+            orderId:          $review->order_id ? (int) $review->order_id : null,
+            userId:           $review->user_id ? (int) $review->user_id : null,
+            author:           (string) ($review->author ?? ''),
             displayName:      $displayName,
             userAvatar:       $avatar,
-            title:            $r->title,
-            text:             (string) ($r->text ?? ''),
-            rating:           (int) $r->rating,
-            status:           (int) $r->status,
-            isAnonymous:      (bool) $r->is_anonymous,
+            title:            $review->title,
+            text:             (string) ($review->text ?? ''),
+            rating:           (int) $review->rating,
+            status:           (int) $review->status,
+            isAnonymous:      (bool) $review->is_anonymous,
             variantLabel:     $variantLabel,
-            source:           (string) ($r->source ?? 'web'),
-            helpfulCount:     (int) $r->helpful_count,
-            unhelpfulCount:   (int) $r->unhelpful_count,
-            replyCount:       (int) $r->reply_count,
-            mediaCount:       (int) $r->media_count,
+            source:           (string) ($review->source ?? 'web'),
+            helpfulCount:     (int) $review->helpful_count,
+            unhelpfulCount:   (int) $review->unhelpful_count,
+            replyCount:       (int) $review->reply_count,
+            mediaCount:       (int) $review->media_count,
             myVote:           $myVote,
-            createdAt:        $r->created_at,
-            createdAtHuman:   $r->created_at?->diffForHumans(),
-            ratings:  ReviewRatingDTO::collect($r->relationLoaded('reviewRatings') ? $r->reviewRatings : collect()),
-            media:    ReviewMediaDTO::collect($r->relationLoaded('reviewMedia') ? $r->reviewMedia : collect()),
-            replies:  ReviewReplyDTO::collect($r->relationLoaded('reviewReplies') ? $r->reviewReplies : collect()),
-            tags:     ReviewTagDTO::collect($r->relationLoaded('reviewTags') ? $r->reviewTags : collect()),
+            createdAt:        $review->created_at,
+            createdAtHuman:   $review->created_at?->diffForHumans(),
+            ratings:  ReviewRatingDTO::collect($review->relationLoaded('reviewRatings') ? $review->reviewRatings : collect()),
+            media:    ReviewMediaDTO::collect($review->relationLoaded('reviewMedia') ? $review->reviewMedia : collect()),
+            replies:  ReviewReplyDTO::collect($review->relationLoaded('reviewReplies') ? $review->reviewReplies : collect()),
+            tags:     ReviewTagDTO::collect($review->relationLoaded('reviewTags') ? $review->reviewTags : collect()),
         );
     }
 }

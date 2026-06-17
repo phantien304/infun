@@ -148,7 +148,16 @@ return [
         'client' => env('REDIS_CLIENT', 'phpredis'),
 
         'options' => [
-            'cluster' => env('REDIS_CLUSTER', 'redis'),
+            // KHÔNG đặt 'redis' (Laravel scaffold default) khi chạy single
+            // instance — Predis sẽ vào cluster client mode, gửi CLUSTER SLOTS
+            // / CLUSTER NODES tới Redis không bật cluster → response sai
+            // protocol → "Error while reading line from the server".
+            //
+            // Single instance (local docker, AWS ElastiCache non-cluster)
+            // → null. Chỉ set 'redis' khi thực sự chạy Redis Cluster
+            // (multi-node với CLUSTER ENABLED) hoặc 'predis' khi muốn
+            // client-side sharding kiểu Predis.
+            'cluster' => env('REDIS_CLUSTER', null),
             'prefix' => env('REDIS_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-database-'),
             'persistent' => env('REDIS_PERSISTENT', false),
         ],
@@ -177,6 +186,7 @@ return [
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
+            'read_write_timeout' => 60,
         ],
 
     ],

@@ -12,7 +12,7 @@ class TaxClass extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
-    protected static $_destroyRelations = ['taxRules'];
+    protected static array $destroyRelations = ['taxRules'];
 
     public function taxRules()
     {

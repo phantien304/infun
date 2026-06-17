@@ -52,10 +52,23 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                     return;
                 }
 
+                $backorder = (int) getCoreConfig('stock.policy.backorder');
+                $untracked = (int) getCoreConfig('stock.policy.untracked');
+                $inStockExists = function ($qq) use ($backorder, $untracked) {
+                    $qq->select(DB::raw(1))
+                        ->from('product_variant as pv')
+                        ->join('product_stock as ps', 'ps.product_variant_id', '=', 'pv.id')
+                        ->whereColumn('pv.product_id', 'product.id')
+                        ->whereNull('pv.deleted_at')
+                        ->where(function ($w) use ($backorder, $untracked) {
+                            $w->whereIn('ps.inventory_policy', [$backorder, $untracked])
+                                ->orWhereRaw('(ps.on_hand - ps.reserved) > 0');
+                        });
+                };
+
                 $values->first() === '1'
-                    ? $q->where('product.quantity', '>', 0)
-                    : $q->where(fn ($qq) => $qq->where('product.quantity', '<=', 0)
-                        ->orWhereNull('product.quantity'));
+                    ? $q->whereExists($inStockExists)
+                    : $q->whereNotExists($inStockExists);
             }),
 
             AllowedFilter::callback('search', function (Builder $q, $value) {
@@ -134,13 +147,13 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             return null;
         }
 
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.product_root'), getCoreConfig('cache.products').$id],
+        return $this->rememberCache(
             $this->detailCacheKey($id),
             fn () => $this->resetModel()
                 ->with($this->detailRelations())
                 ->find($id),
-            getCoreConfig('time.cache')
+            getCoreConfig('time.cache'),
+            tags: [getCoreConfig('cache.product_root'), getCoreConfig('cache.products').$id],
         );
     }
 
@@ -186,8 +199,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     public function getProductSpecialLatest(int $limit = 8)
     {
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.product_root')],
+        return $this->rememberCache(
             $this->specialLatestCacheKey($limit),
             fn () => $this->cardQuery()
                 ->hasActiveSpecial()
@@ -195,7 +207,8 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 ->orderBy('product.created_at', 'DESC')
                 ->take($limit)
                 ->get(),
-            getCoreConfig('time.cache')
+            getCoreConfig('time.cache'),
+            tags: [getCoreConfig('cache.product_root')],
         );
     }
 
@@ -210,14 +223,14 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     public function getProductLatest(int $limit = 6)
     {
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.product_root'), getCoreConfig('cache.product_latest')],
+        return $this->rememberCache(
             $this->latestCacheKey($limit),
             fn () => $this->cardQuery()
                 ->orderBy('product.created_at', 'DESC')
                 ->take($limit)
                 ->get(),
-            getCoreConfig('time.cache')
+            getCoreConfig('time.cache'),
+            tags: [getCoreConfig('cache.product_root'), getCoreConfig('cache.product_latest')],
         );
     }
 
@@ -233,14 +246,14 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         sort($sorted);
         $key = implode('_', [getCoreConfig('cache.product_related'), getUserGroupId(), getUserType(), md5(implode(',', $sorted))]).'_';
 
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.product_root')],
+        return $this->rememberCache(
             $key,
             fn () => $this->cardQuery()
                 ->whereIn('product.id', $productIds)
                 ->orderByRaw('FIELD(product.id, '.implode(',', $productIds).')')
                 ->get(),
-            getCoreConfig('time.cache')
+            getCoreConfig('time.cache'),
+            tags: [getCoreConfig('cache.product_root')],
         );
     }
 
@@ -264,6 +277,10 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             'stockStatus',
             'productCategories.category.description',
             'productSpecial',
+            // Default variant + its stock row powers ProductDTO::formatStock
+            // post unify_simple_product_stock. Eager-load here so the card
+            // path never N+1's onto product_variant / product_stock.
+            'defaultVariant.productStock',
         ];
     }
 
@@ -288,6 +305,10 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 ->orderBy('sort_order', 'ASC')
                 ->orderBy('id', 'ASC'),
             'productVariants.productVariantAttributes.optionValue.description',
+            // Hướng B: trục biến thể suy từ product_variant_attribute → cần
+            // metadata option (name_display + type) ngay trên attribute thay vì
+            // qua product_option. Xem ProductOptionService::buildVariantOptions.
+            'productVariants.productVariantAttributes.option.description',
             'productVariants.productStock',
             'productVariants.description',
             // productVariantSpecial = hasOne ofMany (priority MAX +

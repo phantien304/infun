@@ -144,6 +144,76 @@ return [
     'zones' => [
         'country_id_default' => 230
     ],
+    'coupon' => [
+        // type values khớp DB-level `coupon.type TINYINT UNSIGNED`.
+        // KHÔNG dùng literal 1/2/3 trong code — đọc qua getCoreConfig.
+        'type' => [
+            'percent'  => 1, // discount_value = %, kèm discount_max cap VND.
+            'fixed'    => 2, // discount_value = VND tuyệt đối.
+            'freeship' => 3, // bỏ qua discount_value, set shipping_fee=0.
+        ],
+        'apply_scope' => [
+            'all'        => 0, // áp mọi SP trong cart.
+            'products'   => 1, // chỉ SP có row trong coupon_product.
+            'categories' => 2, // chỉ SP thuộc category có row trong coupon_category.
+        ],
+        'history_status' => [
+            'applied'   => 0, // đang trong cart, chưa thanh toán.
+            'used'      => 1, // order paid → trừ used_count.
+            'cancelled' => 2, // order cancel → trả quota lại.
+        ],
+        'stacking' => [
+            // 1 voucher discount (percent | fixed) + 1 voucher freeship/order.
+            // Set false để cấm stack hoàn toàn (chỉ 1 voucher).
+            'allow_freeship_with_discount' => true,
+        ],
+        'cache' => [
+            'tag_root'   => 'coupon_root',
+            'tag_user'   => 'coupon_user_', // concat user_id → tag riêng (saved list).
+            'key_active' => 'coupon_active',
+        ],
+        // TTL áp riêng cho cart pending — quá hạn auto chuyển status applied → expired
+        // (cron job) để giải phóng quota cho user khác.
+        'cart_applied_ttl_minutes' => 30,
+    ],
+    'voucher' => [
+        // Thẻ quà tặng cá nhân (gift card), KHÔNG phải coupon marketing.
+        // status values khớp DB-level `voucher.status TINYINT UNSIGNED`.
+        'status' => [
+            'active'      => 1, // còn dùng được
+            'expired'     => 2, // hết HSD (date_expire < now)
+            'fully_used'  => 3, // balance = 0
+            'revoked'     => 4, // admin thu hồi (fraud)
+        ],
+        // history_status track lifecycle redeem:
+        'history_status' => [
+            'applied'   => 1, // đang ở cart, chưa thanh toán
+            'confirmed' => 2, // order paid → balance trừ thật
+            'refunded'  => 3, // order cancel → balance trả lại
+        ],
+        'cache' => [
+            'tag_root'      => 'voucher_root',
+            'key_active'    => 'voucher_active',
+            'tag_user_'     => 'voucher_user_', // concat user_email → per-user tag.
+        ],
+    ],
+    'gift' => [
+        // trigger_type values khớp DB-level `gift.trigger_type TINYINT UNSIGNED`.
+        'trigger_type' => [
+            'min_subtotal'         => 1, // đơn từ X VND (đọc gift.min_subtotal).
+            'buy_specific_product' => 2, // mua bất kỳ SP trong gift_trigger_product.
+        ],
+        // pick_type — UX user chọn gift:
+        'pick_type' => [
+            'auto'          => 0, // tự áp tất cả gift_item khi đủ ĐK.
+            'pick_1_of_n'   => 1, // radio: chọn 1 trong N gift_item.
+            'pick_up_to_n'  => 2, // checkbox: chọn tối đa pick_limit gift_item.
+        ],
+        'cache' => [
+            'tag_root'   => 'gift_root',
+            'key_active' => 'gift_active',
+        ],
+    ],
     'view' => [
         'unread' => 0,
         'read' => 1,
@@ -164,6 +234,23 @@ return [
     'option' => [
         'role_custom_field' => 0,
         'role_variant' => 1,
+    ],
+    'stock' => [
+        'policy' => [
+            'deny'      => 0,
+            'backorder' => 1,
+            'untracked' => 2,
+        ],
+        'movement_type' => [
+            'receive'         => 'receive',
+            'sale'            => 'sale',
+            'sale_backorder'  => 'sale_backorder', // sale that drove on_hand negative
+            'reserve'         => 'reserve',
+            'release'         => 'release',
+            'adjust'          => 'adjust',
+            'transfer'        => 'transfer',
+        ],
+        'default_warehouse_id' => 1,
     ],
     'review' => [
         'status' => [

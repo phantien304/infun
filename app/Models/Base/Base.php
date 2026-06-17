@@ -25,62 +25,77 @@ class Base extends Model
     protected $alias = '';
     protected $primaryKeyAutoIncrement = '';
     protected $sequence = '';
+
     public function getAllowBlankField(): bool
     {
         return $this->allowBlankField;
     }
+
     public function getExceptAllowBlankField()
     {
         return $this->exceptAllowBlankField;
     }
+
     public function setExceptAllowBlankField($exceptAllowBlankField)
     {
         $this->exceptAllowBlankField = $exceptAllowBlankField;
     }
+
     public function getPrimaryKeyAutoIncrement()
     {
         return $this->primaryKeyAutoIncrement;
     }
+
     public function setPrimaryKeyAutoIncrement($primaryKeyAutoIncrement)
     {
         $this->primaryKeyAutoIncrement = $primaryKeyAutoIncrement;
     }
+
     public function getSequence()
     {
         return $this->sequence;
     }
+
     public function setSequence($sequence)
     {
         $this->sequence = $sequence;
     }
+
     public static function getTableName(): string
     {
-        return (new static)->getTable();
+        return (new static())->getTable();
     }
+
     public static function newEntity(): static
     {
-        return new static;
+        return new static();
     }
+
     public function getField($field)
     {
         return $this->getTableName() . '.' . $field;
     }
+
     public function getQualifiedColumn($column)
     {
         return $this->getTable() . '.' . $column;
     }
+
     public static function getQuaColumn($column)
     {
-        return (new static)->getQualifiedColumn($column);
+        return (new static())->getQualifiedColumn($column);
     }
+
     public function getAlias()
     {
         return $this->alias ?: $this->table;
     }
+
     public function setAlias($alias)
     {
         $this->alias = $alias;
     }
+
     public function save(array $options = [])
     {
         $attrs = $this->getAttributes();
@@ -105,6 +120,7 @@ class Base extends Model
         $this->setRawAttributes([])->fill($attrs);
         return parent::save($options);
     }
+
     public function fill(array $attributes)
     {
         $keys = (array)$this->getKeyName();
@@ -114,26 +130,31 @@ class Base extends Model
         }
         return parent::fill($attributes);
     }
+
     public function hasAttribute($key)
     {
         return array_key_exists($key, $this->getAttributes());
     }
+
     public function removeAttribute($key)
     {
         unset($this->attributes[$key]);
         return $this;
     }
+
     public function mergeAttributes($data)
     {
         $this->attributes = array_merge($this->attributes, $data);
         return $this;
     }
+
     public function removeTrashAttributes()
     {
         $attrs = $this->getAttributes();
         $this->setRawAttributes([])->fill($attrs);
         return $this;
     }
+
     public function removeRelation($key)
     {
         $relations = $this->getRelations();
@@ -141,10 +162,12 @@ class Base extends Model
         $this->setRelations($relations);
         return $this;
     }
+
     public function removeRelations()
     {
         $this->setRelations([]);
     }
+
     public function getNextInsertId(): int|string
     {
         $entity = $this;
@@ -169,6 +192,7 @@ class Base extends Model
         }
         return $nextId;
     }
+
     protected function insertAndSetId(\Illuminate\Database\Eloquent\Builder $query, $attributes)
     {
         if ($this->incrementing && empty($attributes[$this->getPrimaryKeyAutoIncrement()])) {
@@ -176,6 +200,7 @@ class Base extends Model
         }
         return parent::insertAndSetId($query, $attributes);
     }
+
     protected function castAttribute($key, $value)
     {
         if (is_null($value)) {
@@ -187,6 +212,7 @@ class Base extends Model
             default     => parent::castAttribute($key, $value),
         };
     }
+
     protected function fireModelEvent($event, $halt = true)
     {
         if (!isset(static::$dispatcher)) {
@@ -205,6 +231,7 @@ class Base extends Model
             $this
         );
     }
+
     protected static function registerModelEvent($event, $callback): void
     {
         if (isset(static::$dispatcher)) {
@@ -213,19 +240,12 @@ class Base extends Model
             static::$dispatcher->listen($prefix . ".{$event}: {$name}", $callback);
         }
     }
-    public function setOriginKeyFromString($value)
-    {
-        $value = explode('k_k', $value);
-        $keys = (array)$this->getKeyName();
-        foreach ($keys as $idx => $key) {
-            data_get($this->original, $key, data_get($value, $idx));
-        }
-        return $this;
-    }
+
     public static function getAllGlobalScope()
     {
         return static::$globalScopes;
     }
+
     public static function callRaw(string $sProcedure, array $aParams = [], bool $isExecute = false): mixed
     {
         return StoredProcedureService::call($sProcedure, $aParams, $isExecute);

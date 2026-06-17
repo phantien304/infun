@@ -2,61 +2,51 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Data\Output\CategoryDTO;
+use App\Data\Output\ProductDTO;
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Builder;
 
 class CategoryController extends Controller
 {
-    public function __construct(
-        CategoryRepository $categoryRepository,
-        ProductRepository $productRepository
-    ) {
-        parent::__construct();
-        $this->setRepository($categoryRepository);
-        $this->registerRepository($productRepository);
-        $this->_breadcrumbs = [
+    public function __construct()
+    {
+        $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
             ['text' => trans('messages.breadcrumbs.list_product'), 'href' => route('product.getList'), 'separator' => false],
         ];
     }
 
-    public function index($id)
+    public function index($id = '')
     {
-        $entity = $this->getRepository()->getDetail($id);
-        if (empty($entity) || !isset($entity->categoryDescription)) {
-            return $this->_to('error.404');
+        $id = (int) $id;
+        $entity = $this->categoryRepo->getCategoryDetail($id);
+        if (! $entity || ! $entity->description) {
+            return $this->toUrl('error.404');
         }
 
-        $this->setBreadcrumb(['text' => $entity->categoryDescription->title, 'href' => $entity->categoryDescription->getUrlClient(), 'separator' => false]);
+        $category = CategoryDTO::from($entity);
+        $this->setBreadcrumb(['text' => $category->title, 'href' => $category->url, 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByData', (string) $category->metaTitle(), (string) $category->metaDescription());
 
-        $this->_processMetaSeo(
-            '_buildForSeoByData',
-            $entity->categoryDescription->getMetaTitle(),
-            $entity->categoryDescription->getMetaDescription()
+        $productList = $this->productRepo->list(
+            null,
+            null,
+            fn (Builder $q) => $q->whereHas(
+                'productCategories',
+                fn ($qq) => $qq->where('category_id', $id)
+            ),
+        );
+        $productList->setCollection(
+            $productList->getCollection()->map(fn ($m) => ProductDTO::from($m))
         );
 
-        $this->_processRequest($id);
-
-        $entities = $this->fetchRepository(ProductRepository::class)->getListForFrontend($this->getParams());
-
-        return $this->render('client.infunstudio.category.list', [
-            'entity' => $entity,
-            'entities' => $entities,
+        return $this->render('web::category.list', [
+            'entity'         => $category,
+            'entities'       => $productList,
+            'latestProducts' => ProductDTO::collect($this->getProductLatest()),
+            'sortMenu'       => $this->productRepo->getSortMenu(),
+            'perPageMenu'    => $this->productRepo->getPerPageMenu(),
         ]);
-    }
-
-    protected function _buildDataCommon()
-    {
-        $this->setViewData([
-            'products' => $this->getProductLatest(),
-        ]);
-    }
-
-    protected function _processRequest($id)
-    {
-        if (!request()->has('product_category')) {
-            request()->merge([
-                'product_category' => ['category_id_eq' => $id]
-            ]);
-        }
     }
 }

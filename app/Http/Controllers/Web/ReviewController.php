@@ -94,7 +94,7 @@ class ReviewController extends Controller
             $reviews->getCollection()->map(fn ($r) => ReviewDTO::fromModel($r, $userId ?: null)),
         );
 
-        return view('web.product.structure._comment_list', [
+        return view('web::product.structure._comment_list', [
             'reviews'  => $reviews,
             'criteria' => ReviewCriteriaDTO::collect($this->reviewRepo->getActiveCriteria()),
             'tags'     => ReviewTagDTO::collect($this->reviewRepo->getActiveTags()),

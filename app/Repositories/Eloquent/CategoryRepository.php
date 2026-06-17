@@ -34,6 +34,17 @@ class CategoryRepository extends QueryableRepository implements CategoryReposito
         $this->forgetSystem(setting('cache.categories'));
     }
 
+    public function getCategoryDetail(int $id): ?Category
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return $this->resetModel()
+            ->with($this->withRelations())
+            ->find($id);
+    }
+
     protected function withRelations(): array
     {
         return ['description'];

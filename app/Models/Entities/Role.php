@@ -11,7 +11,7 @@ class Role extends Base
     protected $table = 'roles';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['permissionRoles', 'roleUsers'];
+    protected static array $destroyRelations = ['permissionRoles', 'roleUsers'];
 
     public function permissionRoles()
     {

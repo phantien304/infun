@@ -21,13 +21,24 @@ code cũ và code mới, đừng nhầm lẫn hai bên (xem mục "Cũ vs Mới"
 
 - Cache **chỉ sống ở tầng Repository**, qua trait `App\Repositories\Concerns\CacheableRepository`.
   KHÔNG đặt logic cache trong controller/service.
-- API trait:
-  - `rememberCache($key, $resolver, $ttl = null, $perLocale = true)` /
-    `forgetCache($key, $perLocale = true)` — cache thường, chạy với mọi driver.
-  - `rememberCacheTagged($tags, $key, $resolver, $ttl = null, $perLocale = true)` /
-    `forgetCacheTagged($tags)` — cache theo tag. Driver hỗ trợ tag (redis, memcached)
-    cache theo tag để flush được cả nhóm; driver khác (file, database) tự fallback
-    về `rememberCache` thường.
+- API trait (consolidated 2026-06-11):
+  - `rememberCache($key, $resolver, $ttl = null, $perLocale = true, array $tags = [])` —
+    bread-and-butter. Tags optional; pass khi row thuộc cluster cần flush group.
+    Driver hỗ trợ tag (redis, memcached) cache theo tag → flush được cả nhóm;
+    driver khác (file, database) tự fallback về untagged remember — không gãy.
+    Trước đây có 2 method riêng (`rememberCache` + `rememberCacheTagged`), đã
+    gộp về 1 entry point này. Old `rememberCacheTagged` callers chỉ cần
+    reorder: `$tags` chuyển xuống cuối thành named arg.
+  - `forgetCache($key, $perLocale = true)` — flush 1 exact key, mọi locale.
+    Dùng khi không có tag nào hợp lý; otherwise prefer `forgetCacheTagged`.
+  - `forgetCacheTagged(array $tags)` — flush cluster invalidation. No-op trên
+    file/database driver.
+  - `rememberEntity($entity, $prefix, $resolver, ...)` — high-level helper key
+    cache theo `$entity->getKeyAsString()` (single-PK lẫn composite-PK). Auto-
+    resolve `$perLocale` theo PK shape (composite-PK đã chứa locale → false;
+    single-PK → true).
+  - `rememberSystem` / `forgetSystem` — store riêng (`CacheGate::systemStore`),
+    luôn cached kể cả khi `config_debug=1`. Dùng cho 5 taxonomy + menu.
 - `perLocale = true` tự nối `app()->getLocale()` vào cuối key. Nếu key còn phụ thuộc
   user group / user type / limit / ids thì tự đưa vào key trước khi gọi.
 - Mọi cache liên quan **giá hiệu lực** (sản phẩm + special) PHẢI gắn `getUserGroupId()`
@@ -939,6 +950,94 @@ seed + legacy nhiều nơi nằm thẳng trong Laravel `public/` (vd `public/see
   (list/related/latest/feature/special)
 - `detailRelations()` — UI trang chi tiết (mở rộng từ cardRelations)
 
+## Naming variable / view-data key — ngữ nghĩa rõ, không generic
+
+**Rule 1 — Key view data + property name PHẢI tự document được entity nguồn.**
+Nhìn key là biết đang xử lý dữ liệu nào. KHÔNG dùng từ chung như `criteria`,
+`tags`, `items`, `data`, `list`. Bắt buộc kèm tiền tố entity:
+
+```php
+// BAD — key sa-mô-rai, đọc blade không biết đâu là review criteria,
+// đâu là filter criteria, đâu là gì khác.
+return $this->render('web::product.index', [
+    'criteria'         => ReviewCriteriaDTO::collect($this->reviewRepo->getActiveCriteria()),
+    'tags'             => ReviewTagDTO::collect($this->reviewRepo->getActiveTags()),
+    'criteriaAverages' => $this->reviewRepo->getCriteriaAverages($id),
+]);
+
+// GOOD — tự document.
+return $this->render('web::product.index', [
+    'reviewCriteria'         => ReviewCriteriaDTO::collect($this->reviewRepo->getActiveCriteria()),
+    'reviewTags'             => ReviewTagDTO::collect($this->reviewRepo->getActiveTags()),
+    'reviewCriteriaAverages' => $this->reviewRepo->getCriteriaAverages($id),
+]);
+```
+
+Áp cho mọi tầng: view data, controller property, service method param, DTO
+property, session/cookie key. Trade-off verbose vs maintain: chọn maintain.
+
+Ngoại lệ — context đã rõ ràng từ scope class: trong `ReviewRepository`
+method `getActiveCriteria()` không cần đặt `getActiveReviewCriteria()` vì
+class name đã carry context.
+
+**Rule 2 — Closure parameter ngắn OK, biến ngoài closure phải đầy đủ.**
+
+Closure là scope hẹp 1-2 dòng — variable name `$m`, `$r`, `$q`, `$e` đọc
+được vì context ngay sát:
+
+```php
+// OK — $m thấy ngay context map → ProductDTO::from(Model)
+$entities->getCollection()->map(fn ($m) => ProductDTO::from($m));
+
+// OK — $q builder context Eloquent rõ
+$query->where(fn ($q) => $q->where('status', 1)->orWhere('featured', 1));
+
+// OK — $r resolved value
+collect($payments)->filter(fn ($r) => $r->isActive());
+```
+
+NGOÀI closure (scope rộng — block 5+ dòng, method param, loop body lớn,
+function body) phải có nghĩa:
+
+```php
+// BAD
+foreach ($products as $p) {                    // $p tồn tại 20 dòng dưới
+    if ($p->isAddCart) { ... }
+    if ($p->productSpecial) { ... }
+}
+
+// GOOD
+foreach ($products as $product) {
+    if ($product->isAddCart) { ... }
+    if ($product->productSpecial) { ... }
+}
+
+// BAD
+public function handle(Request $r): JsonResponse  // method param
+{ ... }
+
+// GOOD
+public function handle(Request $request): JsonResponse
+{ ... }
+
+// BAD
+try { ... } catch (\Throwable $e) {              // dài 10 dòng
+    logError($e->getMessage());
+    notify($e);
+    return errorResponse($e);
+}
+
+// GOOD
+try { ... } catch (\Throwable $exception) {
+    logError($exception->getMessage());
+    notify($exception);
+    return errorResponse($exception);
+}
+```
+
+Cutoff đại khái: closure 1-3 dòng dùng tên ngắn cũng được; quá đó hoặc nested
+nhiều cấp → đặt tên đầy đủ.
+
 ## Seed commands (refactor 2026-06-03)
 
 `SeedProductsCommand` (products:seed):
@@ -1649,6 +1748,140 @@ php artisan tinker
 | `--maxmemory` flag | Tham số `maxmemory-policy` ở ElastiCache parameter group |
 | `127.0.0.1:6379` | ElastiCache primary endpoint (TLS port 6380 nếu bật in-transit encryption) |
 
+## Cluster Coupon / Gift / Voucher Shopee-style (2026-06-11 → 2026-06-13)
+
+3 cluster promotion độc lập, mỗi cluster lifecycle riêng. Phân biệt rõ trong
+code: KHÔNG được gộp `coupon` và `voucher` cùng namespace dù tên dễ nhầm.
+
+| Cluster | Bản chất | Trừ vào | UI session key |
+|---|---|---|---|
+| `Coupon` | Mã giảm giá marketing (% / fixed / freeship) | Subtotal / shipping fee | `checkout.applied_coupons` |
+| `Gift` | SP tặng kèm khi đơn đủ ĐK (min_subtotal hoặc buy_specific_product) | Không (quà miễn phí) | `checkout.applied_gifts` |
+| `Voucher` | Gift card cá nhân (user A tặng B qua email) | VND tuyệt đối từ tổng đơn (sau coupon + ship) | `checkout.applied_vouchers` |
+
+### Session namespace — KHÔNG dùng `cart.*`
+
+**Bug đã trải qua**: session key `cart.applied_coupons` (Laravel dot-notation
+lưu thành `session->cart->applied_coupons`) bị **CartService::getItems()**
+nuốt và xoá vì loop `session('cart', [])` coi `applied_coupons` như 1 cart
+row không có `product_id` → tự gọi `remove()` → `session()->forget('cart.applied_coupons')`.
+
+Tất cả 3 cluster phải dùng **prefix `checkout.*`** (không phải `cart.*`):
+- `session('checkout.applied_coupons')` ✅
+- `session('checkout.applied_gifts')` ✅
+- `session('checkout.applied_vouchers')` ✅
+- `CartService::clear()` phải `forget` đầy đủ cả 3 key này khi order success.
+
+### Order of operations trong CheckoutTotalService::build()
+
+Strict ordering — mỗi step compute residual cho step sau:
+
+```
+1. lineSubTotal              → subtotal
+2. linesAppliedCoupons       → -coupon (percent → fixed → freeship skip)
+3. lineGifts                 → info only (value=0, gifts miễn phí)
+4. lineReward                → -reward points
+5. lineShipping              → +fee | freeship discount | placeholder
+6. lineVouchers              → -voucher (cap residual, stack được)
+7. lineTotal                 → grand total
+```
+
+Voucher BẮT BUỘC áp SAU shipping vì gift card cover được cả phí ship.
+Coupon freeship trừ phí ship (qua lineShipping branch); voucher trừ residual
+sau shipping.
+
+### Stacking rules
+
+| Cluster | Stack chính nó | Stack với loại khác |
+|---|---|---|
+| `Coupon` percent | KHÔNG (chỉ 1 winning) | + Coupon freeship (theo config `coupon.stacking.allow_freeship_with_discount`) |
+| `Coupon` fixed | KHÔNG | + Coupon freeship |
+| `Coupon` freeship | KHÔNG | + 1 percent/fixed |
+| `Voucher` | CÓ (stack nhiều, cap residual) | + tất cả coupon + gift |
+| `Gift` | N/A (gift là eligibility-based, không stack) | Độc lập |
+
+### Quota / Lifecycle pattern (cluster Coupon + Voucher)
+
+3 status pattern lifecycle giống nhau (lưu trong `*_history.status`):
+- `0/1 = applied` — đang ở cart, KHÔNG trừ quota/balance thật.
+- `2 = used/confirmed` — order paid → trừ quota / balance.
+- `3 = cancelled/refunded` — order cancel → trả về.
+
+Pattern atomic:
+- Order create: `INSERT history status=applied`.
+- Payment success: `UPDATE status=confirmed` + `DB::increment('used_count')`
+  hoặc `DB::increment('redeemed_balance')` (atomic chống race).
+- Order cancel: `UPDATE status=cancelled` + `DB::decrement(...)`.
+
+**Voucher khác Coupon ở 1 điểm**: voucher còn flip `voucher.status`
+(`active ↔ fully_used`) khi `redeemed_balance >= amount`. Coupon chỉ track
+`used_count`.
+
+### Gift cluster bổ sung
+
+Gift KHÔNG có history per-redeem như coupon/voucher — chỉ có `order_gift`
+(audit per order). Quota global qua `gift.used_count`.
+
+- `trigger_type=1` (min_subtotal): đọc `gift.min_subtotal`, validate cart ≥ X.
+- `trigger_type=2` (buy_specific_product): check `gift_trigger_product` pivot
+  intersect cart product IDs. `min_subtotal` bỏ qua.
+- `pick_type=0` (auto): tự pre-pick mọi `gift_item`.
+- `pick_type=1` (pick_1_of_n): user chọn đúng 1 item (radio).
+- `pick_type=2` (pick_up_to_n): user chọn ≤ `pick_limit` items (checkbox).
+
+### UI Pattern (đã chốt cho 3 cluster)
+
+- Mỗi cluster có 2 partial:
+  - `_{cluster}_promo_row.blade.php` — clickable row mở modal, hiện chip mã đã áp.
+  - `_{cluster}_modal.blade.php` — Alpine `x-data="{cluster}Modal()"`,
+    listen `@open-{cluster}-modal.window` / `@remove-{cluster}.window`.
+- Container stable ID `#{cluster}-promo-row-container` để JS swap innerHTML
+  sau AJAX (xem coupon flow — pattern đầy đủ). Hiện gift + voucher dùng
+  reload thay swap DOM — refactor sau nếu UX cần.
+- Color coding:
+  - Coupon: brand orange (`.text-brand`)
+  - Gift: pink (`.text-pink-500`)
+  - Voucher: purple (`.text-purple-500`)
+
+### Việc còn nợ phase tiếp
+
+- **Payment callback wire `VoucherService::confirmOrderVouchers($orderId)`**:
+  hiện order create chỉ insert `voucher_history` status=applied. Sau ZaloPay
+  / COD success cần flip → confirmed + cộng `redeemed_balance`. Chỗ wire:
+  `CheckoutPaymentService::processCallback` hoặc `paymentCallBack` action.
+- **Coupon `recordApplied` (status=applied khi user check vào cart, chưa paid)**:
+  hiện chỉ ghi history khi order tạo. Nếu cần "hold quota" lúc user vào cart
+  (chống race khi quota gần hết) — chưa làm.
+- **Inline DOM swap cho gift + voucher**: hiện reload trang sau AJAX. Coupon
+  đã có pattern swap (`/checkout/coupons/apply` trả `total_data_html` +
+  `promo_row_html`).
+- **Cron clean stale `coupon_history.status=applied`**: nếu wire phase trên,
+  cần job clean rows quá hạn `coupon.cart_applied_ttl_minutes`.
+- **Admin CMS UI** cho cả 3 cluster — backend đầy đủ, FE admin chưa có.
+
+## TODO checkpoint — chuyển sang task Login / Account (sau cluster promotion)
+
+Hoàn thành 3 cluster promotion (coupon + gift + voucher) — cluster checkout
+flow giờ stable. Bước tiếp theo: **refactor cluster Account / Auth** theo
+pattern Shopee/UX hiện đại.
+
+Khu vực cần audit:
+- `AuthController` (register, login, social login, forgot password,
+  change password, OTP). Đã extends `Controller` mới chưa? Có legacy
+  `_buildForSeoBy*` hoặc trait CheckoutMarketing không?
+- `AccountController` đã refactor 2026-05-31 — verify chốt convention
+  (FormRequest, DTO, service layer) còn áp dụng được không sau khi refactor
+  coupon/gift/voucher đụng vào `AccountService::cancelOrder`.
+- `User` model: cần thêm scopes / casts cho field social login.
+- Phân tầng: tạo `AuthService` (nếu chưa có) tách khỏi controller.
+- UI: rewrite login/register blade theo style hiện tại (Tailwind), modal
+  reset password, OTP flow.
+- Session security: rate limit login, 2FA roadmap.
+
+Xem mục "Account flow (refactor 2026-05-31)" phía trên để hiểu phân tầng
+đã setup. AuthController có thể đã legacy hơn (chưa rewrite). Audit trước
+khi quyết định scope refactor.
+
 Production: đổi `REDIS_HOST=xxx.cache.amazonaws.com`, set
 `REDIS_CLIENT=phpredis` (cài extension trong container PHP-FPM), giữ
 nguyên code Laravel.
@@ -1661,3 +1894,392 @@ nguyên code Laravel.
   Apache khác stack production).
 - Healthcheck cho composer install + migrate ở Dockerfile khi PR
   containerize hoàn toàn.
+
+## Cluster `product_stock` — bán khống + warehouse single source
+
+Refactor 2026-06-11 thống nhất nguồn tồn kho cho mọi product (simple lẫn
+variant) qua `product_stock`. Đường đi hiện tại:
+
+```
+Product ── defaultVariant (hasOne ofMany is_default) ── productStock (hasOne)
+        └─ productVariants (hasMany) ────────────────── productStock (hasOne / variant)
+```
+
+Mọi simple product đã được migration `2026_06_11_000003_unify_simple_product_stock`
+tạo cho 1 `product_variant` mặc định (is_default=1, không attribute) + 1
+`product_stock` (on_hand = product.quantity tại thời điểm chạy).
+
+### Schema bổ sung
+
+`product_stock.inventory_policy TINYINT UNSIGNED DEFAULT 0`:
+
+| Giá trị | Tên       | Hành vi cart / order                                       |
+|---------|-----------|-------------------------------------------------------------|
+| `0`     | deny      | Block sale khi `on_hand - reserved <= 0` (default).         |
+| `1`     | backorder | Cho phép sale, `on_hand` có thể âm = backlog ("bán khống"). |
+| `2`     | untracked | Không trừ tồn, luôn sellable (digital / dropship).          |
+
+Backfill từ `product_stock.subtract`: `subtract=1 → deny`, `subtract=0 → untracked`.
+Convention: **không hard-code 0/1/2**, mọi caller đọc qua
+`getCoreConfig('stock.policy.deny|backorder|untracked')`.
+
+### Config tập trung — `config/core/config.php → stock`
+
+```php
+'stock' => [
+    'policy' => [
+        'deny' => 0, 'backorder' => 1, 'untracked' => 2,
+    ],
+    'movement_type' => [
+        'receive', 'sale', 'sale_backorder', 'reserve', 'release', 'adjust', 'transfer',
+    ],
+    'default_warehouse_id' => 1,
+],
+```
+
+Mọi nơi đọc enum + warehouse_id qua `getCoreConfig('stock.xxx')`, KHÔNG
+qua hằng số class. Cùng convention với `option.role`, `coupon.type`,
+`review.status`. Lý do: tránh blade/view "reach into entity" để hỏi enum,
+đổi giá trị chỉ sửa 1 chỗ, không drift giữa migration + runtime.
+
+`ProductStock` model trước có `const POLICY_DENY|BACKORDER|UNTRACKED` và
+`DEFAULT_WAREHOUSE_ID` — đã gỡ. Migration `2026_06_11_000003` giữ local
+const để self-contained (run-once snapshot, không depend runtime config) —
+đó là ngoại lệ duy nhất.
+
+### Method explicit thay accessor magic
+
+`ProductStock::getAvailableAttribute()` từng dùng accessor `$model->available`
+nhưng KHÔNG chạy ổn định trên stack Base + Compoships + Laravel 12 —
+`$this->available` rơi vào fallback raw column / null thay vì gọi accessor.
+Đã thay bằng method thường:
+
+```php
+public function sellableQuantity(): int     // max(0, on_hand - reserved)
+public function canSell(int $qty): bool     // honour policy + sellableQuantity()
+public function tracksMovements(): bool     // false khi policy = untracked
+```
+
+**Convention chung**: khi expose computed value trên model, ưu tiên method
+thường (`$stock->sellableQuantity()`) thay vì `getXxxAttribute`. Lý do:
+trait `Awobaz\Compoships` + Base override `castAttribute` + Laravel 12
+dual Attribute API tạo nhiều đường resolve attribute — method thường
+tránh hết magic, gọi nào ăn nấy.
+
+### Flow add-to-cart strict-no-legacy
+
+`CartService::tryAdd(payload)` — entry point validate-then-persist:
+
+1. `resolveVariantId(productId, attrs)` — simple product không có attr →
+   fallback `resolveDefaultVariantId(productId)` (qua `Product::defaultVariant`
+   relation). Cart line LUÔN mang `product_variant_id` post-unify.
+2. `makeKey(productId, variantId, customOptions)` + đọc `alreadyInCart`
+   trong session cho cùng key.
+3. `checkStock(product, variant, alreadyInCart + requested)`:
+   - `$stock = $variant?->productStock ?? $product->defaultVariant?->productStock`.
+   - Không phải `ProductStock` instance → return `false` (strict deny).
+     **KHÔNG fallback** sang `product.quantity / product.subtract`.
+   - Có → `$stock->canSell(totalAfter)`.
+4. `resolveAvailable(product, variant)` — đồng nhất, cùng `$stock` lookup.
+   Trả `PHP_INT_MAX` cho `untracked/backorder`, `0` cho missing stock.
+5. Persist qua `persistLine()` (chia sẻ với `add()` legacy entry).
+
+`CheckoutController::addToCart` gọi `tryAdd`, trả `errValidator` với
+message giàu ngữ cảnh khi `ok=false`: "Sản phẩm X chỉ còn N trong kho,
+bạn yêu cầu M" / "bạn đã có K trong giỏ, yêu cầu thêm Q (tổng T) nhưng
+kho chỉ còn N". Cũ "chỉ còn 30 trong kho" không tiết lộ M nên user
+tưởng "30 = đủ".
+
+### `CreateOrderService::subtractStock` — strict + audit
+
+1. `variant_id` null → `logError(...)` + return (không silent bump
+   `product.quantity` nữa).
+2. Lookup `product_stock` với `lockForUpdate()` để chống TOCTOU.
+3. Policy gating:
+   - `untracked` → no-op.
+   - `deny` → decrement (CartService đã gate sẵn, lock chống concurrency).
+   - `backorder` → decrement, cho `on_hand` âm. `stock_movement.type =
+     sale_backorder` để admin filter ra backlog.
+4. `version` tăng 1 mỗi UPDATE → optimistic lock infrastructure sẵn sàng.
+5. Append `stock_movement` cho mọi tracked sale → rebuild on_hand được từ log.
+
+### `ProductDTO` aggregation across variants
+
+- `formatStock(Product)`: variant product duyệt `productVariants`, lấy
+  label của variant đầu tiên `canSell(1)`. Fallback `defaultVariant` cho
+  simple. Không còn nhánh `product.quantity`.
+- `resolveInStock(Product)`: boolean aggregator — true nếu BẤT KỲ variant
+  còn sellable, hoặc defaultVariant sellable (cho simple).
+- Blade chi tiết product gate button "Mua hàng" / "Liên hệ mua hàng" qua
+  `$entity->inStock` (KHÔNG `$entity->quantity > 0` nữa — quantity của
+  parent variant product luôn 0).
+- `stockLabelFromPolicy(Product, ProductStock)`: helper decision tree
+  untracked → instock label / backorder + available=0 → "Đặt trước -
+  giao sau" / available=0 + deny → stockStatus name / else → count hoặc
+  instock label.
+
+### Filter `in_stock` ở list page
+
+`ProductRepository::allowedFilters('in_stock')`: dùng `EXISTS` subquery
+qua `product_variant + product_stock`:
+
+```sql
+EXISTS (
+    SELECT 1 FROM product_variant pv
+    JOIN product_stock ps ON ps.product_variant_id = pv.id
+    WHERE pv.product_id = product.id
+      AND pv.deleted_at IS NULL
+      AND (
+        ps.inventory_policy IN (backorder, untracked)
+        OR (ps.on_hand - ps.reserved) > 0
+      )
+)
+```
+
+`= '1'` → `whereExists`, `= '0'` → `whereNotExists`. Hoạt động cho cả
+simple + variant qua cùng predicate. Mọi giá trị enum đọc qua
+`getCoreConfig('stock.policy.xxx')`.
+
+### `ProductOptionService::buildVariantMatrix` — UI affordance
+
+Khi `productStock` null (data drift / seed thiếu): trả `available = 999`,
+`subtract = false` (= "untracked" về UX) cho swatch vẫn pickable. **KHÁC**
+với `CartService::checkStock` strict — đây là affordance cho detail page,
+gate thật chạy lúc add-to-cart. Document có chủ ý, không nhầm với
+"missing stock = OOS" của cart pipeline.
+
+### Việc còn nợ — stock cluster
+
+- Drop `product.quantity` + `product.subtract` cột legacy sau khi observe
+  1-2 sprint không còn caller (search `->quantity` / `->subtract` ngoài
+  DTO/seed phải = 0).
+- `SeedProductsCommand` chưa tạo default variant + stock cho product mới
+  → newly seeded product rơi vào strict-deny đến khi chạy lại unify
+  migration. Patch seed command tạo cả cluster.
+- Observer `ProductVariantSpecial::saved/deleted` chưa có để recompute
+  `min_effective_variant_price / max_effective_variant_price` (cột mới
+  sẽ thêm). Hiện list page card vẫn show base range, không reflect
+  campaign — trade-off documented.
+- Reservation pattern (`stock_reservation` table + TTL sweeper) — pattern
+  Magento/Shopee chống oversell concurrent thực sự ở Black Friday. Cluster
+  hiện đã có cột `reserved` nhưng chưa có flow nào ghi. Roadmap.
+- Admin CMS chưa có UI chọn `inventory_policy` per variant + warehouse
+  picker khi nhập kho. Backend ready.
+- Dashboard "Backorder backlog" — `WHERE stock_movement.type =
+  sale_backorder` group by variant — admin xem cần nhập bù bao nhiêu.
+
+## Cache key cho entity composite-PK — `rememberEntity()`
+
+`CacheableRepository::rememberEntity($entity, $prefix, $resolver, $ttl,
+$tags, $perLocale)` — helper canonical để cache "1 row entity" qua
+`HasCompositeKey::getKeyAsString()`:
+
+- Single-PK model → suffix là `5` (PK value).
+- Composite-PK model (description, pivot) → suffix `5k_kvi`
+  (`<id>k_k<lang>` từ trait).
+
+Lợi ích so với hand-roll `"prefix_{$id}_{$locale}"`:
+- Schema-agnostic: PK đổi shape (thêm/bớt cột) thì cache key tự khớp,
+  không cần update từng caller.
+- Single source of truth cho separator (`k_k` từ trait), không drift
+  giữa `_` / `:` / `|` giữa các caller.
+- `perLocale` auto-resolve: composite-PK đã có `language_code` trong
+  suffix → mặc định `false` (không double-append). Single-PK locale-sensitive
+  → mặc định `true`. Caller có thể force.
+
+Usage:
+
+```php
+return $this->rememberEntity(
+    $description,
+    getCoreConfig('cache.category_desc'),
+    fn () => $this->buildPayload($description),
+    ttl: now()->addHours(6),
+    tags: [getCoreConfig('cache.category_root')],
+);
+```
+
+**Convention**: khi cần cache 1 row entity (description, pivot, single
+row product...), DÙNG `rememberEntity` thay vì manual concat key. Để
+`rememberCache` / `rememberCacheTagged` cho cache list/aggregate có key
+do business compose (vd `cache.product_latest_{groupId}_{type}_{limit}`).
+
+## Audit Base traits — Cần review trước khi action (2026-06-11)
+
+Audit `Base.php` use list để rà cruft. 3 finding mở, **chưa action**,
+cần đọc kỹ trước khi quyết:
+
+### `HasSchemaCache` — SỐNG NGẦM, KHÔNG xoá
+
+- Public API thấy được: `getTableColumnAndTypeList()` — chỉ 1 caller
+  (`ProductSpecialRepository::__construct`, validate sort_field).
+- **Bí mật**: override `getFillable()` — khi model không khai báo
+  `$fillable` thì return `array_keys(schema)`. **135/136 model entity
+  KHÔNG khai báo `$fillable`** → trait đang silent là single-source
+  of-fillable cho gần toàn bộ codebase.
+- Xoá trait = vỡ mass assignment (`create()`/`update()`/`fill()`) của
+  135 model. Phải migrate từng model bổ sung `$fillable` thủ công
+  trước → task lớn, không phải 1 PR.
+- **Verdict**: GIỮ. Cần thêm warning docblock "Single source of
+  fillable cho 135 model, không xoá."
+
+### `HasAuditColumns` — DEAD infrastructure
+
+- Boot listener `creating`/`updating` trên mọi model, nhưng gate qua
+  `$hasActionBy = false` (default) → return không ghi gì.
+- Grep toàn repo: **KHÔNG model nào** set `$hasActionBy = true` hoặc
+  gọi `setHasActionBy(true)`. Tức `fillUpdatedBy()` / `fillDeletedBy()`
+  / `setDeletedAt()` đều dead path.
+- Trùng `OwenIt\Auditing\Auditable` (3rd party, đã use ở `Product`) —
+  log audit đầy đủ vào bảng `audits`. Đó mới là audit thật.
+- Native Eloquent `$timestamps = true` + `SoftDeletes` đã cover
+  `created_at`/`updated_at`/`deleted_at`.
+- **Verdict đề xuất**: GỠ trait + bỏ `use HasAuditColumns` ở Base. 0
+  hành vi đổi (gate đã false sẵn), giảm 1 boot listener mỗi model.
+- **Cần xác nhận**: chắc không có module admin tương lai nào dự định
+  bật `$hasActionBy = true` mà chưa code → nếu có thì giữ làm opt-in
+  infrastructure, document cách bật.
+
+### Lỗi config — `system.updated_at_column.field` thiếu
+
+`config/system.php` có 4 key `created_by_column / updated_by_column /
+deleted_by_column / del_flag_column` nhưng **thiếu `updated_at_column`**.
+3 chỗ trong code đọc key đó:
+
+1. `Base::save()` line 104 — `$attrs[null] = now()` → no-op (Eloquent
+   đã handle `updated_at` qua `$timestamps = true`, dòng này thừa).
+2. `HasSchemaCache::getFillable()` line 31-34 — gate `if ($updatedAt)`
+   nên không vào branch → no harm.
+3. `HasCascadeRelations::runCascadeUpdate()` + `cascadeUpdateLeaf()`
+   line 128, 136 — `update(['' => $time])` → Laravel ignore key rỗng.
+   Đây là path cascade update **thật**: cha update → con cần bump
+   `updated_at` nhưng hiện stale.
+
+**Verdict đề xuất**: thêm 1 dòng vào `config/system.php`:
+
+```php
+'updated_at_column' => ['field' => 'updated_at', 'comment' => ''],
+```
+
+Vừa khớp convention 4 key kia, vừa fix cascade update bị stale ngầm.
+Dòng `Base::save()` line 104 nên gỡ luôn (Eloquent đã làm).
+
+### Trait đã action ở turn này
+
+- `HasUrlAttributes` — **XOÁ** (file + use). Trait dead: gọi `getFileUrl()`
+  không tồn tại, chỉ Banner use với `$urlAttributes = []` no-op, lại
+  override `getAttribute` (loại magic gây bug `$stock->available`). DTO
+  đã cover URL composition.
+- `Base::setOriginKeyFromString()` shadow — **XOÁ**. Method dùng
+  `data_get` (đọc) thay vì ghi `$this->original`, no-op câm. Trait
+  `HasCompositeKey` có version đúng → giờ là implementation duy nhất.
+
+## Hướng B — `product_option` CHỈ custom field, biến thể single source (2026-06-17)
+
+Quyết định chốt: **`product_option` giờ CHỈ chứa option role=custom_field.** Trục
+biến thể (variant axes), giá trị chọn được, và metadata option đều suy **trực
+tiếp từ `product_variant_attribute`** — một nguồn sự thật duy nhất. Lý do: trước
+đó có 2 nguồn rời nhau (khai báo `product_option` role=variant vs tổ hợp SKU
+`product_variant`) không ràng buộc DB → drift được, phải check 2 vòng. Gộp về 1
+nguồn = hết drift, hết check thừa.
+
+- `ProductOptionService::buildVariantOptions` rewrite: gom `$optionMeta`
+  (`option_id => Option`, lấy qua `$attr->option`) + `$optionValuesByOption`
+  (`option_id => [option_value_id => OptionValue]`, qua `$attr->optionValue`)
+  trong 1 vòng lặp variant; sắp trục theo `option.sort_order` rồi `option.id`.
+  **KHÔNG còn đọc `product_option`** cho nhánh variant.
+- **Hai check trong hàm là HAI CẤP khác nhau, KHÔNG trùng** (đừng gộp/bỏ):
+  - `if ($attr->optionValue)` — lọc per-row khi gom (value resolve được mới ghi).
+  - `if (empty($optionValues)) continue;` — skip option mà MỌI value đã rỗng.
+  Vì `Option` lẫn `OptionValue` đều `SoftDeletes`, `$attr->option` và
+  `$attr->optionValue` null độc lập nhau → keyset `$optionMeta` ⊇
+  `$optionValuesByOption`. Kịch bản thật: admin soft-delete hết value của 1
+  option còn sống → option vào `$optionMeta` nhưng 0 value → không check sẽ
+  render picker rỗng ("Màu sắc:" không swatch).
+- `required` cho variant **hardcode `true`** — bất biến cấu trúc, không phải
+  default: `resolveVariantId` cần đủ mọi trục mới match SKU; và
+  `CheckoutAddToCartRequest:34` đã ép `|| $isVariant` bất kể field.
+- Eager-load: `ProductRepository::detailRelations()` thêm
+  `productVariants.productVariantAttributes.option.description` (metadata trục).
+  `CartService::getItems()` cũng thêm relation `option.description` này để
+  `buildVariantDisplay` không lazy-load `$attr->option` (N+1 mỗi dòng giỏ).
+- Migration `2026_06_16_000000_purge_variant_role_product_option`: xoá row
+  `product_option` có `option.role = variant` (`DELETE po JOIN option o WHERE
+  o.role = 1`). Idempotent, `down()` no-op (suy lại được từ attribute).
+- `SeedProductVariantsCommand` ngừng tạo `product_option` role=variant (bỏ
+  plumbing `$productOptions`); `buildBatch` trả 5 phần tử (bỏ productOptions).
+- **GIỮ `option.role`** (cột bảng `option`) — vẫn là nguồn phân loại option
+  toàn cục: `CartService::splitOptionPayload` + `CheckoutAddToCartRequest` đọc
+  `role` để rẽ nhánh payload variant vs custom field. `buildCustomFieldOptions`
+  vẫn đọc `product_option` lọc role=custom_field.
+- `has_variants` vẫn là **cờ UI-only**; mọi product (kể cả simple) có ≥1
+  `product_variant` (default variant từ unify migration 2026_06_11), simple thì
+  variant đó KHÔNG có `product_variant_attribute`. `buildVariantOptions` chỉ
+  được gọi khi `has_variants=1` (gate ở `buildOptions`).
+- Product "có cả custom field LẪN variant" trỏ **song song** 2 bảng:
+  variant → `product_variant(_attribute)`, custom field → `product_option`
+  role=custom_field. `buildOptions` nối `[variant groups..., custom fields...]`.
+
+## Naming option tree — `selectableValues` / `optionGroups` (2026-06-17)
+
+Đổi tên để key tự-document, không claim sai bảng (Rule "Naming variable" ở trên):
+
+- `buildOptions` trả: `optionGroups` (trước `options`), `variantSwatchImages`
+  (trước `imageOptions`), `variantMatrix`, `defaultVariant`, `variantGallery`.
+- Mỗi option group: `option_id` (gộp bỏ key `id` trùng giá trị), `type` (gộp
+  bỏ `option_type` — thống nhất với cột DB + wire), `name_display`, `role`,
+  `required`, `value`, **`selectableValues`** (trước `product_option_values` —
+  tên cũ làm tưởng dữ liệu lấy từ bảng `product_option`, sai cho nhánh variant).
+  Bỏ key chết `option_name`.
+- `_option.blade.php` đọc `$option['option_id']` / `['type']` /
+  `['selectableValues']`. `ProductController` map `$optionTree['optionGroups']`
+  → view var `productOptions`; `['variantSwatchImages']` merge vào
+  `productImages`. JS global `var options` (inject ở `index.blade`) hiện KHÔNG
+  được `style.js` đọc (dead) — shape đổi không ảnh hưởng.
+
+## CheckoutContext + CreateOrderService — dọn dead code (2026-06-17)
+
+- `CheckoutContext` giờ chỉ còn `items` / `appliedCoupons` (+`hasFreeshipCoupon`
+  /`totalCouponDiscount`) / `orderId` / `userGroupId`. **Bỏ** field `$coupon`/
+  `$voucher` + `setCoupon()`/`setVoucher()` — verify toàn repo: 0 caller, field
+  luôn rỗng.
+- `CreateOrderService`: coupon ghi qua `$ctx->appliedCoupons` trong
+  `writeCouponHistory`; voucher ghi qua `writeNewVouchers` →
+  `VoucherService::recordOrderVouchers`. **Bỏ** `writeVoucherHistory()` + nhánh
+  "Legacy single-coupon fallback" (đều dead vì ctx field luôn rỗng;
+  `writeVoucherHistory` còn dead kép: tìm `firstWhere('code','voucher')` nhưng
+  voucher line thật mang code `voucher:<CODE>`).
+- Cột `orders.coupon` / `orders.voucher` = legacy denormalized, **giờ luôn ghi
+  null** (dữ liệu KM thật nằm ở `coupon_history` / `voucher_history`). Nếu muốn
+  tra cứu ở cấp order thì cần populate mã đầu tiên — đó là *thêm hành vi*.
+
+## Cart flow — session/key + hiệu năng N+1 (2026-06-17)
+
+- `CartService::clear()` forget thêm `reward`; **bỏ** `forget('coupon')`/
+  `forget('voucher')` (key top-level chết, không ai ghi — chỉ còn 1 dòng debug
+  blade đọc, đã dọn). 3 cluster KM nhất quán prefix `checkout.*`.
+- Item key `'stock'` (boolean stockOk) → **`'in_stock'`** (CartService +
+  `cart.blade.php` + `index.blade.php`) — boolean đặt tên như số lượng gây nhầm.
+- N+1 đã sửa:
+  - `CouponRepository::countUsedByUserForCoupons($userId, $couponIds)` — 1 query
+    `GROUP BY` thay `countUsedByUser` mỗi coupon. `CouponService::listForCart`
+    pre-fetch map, truyền vào `validateForCart(..., usedByUser:)` (param mới,
+    null → fallback query lẻ cho `applyCodes`).
+  - `VoucherRepository::findByCodes($codes)` — 1 query keyBy `code` thay
+    `findByCode` trong loop. `VoucherService::resolveApplied` dùng (hàm này
+    chạy lại mỗi lần build total).
+  - `CheckoutCouponController::apply` truyền `$result` vào `renderState`
+    (param `$applyResult`) → không chạy `applyCodes` 2 lần; `remove` vẫn tự
+    resolve từ session khi không có sẵn.
+- `GiftService::getAppliedFromSession()` → `getAppliedGifts()` (nhất quán với
+  `VoucherService::getAppliedCodes()`).
+
+## Ghi chú công cụ khi sửa repo này
+
+- **Một số file có byte binary** (vd `CheckoutContext.php`, nhiều `*.blade.php`,
+  vài interface) → `grep` báo "binary file matches" hoặc sót dòng, đọc SAI.
+  **Tin `Read` tool, KHÔNG tin `grep`** khi verify các file này.
+- Sandbox dev **không có php-cli** → không chạy được `php -l` / `artisan
+  migrate` / `tinker`. Verify tĩnh bằng Read + grep; chạy thật trên XAMPP. Nhớ
+  `php artisan view:clear` khi đổi blade, `cache:clear` khi đổi eager-load (cache
+  `getProductDetail` giữ entity với relation cũ).

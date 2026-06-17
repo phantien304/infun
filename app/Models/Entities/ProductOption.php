@@ -10,7 +10,7 @@ class ProductOption extends Base
     public $primaryKey = ['product_id', 'option_id'];
     public $incrementing = false;
     public $timestamps = true;
-    protected static $_destroyRelations = ['productOptionValues'];
+    protected static array $destroyRelations = ['productOptionValues'];
 
     public function option()
     {

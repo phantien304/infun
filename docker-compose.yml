@@ -35,8 +35,20 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    # `--protected-mode no`: Redis 7 mặc định protected-mode=yes → khi bind
+    # 0.0.0.0 + không password + connect từ NON-loopback IP, server accept
+    # TCP rồi DISCONNECT NGẦM không trả response. Predis đọc tiếp → lỗi
+    # "Stream is already at the end".
+    #
+    # Trong Docker, PHP host kết nối qua NAT bridge (172.x.x.x) — KHÔNG phải
+    # 127.0.0.1 từ góc nhìn Redis → trigger protected-mode. Tắt cho local dev.
+    #
+    # Production AWS ElastiCache: bảo mật bằng VPC + Security Group, không
+    # cần protected-mode flag.
     command:
       - redis-server
+      - --protected-mode
+      - "no"
       - --appendonly
       - "yes"
       - --maxmemory

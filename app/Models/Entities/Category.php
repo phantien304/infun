@@ -11,7 +11,7 @@ class Category extends Base
     protected $table = 'category';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['productCategories', 'couponCategories'];
+    protected static array $destroyRelations = ['productCategories', 'couponCategories'];
 
     public function description()
     {

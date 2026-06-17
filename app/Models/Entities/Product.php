@@ -92,6 +92,19 @@ class Product extends Base implements Auditable
         return $this->hasMany(ProductVariant::class, 'product_id', 'id');
     }
 
+    /**
+     * Resolve the single "default" variant — always present after the
+     * unify_simple_product_stock migration: variant products mark their
+     * primary tuple is_default=1, simple products own a hidden no-attribute
+     * default variant. Cart / checkout / availability code uses this to
+     * read product_stock through one consistent relation chain.
+     */
+    public function defaultVariant()
+    {
+        return $this->hasOne(ProductVariant::class, 'product_id', 'id')
+            ->ofMany(['is_default' => 'max']);
+    }
+
     public function productFilters()
     {
         return $this->hasMany(ProductFilter::class, 'product_id', 'id');

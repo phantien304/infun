@@ -12,7 +12,7 @@ class TaxRate extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
-    protected static $destroyRelations = ['taxRateToUserGroups'];
+    protected static array $destroyRelations = ['taxRateToUserGroups'];
 
     public function taxRateToUserGroups()
     {

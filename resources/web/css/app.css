@@ -1,0 +1,172 @@
+@import 'tailwindcss';
+
+@source '../../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+@source '../js/**/*.js';
+
+/*
+ * Tailwind v4 theme cho web/ (frontend, area=web).
+ *
+ * Vị trí mirror `public/web/css/` convention dự án (CMS riêng `resources/cms/`).
+ *
+ * Brand color extract từ public/web/css/main.css (`.text-brand`, `.btn`):
+ *  - brand 500 = #F4a883 (peach/coral, màu chính)
+ *  - body     = #333 (text mặc định)
+ *  - success  = #3bb77e
+ *  - danger   = #FD6E6E
+ *  - warning  = #ff9900
+ *  - info     = #5a97fa
+ *
+ * Bootstrap spacing (`mb-30`, `pt-15`) dùng pixel-scale 5px. Tailwind default
+ * 4px scale → cần utility bridge (xem @layer utilities ở cuối file) để blade
+ * chưa convert vẫn render đúng spacing trong giai đoạn coexistence Bootstrap.
+ */
+@theme {
+    --font-sans: 'Quicksand', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-heading: 'Quicksand', 'Lato', ui-sans-serif, system-ui, sans-serif;
+
+    /* Brand palette — mirror Bootstrap text-brand/btn primary của theme cũ. */
+    --color-brand-50:  #fff5ef;
+    --color-brand-100: #ffe4d3;
+    --color-brand-200: #fbcab0;
+    --color-brand-300: #f8b292;
+    --color-brand-400: #f6a283;
+    --color-brand-500: #f4a883;
+    --color-brand-600: #e88a5e;
+    --color-brand-700: #c66d44;
+    --color-brand-800: #9a5234;
+    --color-brand-900: #6e3a25;
+
+    --color-success: #3bb77e;
+    --color-danger:  #fd6e6e;
+    --color-warning: #ff9900;
+    --color-info:    #5a97fa;
+
+    --color-body:  #333333;
+    --color-muted: #7e7e7e;
+}
+
+/*
+ * Component layer — replicate Bootstrap component thường dùng (btn, form-control,
+ * alert, form-check) bằng utility Tailwind. Blade hiện tại có `class="btn"`
+ * vẫn render đúng theme cũ trong giai đoạn coexistence Bootstrap → không phải
+ * sửa hàng loạt nơi ngay. Khi convert page → có thể giữ `.btn` hoặc viết
+ * utility trực tiếp (`bg-brand-500 hover:bg-brand-600 ...`).
+ *
+ * KHÔNG copy nguyên Bootstrap component — chỉ replicate những class xuất hiện
+ * trong audit (btn, btn-md, btn-lg, btn-block, form-control, form-label,
+ * alert-*, form-check, required).
+ */
+@layer components {
+    /* === Buttons === */
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 px-5 py-2.5
+               rounded-md font-medium text-white bg-brand-500
+               hover:bg-brand-600 active:bg-brand-700
+               transition-colors cursor-pointer
+               border border-transparent
+               disabled:opacity-50 disabled:cursor-not-allowed;
+    }
+    .btn-md       { @apply px-4 py-2 text-sm; }
+    .btn-lg       { @apply px-6 py-3 text-base; }
+    .btn-sm       { @apply px-3 py-1.5 text-xs; }
+    .btn-block    { @apply w-full; }
+    .btn-outline {
+        @apply bg-transparent text-brand-500 border-brand-500
+               hover:bg-brand-500 hover:text-white;
+    }
+    .btn-secondary {
+        @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+    }
+    .btn-danger {
+        @apply bg-[var(--color-danger)] hover:opacity-90;
+    }
+
+    /* === Forms === */
+    .form-control {
+        @apply block w-full px-3 py-2 text-sm
+               bg-white border border-gray-300 rounded-md
+               focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500
+               disabled:bg-gray-100 disabled:cursor-not-allowed;
+    }
+    .form-control.is-invalid {
+        @apply border-[var(--color-danger)] focus:border-[var(--color-danger)] focus:ring-[var(--color-danger)];
+    }
+    .invalid-feedback {
+        @apply block mt-1 text-xs text-[var(--color-danger)];
+    }
+    .form-label {
+        @apply block mb-1.5 text-sm font-medium text-gray-700;
+    }
+    .form-check {
+        @apply flex items-center gap-2;
+    }
+    .form-check-input {
+        @apply h-4 w-4 text-brand-500 border-gray-300 rounded
+               focus:ring-brand-500;
+    }
+    .form-check-label {
+        @apply text-sm text-gray-700;
+    }
+    .required {
+        @apply text-[var(--color-danger)];
+    }
+
+    /* === Alerts === */
+    .alert {
+        @apply p-3 rounded-md text-sm border;
+    }
+    .alert-success { @apply bg-green-50 text-green-800 border-green-200; }
+    .alert-danger  { @apply bg-red-50   text-red-800   border-red-200;   }
+    .alert-warning { @apply bg-yellow-50 text-yellow-800 border-yellow-200; }
+    .alert-info    { @apply bg-blue-50  text-blue-800  border-blue-200;  }
+
+    /* === Misc === */
+    .text-brand   { color: var(--color-brand-500); }
+    .text-body    { color: var(--color-body); }
+    .text-muted   { color: var(--color-muted); }
+    .text-danger  { color: var(--color-danger); }
+    .text-success { color: var(--color-success); }
+    .text-warning { color: var(--color-warning); }
+}
+
+/*
+ * Utility bridge — Bootstrap spacing scale (5px-based) → arbitrary CSS.
+ * Giữ class name cũ (`mb-30`, `pt-15`, ...) hoạt động được, blade chưa convert
+ * vẫn render đúng spacing.
+ *
+ * Cover spacing values xuất hiện trong audit: 10/15/20/30/40/50/80. Khi
+ * convert blade hoàn toàn → có thể xóa block này, dùng `mb-[30px]` trực tiếp
+ * hoặc Tailwind scale 4px (mb-7 ≈ 28px, mb-8 = 32px).
+ */
+@layer utilities {
+    .mb-10 { margin-bottom: 10px; }
+    .mb-15 { margin-bottom: 15px; }
+    .mb-20 { margin-bottom: 20px; }
+    .mb-30 { margin-bottom: 30px; }
+    .mb-40 { margin-bottom: 40px; }
+    .mb-50 { margin-bottom: 50px; }
+    .mb-80 { margin-bottom: 80px; }
+    .mt-10 { margin-top: 10px; }
+    .mt-15 { margin-top: 15px; }
+    .mt-20 { margin-top: 20px; }
+    .mt-30 { margin-top: 30px; }
+    .mt-40 { margin-top: 40px; }
+    .mt-50 { margin-top: 50px; }
+    .pt-15 { padding-top: 15px; }
+    .pt-20 { padding-top: 20px; }
+    .pt-30 { padding-top: 30px; }
+    .pb-15 { padding-bottom: 15px; }
+    .pb-20 { padding-bottom: 20px; }
+    .pb-30 { padding-bottom: 30px; }
+    .pb-80 { padding-bottom: 80px; }
+    .p-10  { padding: 10px; }
+    .p-15  { padding: 15px; }
+    .p-20  { padding: 20px; }
+    .ml-10 { margin-left: 10px; }
+    .ml-15 { margin-left: 15px; }
+    .mr-10 { margin-right: 10px; }
+    .mr-15 { margin-right: 15px; }
+    .mr-30 { margin-right: 30px; }
+}

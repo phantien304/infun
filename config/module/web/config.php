@@ -11,7 +11,9 @@ return [
     'img_default' => 'data/banner/2021-12-17/infun-thiet-ke-dau-theo-yeu-cau.jpg',
     'url' => [
         'forgot_password' => '/account/change-password?token=',
-        'verify_email' => 'verify-email?token=',
+        // Phải có prefix /account để khớp route `account/verify-email`
+        // (VerifyEmailJob build link xác thực từ key này).
+        'verify_email' => '/account/verify-email?token=',
         'product' => 'p',
         'category' => 'c',
         'manufacturer' => 'm',

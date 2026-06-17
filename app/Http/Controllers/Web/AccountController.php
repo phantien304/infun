@@ -56,7 +56,7 @@ class AccountController extends Controller
     {
         $this->processMetaSeo('buildForSeoByConfig', 'account.index.title', 'account.index.description');
 
-        return $this->render('web.account.index');
+        return $this->render('web::account.index');
     }
 
     // ===== Profile / password / newsletter ============================
@@ -72,7 +72,7 @@ class AccountController extends Controller
 
         $user = $this->userRepo->getProfile((int) getCurrentUserId());
 
-        return $this->render('web.account.edit', [
+        return $this->render('web::account.edit', [
             'entity' => $user ? UserDTO::fromModel($user) : null,
         ]);
     }
@@ -88,7 +88,7 @@ class AccountController extends Controller
 
         $user = $this->userRepo->findById((int) getCurrentUserId());
 
-        return $this->render('web.account.password', [
+        return $this->render('web::account.password', [
             'entity' => $user ? UserDTO::fromModel($user) : null,
         ]);
     }
@@ -109,7 +109,7 @@ class AccountController extends Controller
 
         $user = $this->userRepo->findById((int) getCurrentUserId());
 
-        return $this->render('web.account.newsletter', [
+        return $this->render('web::account.newsletter', [
             'entity' => $user ? UserDTO::fromModel($user) : null,
         ]);
     }
@@ -130,7 +130,7 @@ class AccountController extends Controller
 
         $addresses = $this->addressService->listForUser((int) getCurrentUserId());
 
-        return $this->render('web.account.address', [
+        return $this->render('web::account.address', [
             'entities' => UserAddressDTO::collect($addresses),
         ]);
     }
@@ -151,7 +151,7 @@ class AccountController extends Controller
             ? $this->addressService->findForUser($userId, $addressId)
             : null;
 
-        return $this->render('web.account.address_form', [
+        return $this->render('web::account.address_form', [
             'entity' => $entity ? UserAddressDTO::fromModel($entity) : null,
         ]);
     }
@@ -188,7 +188,7 @@ class AccountController extends Controller
 
         $items = $this->wishlistService->listForUser($userId);
 
-        return $this->render('web.account.wishlist', [
+        return $this->render('web::account.wishlist', [
             'entities' => WishlistItemDTO::collect($items),
         ]);
     }
@@ -228,7 +228,7 @@ class AccountController extends Controller
             $paginator->getCollection()->map(fn ($order) => OrderDTO::fromModel($order)),
         );
 
-        return $this->render('web.account.orders', [
+        return $this->render('web::account.orders', [
             'entities' => $paginator,
         ]);
     }
@@ -268,7 +268,7 @@ class AccountController extends Controller
             });
         }
 
-        return $this->render('web.account.order_detail', [
+        return $this->render('web::account.order_detail', [
             'entity'  => OrderDTO::fromModel($order),
             'message' => $message,
         ]);

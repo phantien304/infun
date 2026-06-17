@@ -3,6 +3,7 @@
 namespace App\Services\Checkout;
 
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
+use App\Services\Cart\VoucherService;
 
 /**
  * Tính toàn bộ các dòng trong "Hóa đơn của bạn": sub_total, coupon, voucher,
@@ -23,6 +24,7 @@ class CheckoutTotalService
     public function __construct(
         protected ShippingFeeService $shippingFee,
         protected UserRewardRepositoryInterface $rewardRepo,
+        protected VoucherService $voucherService,
     ) {
     }
 
@@ -32,12 +34,18 @@ class CheckoutTotalService
         $running = (int) array_sum(array_column($ctx->items, 'total'));
 
         $this->lineSubTotal($totalData, $running);
-        $this->lineCoupon($ctx, $totalData, $running);
-        $this->lineVoucher($ctx, $totalData, $running);
+
+        // Shopee multi-coupon — single source of truth qua $ctx->appliedCoupons.
+        // Voucher (gift card) áp riêng ở lineVouchers (sau shipping).
+        $this->linesAppliedCoupons($ctx, $totalData, $running);
+        $this->lineGifts($totalData);
         $this->lineReward($ctx, $totalData, $running);
         if ($withShipping) {
-            $this->lineShipping($totalData, $running);
+            $this->lineShipping($ctx, $totalData, $running);
         }
+        // Voucher (gift card) áp SAU shipping — cover được cả phí ship.
+        // Stack nhiều voucher, cap tại residual (không "trả tiền dư").
+        $this->lineVouchers($totalData, $running);
         $this->lineTotal($totalData, $running);
 
         return [$totalData, max(0, $running)];
@@ -53,70 +61,61 @@ class CheckoutTotalService
         ];
     }
 
-    protected function lineCoupon(CheckoutContext $ctx, array &$totalData, int &$total): void
+    /**
+     * Phase 4 Shopee — render 1 line cho mỗi coupon đã áp (trừ freeship).
+     * Freeship type=3 KHÔNG add line ở đây — lineShipping xử lý (zero fee).
+     *
+     * Mỗi entry $ctx->appliedCoupons: {coupon, discount, type}. discount đã
+     * compute từ CouponService::applyCodes — chỉ việc trừ vào running total.
+     */
+    protected function linesAppliedCoupons(CheckoutContext $ctx, array &$totalData, int &$total): void
     {
-        if (! session()->has('coupon') || empty($ctx->coupon)) {
-            return;
-        }
+        $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
 
-        $coupon = $ctx->coupon;
-        $items = $ctx->items;
-
-        if (empty($coupon['product'])) {
-            $subTotal = (int) array_sum(array_column($items, 'total'));
-        } else {
-            $subTotal = 0;
-            foreach ($items as $item) {
-                if (in_array($item['id'], $coupon['product'], true)) {
-                    $subTotal += (int) $item['total'];
-                }
-            }
-        }
-
-        if ($coupon['type'] === 'F') {
-            $coupon['discount'] = min((int) $coupon['discount'], $subTotal);
-        } elseif ($coupon['type'] === 'P' && (int) $coupon['discount'] > 100) {
-            $coupon['discount'] = 100;
-        }
-
-        $discountTotal = 0;
-        foreach ($items as $item) {
-            $apply = empty($coupon['product']) || in_array($item['id'], $coupon['product'], true);
-            if (! $apply || $subTotal <= 0) {
+        foreach ($ctx->appliedCoupons as $entry) {
+            $coupon = $entry['coupon'];
+            $type = (int) ($entry['type'] ?? $coupon->type);
+            if ($type === $typeFreeship) {
                 continue;
             }
-            if ($coupon['type'] === 'F') {
-                $discountTotal += (int) ($coupon['discount'] * ($item['total'] / $subTotal));
-            } elseif ($coupon['type'] === 'P') {
-                $discountTotal += (int) ($item['total'] / 100 * $coupon['discount']);
-            }
-        }
 
-        $totalData[] = [
-            'code'  => 'coupon',
-            'title' => sprintf(trans('messages.TextCoupon'), session()->get('coupon')),
-            'text'  => '-'.$this->money($discountTotal),
-            'value' => -$discountTotal,
-        ];
-        $total -= $discountTotal;
+            $discount = max(0, min((int) $entry['discount'], $total));
+            if ($discount <= 0) {
+                continue;
+            }
+
+            $totalData[] = [
+                'code'  => 'coupon:' . $coupon->code,
+                'title' => sprintf(trans('messages.TextCoupon'), $coupon->code),
+                'text'  => '-' . $this->money($discount),
+                'value' => -$discount,
+            ];
+            $total -= $discount;
+        }
     }
 
-    protected function lineVoucher(CheckoutContext $ctx, array &$totalData, int &$total): void
+    /**
+     * Gift informational line — KHÔNG trừ vào total (quà miễn phí, không
+     * ảnh hưởng giá). Chỉ render để user thấy "Quà tặng: N quà" trên bill
+     * confirm đã chọn. Đọc trực tiếp session vì gift không có flow
+     * applyCodes phức tạp như coupon.
+     */
+    protected function lineGifts(array &$totalData): void
     {
-        if (! session()->has('voucher') || empty($ctx->voucher)) {
+        $applied = (array) session()->get('checkout.applied_gifts', []);
+        $count = 0;
+        foreach ($applied as $entry) {
+            $count += count((array) ($entry['item_ids'] ?? []));
+        }
+        if ($count <= 0) {
             return;
         }
-
-        $amount = (int) $ctx->voucher['amount'];
-        $amount = $amount > $total ? $total : $amount;
-
         $totalData[] = [
-            'code'  => 'voucher',
-            'title' => sprintf(trans('messages.TextVoucher'), session()->get('voucher')),
-            'text'  => '-'.$this->money($amount),
-            'value' => -$amount,
+            'code'  => 'gifts',
+            'title' => 'Quà tặng',
+            'text'  => $count . ' quà',
+            'value' => 0,
         ];
-        $total -= $amount;
     }
 
     protected function lineReward(CheckoutContext $ctx, array &$totalData, int &$total): void
@@ -158,10 +157,16 @@ class CheckoutTotalService
         $total -= $discountTotal;
     }
 
-    protected function lineShipping(array &$totalData, int &$total): void
+    protected function lineShipping(CheckoutContext $ctx, array &$totalData, int &$total): void
     {
         $method = (string) request()->get('carrier_code');
+
+        // Carrier chưa chọn — vẫn render placeholder freeship để user biết
+        // mã đang áp + sẽ kích hoạt ở bước chọn vận chuyển. Tránh trường
+        // hợp user áp 2 mã (fixed + freeship) nhưng UI chỉ hiện 1 line vì
+        // freeship bị skip ở linesAppliedCoupons + lineShipping bail-out.
         if (! filled($method)) {
+            $this->lineFreeshipPlaceholder($ctx, $totalData);
             return;
         }
 
@@ -170,6 +175,7 @@ class CheckoutTotalService
 
         [$ok, $fee] = $this->shippingFee->calculate($method, $total, $cartShipping, $address);
         if (! $ok || $fee === null) {
+            $this->lineFreeshipPlaceholder($ctx, $totalData);
             return;
         }
 
@@ -180,6 +186,82 @@ class CheckoutTotalService
             'value' => $fee,
         ];
         $total += $fee;
+
+        // Phase 4 — freeship coupon trừ phí ship. Add line riêng để user thấy
+        // "đã tiết kiệm bao nhiêu" thay vì thấy ship = 0 không rõ vì sao.
+        if ($ctx->hasFreeshipCoupon && $fee > 0) {
+            $freeshipCode = $this->findFreeshipCode($ctx);
+            $totalData[] = [
+                'code'  => 'coupon_freeship',
+                'title' => $freeshipCode !== null
+                    ? sprintf(trans('messages.TextCoupon'), $freeshipCode)
+                    : trans('messages.TextCoupon', ['code' => 'FREESHIP']),
+                'text'  => '-' . $this->money($fee),
+                'value' => -$fee,
+            ];
+            $total -= $fee;
+        }
+    }
+
+    /**
+     * Hiển thị 1 line confirm freeship coupon đang áp khi chưa biết phí ship
+     * thật (chưa pick carrier hoặc shippingFee fail). value=0 để KHÔNG mutate
+     * `total` — discount thật áp khi fee tính được sau đó.
+     */
+    protected function lineFreeshipPlaceholder(CheckoutContext $ctx, array &$totalData): void
+    {
+        if (! $ctx->hasFreeshipCoupon) {
+            return;
+        }
+        $code = $this->findFreeshipCode($ctx);
+        $totalData[] = [
+            'code'  => 'coupon_freeship_pending',
+            'title' => $code !== null
+                ? sprintf(trans('messages.TextCoupon'), $code)
+                : 'Voucher freeship',
+            'text'  => 'Áp dụng khi chọn vận chuyển',
+            'value' => 0,
+        ];
+    }
+
+    protected function findFreeshipCode(CheckoutContext $ctx): ?string
+    {
+        $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
+        foreach ($ctx->appliedCoupons as $entry) {
+            if ((int) ($entry['type'] ?? $entry['coupon']->type) === $typeFreeship) {
+                return $entry['coupon']->code;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Render line cho mỗi voucher đã áp. Stack nhiều, cap tại residual total.
+     * Voucher amount đã pro-rate qua `VoucherService::resolveApplied`.
+     */
+    protected function lineVouchers(array &$totalData, int &$total): void
+    {
+        if ($total <= 0) {
+            return;
+        }
+        $result = $this->voucherService->resolveApplied($total);
+        if (empty($result['applied'])) {
+            return;
+        }
+        foreach ($result['applied'] as $entry) {
+            $amount = (int) $entry['amount'];
+            if ($amount <= 0) {
+                continue;
+            }
+            $voucher = $entry['voucher'];
+            $totalData[] = [
+                'code'  => 'voucher:' . $voucher->code,
+                'title' => sprintf('Thẻ quà tặng %s', $voucher->code),
+                'text'  => '-' . $this->money($amount),
+                'value' => -$amount,
+            ];
+            $total -= $amount;
+        }
     }
 
     protected function lineTotal(array &$totalData, int &$total): void
@@ -201,8 +283,8 @@ class CheckoutTotalService
         return (array) $default;
     }
 
-    protected function money(int $v): string
+    protected function money(int $amount): string
     {
-        return number_format($v, 0, '', ',').'đ';
+        return number_format($amount, 0, '', ',').'đ';
     }
 }

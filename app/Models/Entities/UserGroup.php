@@ -2,7 +2,6 @@
 
 namespace App\Models\Entities;
 
-
 use App\Models\Base\Base;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -12,7 +11,7 @@ class UserGroup extends Base
     protected $table = 'user_group';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['productRewards', 'taxRateToUserGroups'];
+    protected static array $destroyRelations = ['productRewards', 'taxRateToUserGroups'];
 
     public function descriptions()
     {

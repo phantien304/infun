@@ -6,6 +6,6 @@ trait HasThumbnail
 {
     public function thumbnail(int $width, int $height, string $module = 'web'): string
     {
-        return \thumbnail($this->image, $width, $height, $module);
+        return \thumbnail((string) ($this->image ?? ''), $width, $height, $module);
     }
 }

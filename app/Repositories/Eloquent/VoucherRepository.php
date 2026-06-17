@@ -5,25 +5,81 @@ namespace App\Repositories\Eloquent;
 use App\Models\Entities\Orders;
 use App\Models\Entities\Voucher;
 use App\Repositories\Base\QueryableRepository;
+use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class VoucherRepository extends QueryableRepository implements VoucherRepositoryInterface
 {
+    use CacheableRepository;
+
     public function model(): string
     {
         return Voucher::class;
     }
 
+    // === Shopee-style API ===
+
+    public function findByCode(string $code): ?Voucher
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return null;
+        }
+        return $this->resetModel()
+            ->newQuery()
+            ->where('code', $code)
+            ->with(['voucherTheme'])
+            ->first();
+    }
+
     /**
-     * Port logic CheckoutMarketing::getVoucher sang repo. Giữ nguyên semantics.
+     * Batch lookup nhiều code trong 1 query — tránh N+1 khi resolveApplied
+     * stack nhiều voucher (gọi lại mỗi lần build total). Trả Collection
+     * keyBy 'code' để caller `->get($code)`.
      *
-     *  - Voucher gắn order: order phải đã complete VÀ có OrdersVoucher tương
-     *    ứng (chống abuse — không cho dùng voucher trước khi order kích hoạt nó).
-     *  - Số dư = voucher.amount + SUM(voucher_history.amount) — voucher_history
-     *    ghi negative khi tiêu, nên cộng trở lại sẽ ra số dư còn lại. Logic này
-     *    legacy, giữ nguyên.
-     *  - amount <= 0 → invalid (hết).
+     * @param  array<int, string>  $codes
+     * @return Collection<string, Voucher>
+     */
+    public function findByCodes(array $codes): Collection
+    {
+        $codes = array_values(array_filter(array_map('trim', $codes), fn ($c) => $c !== ''));
+        if (empty($codes)) {
+            return collect();
+        }
+        return $this->resetModel()
+            ->newQuery()
+            ->whereIn('code', $codes)
+            ->with(['voucherTheme'])
+            ->get()
+            ->keyBy('code');
+    }
+
+    public function listForEmail(string $email): Collection
+    {
+        $email = trim(strtolower($email));
+        if ($email === '') {
+            return collect();
+        }
+        return $this->resetModel()
+            ->newQuery()
+            ->forEmail($email)
+            ->with(['voucherTheme'])
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    public function flushCache(): void
+    {
+        $this->forgetCacheTagged([getCoreConfig('voucher.cache.tag_root')]);
+    }
+
+    // === Legacy API ===
+
+    /**
+     * Port logic CheckoutMarketing::getVoucher cũ. KHÔNG dùng cho flow Shopee
+     * mới — service mới gọi `findByCode` + `VoucherService::validate`.
      */
     public function resolveVoucher(?string $code): array
     {
@@ -40,7 +96,6 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             return [];
         }
 
-        // Voucher gắn order — check trạng thái + record OrdersVoucher
         if ($voucher->order_id) {
             $completeStatuses = (array) getConfigDb('order_complete_status_all', []);
 

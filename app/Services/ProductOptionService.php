@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Entities\Product;
+use App\Models\Entities\ProductVariant;
 use Illuminate\Support\Collection;
 
 class ProductOptionService
@@ -13,15 +14,15 @@ class ProductOptionService
 
         $variantSection = $hasVariants
             ? $this->buildVariantOptions($product)
-            : ['options' => [], 'imageOptions' => []];
+            : ['optionGroups' => [], 'variantSwatchImages' => []];
 
         $customFieldOptions = $this->buildCustomFieldOptions($product);
 
-        $options = [...$variantSection['options'], ...$customFieldOptions];
+        $optionGroups = [...$variantSection['optionGroups'], ...$customFieldOptions];
 
         return [
-            'options'        => $options,
-            'imageOptions'   => $variantSection['imageOptions'],
+            'optionGroups'        => $optionGroups,
+            'variantSwatchImages' => $variantSection['variantSwatchImages'],
             'variantMatrix'  => $hasVariants ? $this->buildVariantMatrix($product) : [],
             'defaultVariant' => $hasVariants ? $this->resolveDefaultVariant($product) : null,
             'variantGallery' => $hasVariants ? $this->buildVariantGallery($product) : [],
@@ -54,26 +55,24 @@ class ProductOptionService
     {
         $productVariants = $product->productVariants ?? collect();
         if ($productVariants->isEmpty()) {
-            return ['options' => [], 'imageOptions' => []];
+            return ['optionGroups' => [], 'variantSwatchImages' => []];
         }
 
-        $variantDeclarations = ($product->productOptions ?? collect())
-            ->filter(fn ($po) => $po->option?->role === getCoreConfig('option.role_variant'));
-
-        if ($variantDeclarations->isEmpty()) {
-            return ['options' => [], 'imageOptions' => []];
-        }
-
-        $optionValuesByVariant = [];
+        $optionMeta = [];
+        $optionValuesByOption = [];
         $variantImages = [];
+
         foreach ($productVariants as $variant) {
             $image = (string) ($variant->image ?? '');
             foreach ($variant->productVariantAttributes ?? [] as $attr) {
                 $optionId      = (int) $attr->option_id;
                 $optionValueId = (int) $attr->option_value_id;
 
+                if ($attr->option) {
+                    $optionMeta[$optionId] ??= $attr->option;
+                }
                 if ($attr->optionValue) {
-                    $optionValuesByVariant[$optionId][$optionValueId] ??= $attr->optionValue;
+                    $optionValuesByOption[$optionId][$optionValueId] ??= $attr->optionValue;
                 }
                 if ($image !== '') {
                     $variantImages[$optionValueId][$image] = true;
@@ -85,42 +84,43 @@ class ProductOptionService
             array_filter($variantImages, fn (array $set) => count($set) === 1),
         );
 
-        $options = [];
-        $images  = [];
-        $index   = 0;
+        uasort(
+            $optionMeta,
+            fn ($a, $b) => [(int) ($a->sort_order ?? 0), (int) $a->id]
+                <=> [(int) ($b->sort_order ?? 0), (int) $b->id],
+        );
 
-        foreach ($variantDeclarations as $value) {
-            $option   = $value->option;
-            $optionId = (int) $option->id;
+        $optionGroups = [];
+        $swatchImages = [];
+        $index        = 0;
 
-            $optionValues = $optionValuesByVariant[$optionId] ?? [];
+        foreach ($optionMeta as $optionId => $option) {
+            $optionValues = $optionValuesByOption[$optionId] ?? [];
             if (empty($optionValues)) {
                 continue;
             }
 
             $optionType = (string) $option->type;
-            [$rows, $rowImages] = $this->buildImageAndOptionValues(
+            [$selectableValues, $rowImages] = $this->buildImageAndOptionValues(
                 collect($optionValues),
                 $optionType,
                 $variantImages,
             );
 
-            $images = array_merge($images, $rowImages);
+            $swatchImages = array_merge($swatchImages, $rowImages);
 
-            $options[$index++] = [
-                'id'                    => $optionId,
-                'value'                 => null,
-                'required'              => (bool) ($value->required ?? true),
-                'option_id'             => $optionId,
-                'option_name'           => $option->description?->name,
-                'option_type'           => $optionType,
-                'name_display'          => $option->description?->name_display ?? $option->description?->name,
-                'role'                  => getCoreConfig('option.role_variant'),
-                'product_option_values' => $rows,
+            $optionGroups[$index++] = [
+                'option_id'        => $optionId,
+                'value'            => null,
+                'required'         => true,
+                'type'             => $optionType,
+                'name_display'     => $option->description?->name_display ?? $option->description?->name,
+                'role'             => getCoreConfig('option.role_variant'),
+                'selectableValues' => $selectableValues,
             ];
         }
 
-        return ['options' => $options, 'imageOptions' => $images];
+        return ['optionGroups' => $optionGroups, 'variantSwatchImages' => $swatchImages];
     }
 
     protected function buildImageAndOptionValues(Collection $optionValues, string $optionType, array $variantImages = []): array
@@ -159,45 +159,43 @@ class ProductOptionService
     protected function buildCustomFieldOptions(Product $product): array
     {
         $productOptions = ($product->productOptions ?? collect())
-            ->filter(fn ($value) => $value->option?->role === getCoreConfig('option.role_custom_field'));
+            ->filter(fn ($productOption) => $productOption->option?->role === getCoreConfig('option.role_custom_field'));
 
         if ($productOptions->isEmpty()) {
             return [];
         }
 
-        $data = [];
+        $optionGroups = [];
         $index = 0;
 
-        foreach ($productOptions as $po) {
-            $option = $po->option;
-            $values = ($po->productOptionValues ?? collect())
-                ->map(fn ($pov) => [
-                    'id'              => (int) $pov->id,
-                    'option_value_id' => (int) $pov->option_value_id,
-                    'name'            => (string) ($pov->optionValue?->description?->name ?? ''),
-                    'image'           => (string) ($pov->image ?? ''),
-                    'product_id'      => (int) $pov->product_id,
-                    'option_id'       => (int) $pov->option_id,
+        foreach ($productOptions as $productOption) {
+            $option = $productOption->option;
+            $selectableValues = ($productOption->productOptionValues ?? collect())
+                ->map(fn ($productOptionValue) => [
+                    'id'              => (int) $productOptionValue->id,
+                    'option_value_id' => (int) $productOptionValue->option_value_id,
+                    'name'            => (string) ($productOptionValue->optionValue?->description?->name ?? ''),
+                    'image'           => (string) ($productOptionValue->image ?? ''),
+                    'product_id'      => (int) $productOptionValue->product_id,
+                    'option_id'       => (int) $productOptionValue->option_id,
                 ])
                 ->values()
                 ->all();
 
-            $optionId = (int) ($option->id ?? $po->option_id ?? 0);
+            $optionId = (int) ($option->id ?? $productOption->option_id ?? 0);
 
-            $data[$index++] = [
-                'id'                    => $optionId,
-                'value'                 => $po->value,
-                'required'              => (bool) ($po->required ?? false),
-                'option_id'             => $optionId,
-                'option_name'           => $option->description?->name,
-                'option_type'           => (string) $option->type,
-                'name_display'          => $option->description?->name_display ?? $option->description?->name,
-                'role'                  => getCoreConfig('option.role_custom_field'),
-                'product_option_values' => $values,
+            $optionGroups[$index++] = [
+                'option_id'        => $optionId,
+                'value'            => $productOption->value,
+                'required'         => (bool) ($productOption->required ?? false),
+                'type'             => (string) $option->type,
+                'name_display'     => $option->description?->name_display ?? $option->description?->name,
+                'role'             => getCoreConfig('option.role_custom_field'),
+                'selectableValues' => $selectableValues,
             ];
         }
 
-        return $data;
+        return $optionGroups;
     }
 
     protected function buildVariantMatrix(Product $product): array
@@ -213,13 +211,7 @@ class ProductOptionService
             ksort($attributes);
 
             $stock = $variant->productStock;
-            // Stock NULL = chưa có row product_stock (data drift / seed thiếu /
-            // eager-load relation fail). KHÔNG fallback về (available=0,
-            // subtract=true) — rule đó sẽ làm UI grey toàn bộ swatch ngay từ
-            // init khi data có vấn đề. Thay bằng (available=999, subtract=false)
-            // = "không track tồn" → variant pickable, user vẫn add-to-cart
-            // được. Stock thực sẽ ép tại OrderService khi tạo order.
-            $available = $stock ? (int) $stock->available : 999;
+            $available = $stock ? $stock->sellableQuantity() : 999;
             $subtract = $stock ? (bool) $stock->subtract : false;
 
             [$effectivePrice, $strikePrice, $special] = $this->resolveVariantPricing($variant);
@@ -287,7 +279,7 @@ class ProductOptionService
             'special'         => $special,
             'image'           => $default->image,
             'attributes'      => $attributes,
-            'available'       => $stock ? (int) $stock->available : 0,
+            'available'       => $stock ? $stock->sellableQuantity() : 0,
             'sku'             => $default->sku,
             'label'           => $default->description?->label,
             'note'            => $default->description?->note,
@@ -308,15 +300,15 @@ class ProductOptionService
      * Logic strike: chỉ trả giá tham chiếu nếu strike > effective. Tránh
      * UI show "1.000.000đ" gạch ngang lên đè "1.000.000đ" giá hiện tại.
      */
-    protected function resolveVariantPricing(\App\Models\Entities\ProductVariant $variant): array
+    protected function resolveVariantPricing(ProductVariant $productVariant): array
     {
-        $basePrice = (float) $variant->price;
-        $regular = $variant->regular_price !== null ? (float) $variant->regular_price : null;
+        $basePrice = (float) $productVariant->price;
+        $regular = $productVariant->regular_price !== null ? (float) $productVariant->regular_price : null;
 
         $special = null;
         $effective = $basePrice;
-        if ($variant->relationLoaded('productVariantSpecial') && $variant->productVariantSpecial) {
-            $vs = $variant->productVariantSpecial;
+        if ($productVariant->relationLoaded('productVariantSpecial') && $productVariant->productVariantSpecial) {
+            $vs = $productVariant->productVariantSpecial;
             $effective = (float) $vs->price;
             $special = [
                 'id'         => (int) $vs->id,
@@ -326,8 +318,6 @@ class ProductOptionService
             ];
         }
 
-        // Ưu tiên reference theo thứ tự: regular_price (MSRP) > variant.price
-        // (khi đang trong campaign). Chỉ trả nếu lớn hơn effective.
         $strike = null;
         if ($regular !== null && $regular > $effective) {
             $strike = $regular;

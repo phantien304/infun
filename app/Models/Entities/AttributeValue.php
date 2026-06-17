@@ -9,7 +9,7 @@ class AttributeValue extends Base
     protected $table = 'attribute_value';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $destroyRelations = ['productAttributes'];
+    protected static array $destroyRelations = ['productAttributes'];
 
     public function descriptions()
     {

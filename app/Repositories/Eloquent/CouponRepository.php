@@ -3,32 +3,120 @@
 namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\Coupon;
+use App\Models\Entities\CouponHistory;
 use App\Models\Entities\ProductCategory;
 use App\Repositories\Base\QueryableRepository;
+use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class CouponRepository extends QueryableRepository implements CouponRepositoryInterface
 {
+    use CacheableRepository;
+
     public function model(): string
     {
         return Coupon::class;
     }
 
+    // === Shopee-style API ===
+
+    public function listActiveForUser(?int $userId, ?int $userGroupId): Collection
+    {
+        return $this->rememberCache(
+            $this->cacheKeyActive($userGroupId),
+            fn () => $this->resetModel()
+                ->newQuery()
+                ->active()
+                ->forUserGroupOrPublic($userGroupId)
+                ->with(['couponProducts', 'couponCategories'])
+                ->orderByDesc('sort_order')
+                ->orderBy('id')
+                ->get(),
+            getCoreConfig('time.cache'),
+            tags: [getCoreConfig('coupon.cache.tag_root')],
+        );
+    }
+
+    public function listSavedByUser(int $userId): Collection
+    {
+        // KHÔNG cache: user-specific data + thay đổi nhanh (save/unsave) →
+        // cache value invalidate quá thường. Acceptable cost: 1 query JOIN
+        // user_coupon với indexed lookup user_id.
+        return $this->resetModel()
+            ->newQuery()
+            ->savedBy($userId)
+            ->with(['couponProducts', 'couponCategories'])
+            ->orderByDesc('sort_order')
+            ->orderBy('id')
+            ->get();
+    }
+
+    public function findByCode(string $code): ?Coupon
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return null;
+        }
+
+        return $this->resetModel()
+            ->newQuery()
+            ->where('code', $code)
+            ->with(['couponProducts', 'couponCategories'])
+            ->first();
+    }
+
+    public function countUsedByUser(int $userId, int $couponId): int
+    {
+        return CouponHistory::query()
+            ->forUser($userId)
+            ->forCoupon($couponId)
+            ->usedOrApplied()
+            ->count();
+    }
+
+    /**
+     * Batch đếm số lần dùng (applied + used) của 1 user trên nhiều coupon —
+     * 1 query GROUP BY thay vì countUsedByUser mỗi coupon (N+1 ở listForCart).
+     *
+     * @param  array<int, int>  $couponIds
+     * @return array<int, int>  [coupon_id => count]
+     */
+    public function countUsedByUserForCoupons(int $userId, array $couponIds): array
+    {
+        if (empty($couponIds)) {
+            return [];
+        }
+
+        return CouponHistory::query()
+            ->forUser($userId)
+            ->whereIn('coupon_id', $couponIds)
+            ->usedOrApplied()
+            ->selectRaw('coupon_id, COUNT(*) as aggregate')
+            ->groupBy('coupon_id')
+            ->pluck('aggregate', 'coupon_id')
+            ->map(fn ($count) => (int) $count)
+            ->all();
+    }
+
+    public function flushCache(): void
+    {
+        $this->forgetCacheTagged([getCoreConfig('coupon.cache.tag_root')]);
+    }
+
+    private function cacheKeyActive(?int $userGroupId): string
+    {
+        return getCoreConfig('coupon.cache.key_active') . ':' . ($userGroupId ?? 'public');
+    }
+
+    // === Legacy API (backward-compat trait CheckoutMarketing) ===
+
     /**
      * Resolve coupon — port nguyên logic từ trait CheckoutMarketing::getCoupon
-     * nhưng tách ra repo. Logic giữ nguyên semantics cũ:
-     *
-     *  - Coupon phải còn trong khoảng [date_start, date_end] (NULL = không
-     *    giới hạn đầu đó).
-     *  - `total` là min subtotal; nếu subtotal >= total → KHÔNG hợp lệ (semantics
-     *    legacy ngược trực giác nhưng giữ nguyên để không vỡ data cũ).
-     *  - `uses_total > 0` → đếm CouponHistory.count() so với uses_total.
-     *  - Nếu coupon có gắn product/category → cart phải chứa ít nhất 1 sản phẩm
-     *    match (qua product_id trực tiếp hoặc qua category).
-     *
-     * Trả array với cùng keys như legacy để service tính tiền không phải đổi.
+     * cũ. KHÔNG dùng cho flow Shopee mới — service mới gọi `findByCode` +
+     * `CouponService::validateForCart` + `computeDiscount`.
      */
     public function resolveCoupon(?string $code, array $cartItems, int $cartSubtotal): array
     {
@@ -52,8 +140,6 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
             return [];
         }
 
-        // Legacy semantics: subtotal >= coupon.total (min order) thì FAIL.
-        // Giữ nguyên không sửa để dữ liệu coupon cũ vẫn hoạt động như đang chạy.
         if ($coupon->total >= $cartSubtotal) {
             return [];
         }
@@ -98,7 +184,7 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
             'date_end'      => $coupon->date_end,
             'uses_total'    => $coupon->uses_total,
             'uses_customer' => $coupon->uses_customer,
-            'status'        => $coupon->status,
+            'status'        => $coupon->status ?? null,
         ];
     }
 

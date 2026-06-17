@@ -109,28 +109,27 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
 
     public function getActiveCriteria(): Collection
     {
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.review.tag_criteria')],
+        return $this->rememberCache(
             getCoreConfig('cache.review.key_criteria_active'),
             fn () => ReviewCriteria::active()->with('description')->get(),
             now()->addDay(),
+            tags: [getCoreConfig('cache.review.tag_criteria')],
         );
     }
 
     public function getActiveTags(int $limit = 8): Collection
     {
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.review.tag_tag')],
+        return $this->rememberCache(
             getCoreConfig('cache.review.key_tag_top').$limit,
             fn () => ReviewTag::active()->with('description')->limit($limit)->get(),
             now()->addHour(),
+            tags: [getCoreConfig('cache.review.tag_tag')],
         );
     }
 
     public function getCriteriaAverages(int $productId): array
     {
-        return $this->rememberCacheTagged(
-            [getCoreConfig('cache.review.tag_root'), getCoreConfig('cache.review.tag_product').$productId],
+        return $this->rememberCache(
             getCoreConfig('cache.review.key_criteria_avg').$productId,
             function () use ($productId) {
                 $rows = DB::table('review_rating as rr')
@@ -146,6 +145,10 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
                 return $rows->mapWithKeys(fn ($r) => [$r->code => (float) $r->avg_rating])->all();
             },
             now()->addHour(),
+            tags: [
+                getCoreConfig('cache.review.tag_root'),
+                getCoreConfig('cache.review.tag_product').$productId,
+            ],
         );
     }
 

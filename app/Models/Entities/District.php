@@ -11,7 +11,7 @@ class District extends Base
     protected $table = 'district';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['wards'];
+    protected static array $destroyRelations = ['wards'];
 
     public function description()
     {

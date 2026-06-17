@@ -11,7 +11,7 @@ class Skincare extends Base
     protected $table = 'skincare';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $_destroyRelations = ['ingredientSkincares'];
+    protected static array $destroyRelations = ['ingredientSkincares'];
 
     public function ingredientSkincares()
     {

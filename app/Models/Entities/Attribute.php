@@ -11,7 +11,7 @@ class Attribute extends Base
     protected $table = 'attribute';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $destroyRelations = ['attributeValues'];
+    protected static array $destroyRelations = ['attributeValues'];
 
     public function attributeValues()
     {

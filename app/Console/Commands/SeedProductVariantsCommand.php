@@ -52,8 +52,6 @@ class SeedProductVariantsCommand extends Command
 
     protected $description = 'Seed product_variant + cluster (attribute, stock, movement) + custom field options cho test schema mới';
 
-    private const WAREHOUSE_ID = 1;
-
     /** Marker để phân biệt option seed khỏi option thật của admin. */
     private const SEED_COLOR_NAME = '[SEED] Màu sắc';
     private const SEED_SIZE_NAME  = '[SEED] Size';
@@ -159,7 +157,7 @@ class SeedProductVariantsCommand extends Command
                     &$totalVariantsCreated,
                     $bar,
                 ) {
-                    [$variants, $attributes, $stocks, $movements, $productOptions, $touched] =
+                    [$variants, $attributes, $stocks, $movements, $touched] =
                         $this->buildBatch(
                             $products,
                             $percent,
@@ -186,9 +184,6 @@ class SeedProductVariantsCommand extends Command
                     }
                     if ($movements) {
                         DB::table('stock_movement')->insert($movements);
-                    }
-                    if ($productOptions) {
-                        DB::table('product_option')->insertOrIgnore($productOptions);
                     }
 
                     $nextVariantId        += count($variants);
@@ -330,8 +325,10 @@ class SeedProductVariantsCommand extends Command
                             'option_id'  => $optionId,
                             'value'      => $cf['default'],
                             'required'   => $cf['required'],
-                            // sort_order >= 10 để hiện SAU variant declarations
-                            // (Color sort 0, Size sort 1 trong buildBatch).
+                            // sort_order >= 10 chỉ để xếp thứ tự GIỮA các custom
+                            // field. Variant luôn render trước (buildOptions nối
+                            // variant groups trước custom field), không phụ thuộc
+                            // sort_order này nữa.
                             'sort_order' => 10 + $sort,
                             'created_at' => $now,
                             'updated_at' => $now,
@@ -505,10 +502,11 @@ class SeedProductVariantsCommand extends Command
     }
 
     /**
-     * Build payload cho 1 chunk product. Trả 5 mảng + danh sách product_id đã
-     * touch (để caller cộng dồn cho backfill).
+     * Build payload cho 1 chunk product. Trả 4 mảng + danh sách product_id đã
+     * touch (để caller cộng dồn cho backfill). Hướng B: không còn trả mảng
+     * product_option (variant declaration) — trục biến thể suy từ attribute.
      *
-     * @return array{0:array, 1:array, 2:array, 3:array, 4:array, 5:array<int>}
+     * @return array{0:array, 1:array, 2:array, 3:array, 4:array<int>}
      */
     private function buildBatch(
         $products,
@@ -525,12 +523,16 @@ class SeedProductVariantsCommand extends Command
         int $startMovementId,
     ): array {
         $now = Carbon::now();
-        $variants = $attributes = $stocks = $movements = $productOptions = [];
+        $variants = $attributes = $stocks = $movements = [];
         $touched = [];
 
         $variantId  = $startVariantId;
         $stockId    = $startStockId;
         $movementId = $startMovementId;
+        // Pulled once per batch from core.stock.default_warehouse_id so the
+        // seed payload follows the same single source of truth as runtime
+        // callers (ProductVariant::productStock, CreateOrderService, ...).
+        $warehouseId = (int) getCoreConfig('stock.default_warehouse_id');
 
         foreach ($products as $product) {
             if (rand(1, 100) > $percent) {
@@ -549,22 +551,9 @@ class SeedProductVariantsCommand extends Command
 
             $touched[] = (int) $product->id;
 
-            // Declarations: 1 row mỗi (product, option). Đặt sort_order để
-            // _option.blade.php render Color trước Size.
-            $productOptions[] = [
-                'product_id' => $product->id,
-                'option_id'  => $colorOptionId,
-                'value'      => null,
-                'required'   => 1,
-                'sort_order' => 0,
-            ];
-            $productOptions[] = [
-                'product_id' => $product->id,
-                'option_id'  => $sizeOptionId,
-                'value'      => null,
-                'required'   => 1,
-                'sort_order' => 1,
-            ];
+            // Hướng B: KHÔNG còn tạo product_option role=variant. Trục biến thể
+            // (kể cả thứ tự Color trước Size) suy từ product_variant_attribute +
+            // option.sort_order — xem ProductOptionService::buildVariantOptions.
 
             $basePrice = (float) $product->price;
             $isFirst = true;
@@ -617,7 +606,7 @@ class SeedProductVariantsCommand extends Command
                 $stocks[] = [
                     'id'                 => $stockId,
                     'product_variant_id' => $variantId,
-                    'warehouse_id'       => self::WAREHOUSE_ID,
+                    'warehouse_id'       => $warehouseId,
                     'on_hand'            => $onHand,
                     'reserved'           => 0,
                     'subtract'           => 1,
@@ -629,7 +618,7 @@ class SeedProductVariantsCommand extends Command
                 $movements[] = [
                     'id'                 => $movementId,
                     'product_variant_id' => $variantId,
-                    'warehouse_id'       => self::WAREHOUSE_ID,
+                    'warehouse_id'       => $warehouseId,
                     'type'               => 'receive',
                     'quantity_change'    => $onHand,
                     'on_hand_after'      => $onHand,
@@ -648,7 +637,7 @@ class SeedProductVariantsCommand extends Command
             }
         }
 
-        return [$variants, $attributes, $stocks, $movements, $productOptions, $touched];
+        return [$variants, $attributes, $stocks, $movements, $touched];
     }
 
     /**

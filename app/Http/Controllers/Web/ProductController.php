@@ -50,53 +50,52 @@ class ProductController extends Controller
         $this->setBreadcrumb(['text' => $product->name, 'href' => $product->url, 'separator' => false]);
         $this->processMetaSeo('buildForSeoByData', (string) $product->metaTitle(), (string) $product->metaDescription());
 
-        $tree = $this->productOptionService->buildOptions($entity);
+        $optionTree = $this->productOptionService->buildOptions($entity);
         $reviewData = [];
         if ($entity->is_review) {
             $userId = (int) getCurrentUserId();
             $reviewData = [
-                'reviews'             => null,
-                'criteria'            => ReviewCriteriaDTO::collect($this->reviewRepo->getActiveCriteria()),
-                'tags'                => ReviewTagDTO::collect($this->reviewRepo->getActiveTags()),
-                'criteriaAverages'    => $this->reviewRepo->getCriteriaAverages($id),
-                'hasReviewed'         => $userId > 0
+                'reviews'                => null,
+                'reviewCriteria'         => ReviewCriteriaDTO::collect($this->reviewRepo->getActiveCriteria()),
+                'reviewTags'             => ReviewTagDTO::collect($this->reviewRepo->getActiveTags()),
+                'reviewCriteriaAverages' => $this->reviewRepo->getCriteriaAverages($id),
+                'hasReviewed'            => $userId > 0
                     ? $this->reviewRepo->hasReviewedFromOrder($userId, $id)
                     : false,
-                'reviewPolicy'        => setting('config_review_policy', getCoreConfig('review.default_policy')),
-                'hasVerifiedPurchase' => $userId > 0
+                'reviewPolicy'           => setting('config_review_policy', getCoreConfig('review.default_policy')),
+                'hasVerifiedPurchase'    => $userId > 0
                     ? (bool) $this->reviewRepo->findVerifiedOrderId($userId, $id)
                     : false,
             ];
         }
 
-        return $this->render('web.product.index', [
-            'entity'         => $product,
-            'options'        => $tree['options'],
-            'variantMatrix'  => $tree['variantMatrix'],
-            'defaultVariant' => $tree['defaultVariant'],
-            'variantGallery' => $tree['variantGallery'],
-            'images'         => array_merge($product->gallery, $tree['imageOptions']),
-            'wishlist'       => $this->getProductUserWishlist($id),
-            'related'        => ProductDTO::collect($this->productRepo->getProductRelatedByProductId($id)),
-            'storeReviews'   => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsByProduct($id)),
-            'blogs'          => BlogDTO::collect($this->blogRepo->getBlogLatest(4)),
+        return $this->render('web::product.index', [
+            'entity'             => $product,
+            'productOptions'     => $optionTree['optionGroups'],
+            'variantMatrix'      => $optionTree['variantMatrix'],
+            'defaultVariant'     => $optionTree['defaultVariant'],
+            'variantGallery'     => $optionTree['variantGallery'],
+            'productImages'      => array_merge($product->gallery, $optionTree['variantSwatchImages']),
+            'userWishlist'       => $this->getProductUserWishlist($id),
+            'relatedProducts'    => ProductDTO::collect($this->productRepo->getProductRelatedByProductId($id)),
+            'storeReviews'       => StoreReviewDTO::collect($this->storeReviewRepo->getStoreReviewsByProduct($id)),
+            'latestBlogs'        => BlogDTO::collect($this->blogRepo->getBlogLatest(4)),
         ] + $reviewData);
     }
 
     public function getList()
     {
         $this->processMetaSeo('buildForSeoBySetting', 'seo_title_products', 'seo_description_products');
-
-        $entities = $this->productRepo->list();
-        $entities->setCollection(
-            $entities->getCollection()->map(fn ($m) => ProductDTO::from($m))
+        $productList = $this->productRepo->list();
+        $productList->setCollection(
+            $productList->getCollection()->map(fn ($m) => ProductDTO::from($m))
         );
 
-        return $this->render('web.product.list', [
-            'entities'    => $entities,
-            'products'    => ProductDTO::collect($this->getProductLatest()),
-            'sortMenu'    => $this->productRepo->getSortMenu(),
-            'perPageMenu' => $this->productRepo->getPerPageMenu(),
+        return $this->render('web::product.list', [
+            'entities'      => $productList,
+            'latestProducts' => ProductDTO::collect($this->getProductLatest()),
+            'sortMenu'      => $this->productRepo->getSortMenu(),
+            'perPageMenu'   => $this->productRepo->getPerPageMenu(),
         ]);
     }
 
@@ -105,16 +104,16 @@ class ProductController extends Controller
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.special'), 'href' => route('product.special'), 'separator' => false]);
         $this->processMetaSeo('buildForSeoByConfig', 'product.special.title', 'product.special.description');
 
-        $entities = $this->productRepo->getListSpecial();
-        $entities->setCollection(
-            $entities->getCollection()->map(fn ($m) => ProductDTO::from($m))
+        $productListSpecial = $this->productRepo->getListSpecial();
+        $productListSpecial->setCollection(
+            $productListSpecial->getCollection()->map(fn ($m) => ProductDTO::from($m))
         );
 
-        return $this->render('web.product.special', [
-            'entities'    => $entities,
-            'products'    => ProductDTO::collect($this->getProductLatest()),
-            'sortMenu'    => $this->productRepo->getSortMenu(),
-            'perPageMenu' => $this->productRepo->getPerPageMenu(),
+        return $this->render('web::product.special', [
+            'entities'      => $productListSpecial,
+            'latestProducts' => ProductDTO::collect($this->getProductLatest()),
+            'sortMenu'      => $this->productRepo->getSortMenu(),
+            'perPageMenu'   => $this->productRepo->getPerPageMenu(),
         ]);
     }
 

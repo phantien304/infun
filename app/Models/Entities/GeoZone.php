@@ -12,7 +12,7 @@ class GeoZone extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
-    protected static $destroyRelations = ['zoneToGeoZones'];
+    protected static array $destroyRelations = ['zoneToGeoZones'];
 
     public function zoneToGeoZones()
     {

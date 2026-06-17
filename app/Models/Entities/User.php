@@ -8,14 +8,15 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends CmsUser
 {
-    use HasApiTokens, SoftDeletes;
+    use HasApiTokens;
+    use SoftDeletes;
     protected $table = 'user';
     protected $hidden = ['password', 'confirm_code'];
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
     protected $casts = ['email_verified_at' => 'datetime'];
-    protected static $_destroyRelations = ['roleUsers2', 'userAddress', 'userPhones', 'userRewards', 'userWishlists'];
+    protected static array $destroyRelations = ['roleUsers2', 'userAddress', 'userPhones', 'userRewards', 'userWishlists'];
 
     public function roleUser()
     {

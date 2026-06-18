@@ -23,25 +23,6 @@ use App\Services\Checkout\CheckoutTotalService;
 use App\Services\Checkout\CreateOrderService;
 use Illuminate\Http\Request;
 
-/**
- * Checkout flow refactor — extend base controller mới (lazyMap repo + breadcrumbs
- * + processMetaSeo).
- *
- * Phân tầng:
- *  - Controller: orchestrate, không tự query model, không tự cache, không tự
- *    transaction. Chỉ inject service/repo qua DI rồi gọi.
- *  - Service (CartService, CheckoutTotalService, CreateOrderService,
- *    CheckoutPaymentService): business logic + transaction.
- *  - Repository (Carrier/Payment/Coupon/Voucher/Order/UserReward): persistence +
- *    cache (theo CacheableRepository trait).
- *
- * Schema mới: Cart đọc product_variant_id resolve qua product_variant_attribute
- * (xem CartService::resolveVariantId). Giá lấy từ ProductVariant.price tuyệt
- * đối, tồn từ product_stock.on_hand - reserved.
- *
- * Blade contract: giữ raw array shape (`$products[i]['name']` etc) để không
- * phá web/checkout/*.blade.php hiện tại.
- */
 class CheckoutController extends Controller
 {
     public function __construct(
@@ -96,7 +77,7 @@ class CheckoutController extends Controller
             'total'              => $total,
             'countProduct'       => $this->cart->countItems(),
             'coupons'            => $coupons,
-            'appliedCouponCodes' => (array) session()->get('checkout.applied_coupons', []),
+            'appliedCouponCodes' => (array) session()->get(getCoreConfig('session.applied_coupons'), []),
             'couponContext'      => 'checkout',
             'gifts'              => $gifts,
             'giftItems'          => $giftItems,
@@ -124,10 +105,6 @@ class CheckoutController extends Controller
 
             return redirect(route('checkout.cart'))->with('success', trans('messages.SuccessUpdateCart'));
         }
-
-        // Bỏ legacy `?coupon=` và `?voucher=` query path — Shopee modal
-        // (POST /checkout/coupons/apply) là entrypoint duy nhất. Bookmark
-        // chứa query coupon cũ sẽ silently bị ignore.
 
         $error = '';
         $items = [];
@@ -181,21 +158,15 @@ class CheckoutController extends Controller
     {
         $params = $request->validated();
 
-        $product = $this->productRepo->resetModel()
-            ->where('id', $params['product_id'])
-            ->where('is_add_cart', 1)
-            ->dateAvailable()
-            ->with('description')
-            ->first();
+        $product = $this->productRepo->findAddableToCart((int) $params['product_id']);
         if (! $product) {
             return errValidator(trans('messages.ErrorNotFoundProduct'), 200);
         }
 
         $result = $this->cart->tryAdd([
-            'id'       => $product->id,
             'quantity' => $params['quantity'] ?? 1,
             'option'   => $params['option'] ?? [],
-        ]);
+        ], $product);
 
         if (! ($result['ok'] ?? false)) {
             return errValidator(
@@ -211,7 +182,7 @@ class CheckoutController extends Controller
                 method_exists($product, 'getUrlClient') ? $product->getUrlClient() : '#',
                 $product->description->name ?? ''
             ),
-            'total_cart_header' => session()->get('total_cart_header'),
+            getCoreConfig('session.cart_header') => session()->get(getCoreConfig('session.cart_header')),
             'link_cart'         => route('checkout.cart'),
         ]);
     }
@@ -219,35 +190,30 @@ class CheckoutController extends Controller
     protected function buildAddToCartError($product, array $result): string
     {
         $name = $product->description->name ?? '';
+        $available = (int) ($result['available'] ?? 0);
+        $totalInCart = (int) ($result['total_in_cart'] ?? 0);
+        $quantity = (int) ($result['quantity'] ?? 0);
+        $totalWanted = $totalInCart + $quantity;
 
-        if (($result['reason'] ?? '') === 'out_of_stock') {
-            $available = (int) ($result['available'] ?? 0);
-            $already   = (int) ($result['already_in_cart'] ?? 0);
-            $requested = (int) ($result['requested'] ?? 0);
-            $totalWanted = $already + $requested;
-
-            if ($available <= 0) {
-                return sprintf(trans('messages.ErrorStockProduct'), $name);
-            }
-            if ($already > 0) {
-                return sprintf(
-                    'Sản phẩm <b style="color: #d81800;">%s</b>: bạn đã có %d trong giỏ, yêu cầu thêm %d (tổng %d) nhưng kho chỉ còn %d.',
-                    $name,
-                    $already,
-                    $requested,
-                    $totalWanted,
-                    $available,
-                );
-            }
+        if ($available <= 0) {
+            return sprintf(trans('messages.ErrorStockProduct'), $name);
+        }
+        if ($totalInCart > 0) {
             return sprintf(
-                'Sản phẩm <b style="color: #d81800;">%s</b>: bạn yêu cầu %d nhưng kho chỉ còn %d.',
+                'Sản phẩm <b style="color: #d81800;">%s</b>: bạn đã có %d trong giỏ, yêu cầu thêm %d (tổng %d) nhưng kho chỉ còn %d.',
                 $name,
-                $requested,
+                $totalInCart,
+                $quantity,
+                $totalWanted,
                 $available,
             );
         }
-
-        return trans('messages.ErrorNotFoundProduct');
+        return sprintf(
+            'Sản phẩm <b style="color: #d81800;">%s</b>: bạn yêu cầu %d nhưng kho chỉ còn %d.',
+            $name,
+            $quantity,
+            $available,
+        );
     }
 
     public function consultSign(CheckoutAddToCartRequest $request)
@@ -300,7 +266,7 @@ class CheckoutController extends Controller
             $url = $this->paymentService->startPayment($orderId, $payload);
 
             $this->cart->clear();
-            session()->put('lastOrderSuccess', $orderId);
+            session()->put(getCoreConfig('session.last_order'), $orderId);
 
             if (filled($url)) {
                 return redirect($url);
@@ -405,7 +371,7 @@ class CheckoutController extends Controller
             return redirect(route('checkout.success'));
         }
 
-        $entity = $this->orderRepo->getOrderSummary((int) session()->get('lastOrderSuccess', 0));
+        $entity = $this->orderRepo->getOrderSummary((int) session()->get(getCoreConfig('session.last_order'), 0));
         if (! $entity) {
             return redirect(route('home'));
         }
@@ -418,20 +384,6 @@ class CheckoutController extends Controller
         ]);
     }
 
-    // ===== private helpers ============================================
-
-    /**
-     * Build context cho 1 request checkout — gồm cart items, coupon, voucher
-     * đã resolve. Mọi service downstream nhận context này thay vì tự query.
-     */
-    /**
-     * @param  bool  $hasShipping  Whether the current render path will
-     *   include a shipping fee in the running total. Forwarded to
-     *   CouponService::applyCodes so free-ship coupons stored in the
-     *   session don't appear as "applied" on the cart page where the
-     *   discount would be invisible. Default TRUE for safe behaviour at
-     *   callers that still build the context for the order-create path.
-     */
     protected function buildContext(bool $hasShipping = true): CheckoutContext
     {
         $items = $this->cart->getItems();
@@ -440,14 +392,7 @@ class CheckoutController extends Controller
         $ctx = new CheckoutContext();
         $ctx->setItems($items);
 
-        // Legacy session('coupon') + session('voucher') + resolveCoupon/resolveVoucher
-        // đã bỏ — flow Shopee multi-coupon là single source of truth. Voucher
-        // (gift card) sẽ refactor riêng ở phase voucher cluster.
-
-        // Shopee multi-coupon — re-resolve every request so the result
-        // reflects post-mutation cart state (e.g. user removed an item and
-        // dropped below the coupon's min_subtotal).
-        $codes = (array) session()->get('checkout.applied_coupons', []);
+        $codes = (array) session()->get(getCoreConfig('session.applied_coupons'), []);
         if (! empty($codes)) {
             $applyResult = $this->couponService->applyCodes(
                 $codes,
@@ -467,12 +412,6 @@ class CheckoutController extends Controller
         return $ctx;
     }
 
-    /**
-     * Trả [error, items] cho controller. Empty error = OK. Quy tắc:
-     *  - cart rỗng → ErrorProduct.
-     *  - cart không đủ tồn (config_stock_checkout bật) → ErrorStock.
-     *  - vi phạm minimum theo product → ErrorMinimum.
-     */
     protected function extractItems(CheckoutContext $ctx): array
     {
         if (! $this->cart->hasItems()) {
@@ -496,8 +435,8 @@ class CheckoutController extends Controller
     protected function syncCartHeader(?array $items = null): void
     {
         $count = $items === null ? $this->cart->countItems() : array_sum(array_column($items, 'quantity'));
-        if ((int) session()->get('total_cart_header', -1) !== $count) {
-            session()->put('total_cart_header', $count);
+        if ((int) session()->get(getCoreConfig('session.cart_header'), -1) !== $count) {
+            session()->put(getCoreConfig('session.cart_header'), $count);
         }
     }
 
@@ -526,3 +465,4 @@ class CheckoutController extends Controller
         ]);
     }
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 

@@ -20,6 +20,13 @@ interface ProductRepositoryInterface extends BaseRepositoryInterface
      */
     public function findReviewableProduct(int $id): ?Product;
 
+    /**
+     * Tìm product hợp lệ để thêm vào giỏ (tồn tại + is_add_cart + dateAvailable),
+     * eager-load description. Dùng cho CheckoutController::addToCart. Trả null
+     * nếu không thoả.
+     */
+    public function findAddableToCart(int $id): ?Product;
+
     public function incrementViewed(int $id): void;
 
     public function getProductRelatedByProductId(int $id, int $limit = 4);

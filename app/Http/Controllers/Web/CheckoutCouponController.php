@@ -102,7 +102,7 @@ class CheckoutCouponController extends Controller
 
         // Single source of truth — chỉ key `checkout.applied_coupons` array.
         $appliedCodes = array_map(fn ($a) => $a['coupon']->code, $result['applied']);
-        session()->put('checkout.applied_coupons', $appliedCodes);
+        session()->put(getCoreConfig('session.applied_coupons'), $appliedCodes);
 
         // Truyền $result đã tính để renderState KHỎI gọi applyCodes lần 2
         // (session vừa set chính là winning codes của $result).
@@ -156,7 +156,7 @@ class CheckoutCouponController extends Controller
      */
     public function remove(Request $request): JsonResponse
     {
-        session()->forget('checkout.applied_coupons');
+        session()->forget(getCoreConfig('session.applied_coupons'));
 
         return successData('Success', $this->renderState($request, $this->contextHasShipping($request)));
     }
@@ -166,7 +166,7 @@ class CheckoutCouponController extends Controller
      */
     private function getAppliedCodes(): array
     {
-        $codes = session()->get('checkout.applied_coupons', []);
+        $codes = session()->get(getCoreConfig('session.applied_coupons'), []);
         if (! is_array($codes)) {
             return [];
         }
@@ -202,7 +202,7 @@ class CheckoutCouponController extends Controller
 
         $ctx = new CheckoutContext();
         $ctx->setItems($items);
-        $appliedCodes = (array) session()->get('checkout.applied_coupons', []);
+        $appliedCodes = (array) session()->get(getCoreConfig('session.applied_coupons'), []);
         // apply() đã tính applyCodes và truyền vào $applyResult → khỏi tính lại.
         // remove() không có sẵn → tự resolve từ session.
         if ($applyResult === null && ! empty($appliedCodes)) {
@@ -221,7 +221,7 @@ class CheckoutCouponController extends Controller
             // mutate trong lúc modal mở). Sync lại session để chip strip
             // phản ánh chính xác cái server đang dùng.
             $appliedCodes = array_map(fn ($a) => $a['coupon']->code, $applyResult['applied']);
-            session()->put('checkout.applied_coupons', $appliedCodes);
+            session()->put(getCoreConfig('session.applied_coupons'), $appliedCodes);
         }
 
         [$totalData, $total] = $this->totalService->build($ctx, withShipping: $hasShipping);

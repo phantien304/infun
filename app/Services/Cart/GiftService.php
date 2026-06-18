@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
  * Trách nhiệm:
  *  - `listForCart`     : list gift + cờ availableToCart + reason + picked items
  *  - `validatePicks`   : check pick_type rule (1_of_n, up_to_n, auto)
- *  - `applyPicks`      : set session('checkout.applied_gifts')
+ *  - `applyPicks`      : set session(getCoreConfig('session.applied_gifts'))
  *  - `clearPicks`      : reset session
  *  - `recordOrderGifts`: persist order_gift rows + increment used_count
  *  - `revertOrderGifts`: rollback khi order cancel
@@ -186,19 +186,19 @@ class GiftService
             ];
         }
 
-        session()->put('checkout.applied_gifts', $accepted);
+        session()->put(getCoreConfig('session.applied_gifts'), $accepted);
 
         return ['ok' => empty($errors), 'errors' => $errors];
     }
 
     public function clearPicks(): void
     {
-        session()->forget('checkout.applied_gifts');
+        session()->forget(getCoreConfig('session.applied_gifts'));
     }
 
     public function getAppliedGifts(): array
     {
-        $raw = (array) session()->get('checkout.applied_gifts', []);
+        $raw = (array) session()->get(getCoreConfig('session.applied_gifts'), []);
         return array_values(array_filter($raw, 'is_array'));
     }
 
@@ -330,3 +330,4 @@ class GiftService
         OrderGift::query()->forOrder($orderId)->delete();
     }
 }
+      

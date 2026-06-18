@@ -1772,6 +1772,32 @@ Tất cả 3 cluster phải dùng **prefix `checkout.*`** (không phải `cart.*
 - `session('checkout.applied_vouchers')` ✅
 - `CartService::clear()` phải `forget` đầy đủ cả 3 key này khi order success.
 
+### Session key cart/checkout — centralize trong core config (2026-06-18)
+
+9 session key cart/checkout giờ nằm trong `config/core/config.php →
+core.config.session`, đọc qua `getCoreConfig('session.*')` — KHÔNG hardcode
+literal nữa. Trước đây 1 key lặp 8–11 lần qua 3 file → typo 1 chỗ = drift; bất
+biến "`clear()` phải forget đúng key mà writer `put()`" chỉ được con người gõ
+khớp. Mapping:
+
+| `getCoreConfig('session.x')` | value (chuỗi session thật) |
+|---|---|
+| `session.cart` | `cart` (prefix → `cart.{key}`) |
+| `session.cart_header` | `total_cart_header` |
+| `session.cart_shipping` | `cart_shipping` |
+| `session.reward` | `reward` |
+| `session.last_order` | `lastOrderSuccess` |
+| `session.applied_coupons` | `checkout.applied_coupons` |
+| `session.applied_gifts` | `checkout.applied_gifts` |
+| `session.applied_vouchers` | `checkout.applied_vouchers` |
+
+- **GIỮ NGUYÊN value** — nhất là dot-notation `checkout.*` (= mảng lồng dưới cha
+  `checkout`, xem mục trên). Đổi value = orphan session khách đang checkout +
+  tái phát bug prefix. Thêm key mới: thêm 1 dòng vào block, code gọi `getCoreConfig`.
+- `CartService::clear()` forget tất cả qua `getCoreConfig('session.*')` → một
+  nguồn sự thật, hết nguy cơ clear() quên key. `total_wishlist` đã ở block này từ
+  trước (WishlistService). Sau khi sửa config phải `php artisan config:clear`.
+
 ### Order of operations trong CheckoutTotalService::build()
 
 Strict ordering — mỗi step compute residual cho step sau:
@@ -2283,3 +2309,16 @@ nguồn = hết drift, hết check thừa.
   migrate` / `tinker`. Verify tĩnh bằng Read + grep; chạy thật trên XAMPP. Nhớ
   `php artisan view:clear` khi đổi blade, `cache:clear` khi đổi eager-load (cache
   `getProductDetail` giữ entity với relation cũ).
+- **Mount của bash lệch pha (stale) với file thật** — sau khi sửa file bằng
+  Read/Write/Edit tool, `bash` (cat/grep/sed/python) có thể đọc **bản cũ** một
+  lúc; ngược lại bash ghi xong thì file-tool thấy ngay. Hệ quả nguy hiểm: chạy
+  `sed -i` trên file vừa sửa bằng tool → sed đọc nhằm bản stale rồi ghi đè =
+  **clobber/cắt cụt file** (đã xảy ra với `VoucherService.php` +
+  `CheckoutCouponController.php` khi gom session key). Quy tắc:
+    * Sửa hàng loạt KHÔNG dùng `sed` cho file đã/đang đụng bằng Edit tool — dùng
+      **Edit tool** (replace_all), nó báo lỗi khi không khớp, không clobber thầm.
+    * Verify "file có cụt không" PHẢI bằng **Read tool** (bản XAMPP đọc), KHÔNG
+      tin brace-count của bash/python (hay stale).
+    * Lỡ clobber file tracked → khôi phục bằng `git show HEAD:path > path`
+      (sandbox chặn `rm`/`git checkout` vì không unlink được), rồi áp lại thay
+      đổi bằng Edit tool.

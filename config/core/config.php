@@ -87,7 +87,18 @@ return [
         'shipping_zone' => 'shipping_zone'
     ],
     'session' => [
-        'total_wishlist' => 'user_total_wishlist'
+        'total_wishlist'   => 'user_total_wishlist',
+        // Cart / checkout session keys — GIỮ NGUYÊN value (gồm dot-notation
+        // 'checkout.*' = mảng lồng). Đổi value = orphan session khách đang
+        // checkout + có thể tái phát bug prefix (xem CLAUDE.md).
+        'cart'             => 'cart',                    // prefix → cart.{key}
+        'cart_header'      => 'total_cart_header',
+        'cart_shipping'    => 'cart_shipping',
+        'reward'           => 'reward',
+        'last_order'       => 'lastOrderSuccess',
+        'applied_coupons'  => 'checkout.applied_coupons',
+        'applied_gifts'    => 'checkout.applied_gifts',
+        'applied_vouchers' => 'checkout.applied_vouchers',
     ],
     'shipping' => [
         'default' => 'vtp'

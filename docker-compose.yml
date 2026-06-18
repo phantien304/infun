@@ -83,6 +83,40 @@ services:
       redis:
         condition: service_healthy
 
+  # ----------------------------------------------------------------------
+  # MariaDB 10.11 — thay MySQL của XAMPP.
+  # ----------------------------------------------------------------------
+  # Dùng MariaDB (KHÔNG phải MySQL 8) vì XAMPP chạy MariaDB → dump/import
+  # khớp 1-1, và schema legacy OpenCart dùng đặc thù MariaDB (CHECK
+  # constraint enforce từ 10.2.1+, FULLTEXT InnoDB). App (Apache/PHP của
+  # XAMPP) vẫn chạy NGOÀI container, connect vào đây qua cổng map
+  # 127.0.0.1:3306 — chỉ MySQL chuyển vào Docker.
+  #
+  # LƯU Ý: phải TẮT MySQL trong XAMPP Control Panel trước khi `up`, nếu
+  # không cổng 3306 bị chiếm → container không bind được.
+  #
+  # Production: trỏ DB_HOST sang RDS/Aurora endpoint, giữ nguyên schema.
+  mysql:
+    image: mariadb:10.11
+    container_name: infun-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_DATABASE: infun
+      MARIADB_ROOT_PASSWORD: root
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   redis_data:
   redis_insight_data:
+  mysql_data:

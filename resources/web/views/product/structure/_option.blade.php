@@ -1,7 +1,3 @@
-@php
-    $isVariant = (int) $option['role'] === getCoreConfig('option.role_variant');
-    $valueParam = $isVariant ? 'option_value_id' : 'product_option_value_id';
-@endphp
 <div id="input-option{{ $option['option_id'] }}" class="input-option">
     <input type="hidden" name="option[{{ $option['option_id'] }}][required]" value="{{ (int) $option['required'] }}">
     <input type="hidden" name="option[{{ $option['option_id'] }}][role]" value="{{ $option['role'] }}">
@@ -27,7 +23,7 @@
                         @foreach ($option['selectableValues'] as $optionValue)
                             <div>
                                 <input type="radio" id="opt-{{ $optionValue['id'] }}"
-                                    name="option[{{ $option['option_id'] }}][{{ $valueParam }}]"
+                                    name="option[{{ $option['option_id'] }}][option_value_id]"
                                     value="{{ $optionValue['id'] }}" data-option="{{ $option['option_id'] }}"
                                     data-option-id="{{ data_get($option, 'option_id') }}"
                                     data-option-value-id="{{ $optionValue['id'] }}">
@@ -48,7 +44,7 @@
                                 <input data-image="{{ thumbnail($thumb, 1000, 1000) }}"
                                     data-variant-image="{{ thumbnail($optionValue['variant_image'] ?: '', 1000, 1000) }}"
                                     type="radio" id="opt-{{ $optionValue['id'] }}"
-                                    name="option[{{ $option['option_id'] }}][{{ $valueParam }}]"
+                                    name="option[{{ $option['option_id'] }}][option_value_id]"
                                     value="{{ $optionValue['id'] }}" data-option="{{ $option['option_id'] }}"
                                     data-option-id="{{ data_get($option, 'option_id') }}"
                                     data-option-value-id="{{ $optionValue['id'] }}">
@@ -62,7 +58,7 @@
                 @endif
                 @if ($option['type'] == 'select')
                     <div class="flex flex-col">
-                        <select name="option[{{ $option['option_id'] }}][{{ $valueParam }}]"
+                        <select name="option[{{ $option['option_id'] }}][option_value_id]"
                             class="select-choose-v2 select-option-product" id="option-{{ $option['option_id'] }}"
                             data-option="{{ $option['option_id'] }}" data-option-id="{{ data_get($option, 'option_id') }}">
                             <option value="">--Chọn--</option>
@@ -79,7 +75,7 @@
                         @foreach ($option['selectableValues'] as $optionValue)
                             <div class="form-check inline-flex mr-2">
                                 <input class="form-check-input" type="checkbox" id="opt-{{ $optionValue['id'] }}"
-                                    name="option[{{ $option['option_id'] }}][{{ $valueParam }}][]"
+                                    name="option[{{ $option['option_id'] }}][option_value_id][]"
                                     value="{{ $optionValue['id'] }}" data-option="{{ $option['option_id'] }}"
                                     data-option-id="{{ data_get($option, 'option_id') }}"
                                     data-option-value-id="{{ $optionValue['id'] }}">

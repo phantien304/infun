@@ -102,7 +102,7 @@ class CheckoutTotalService
      */
     protected function lineGifts(array &$totalData): void
     {
-        $applied = (array) session()->get('checkout.applied_gifts', []);
+        $applied = (array) session()->get(getCoreConfig('session.applied_gifts'), []);
         $count = 0;
         foreach ($applied as $entry) {
             $count += count((array) ($entry['item_ids'] ?? []));
@@ -123,12 +123,12 @@ class CheckoutTotalService
         if (getConfigDb('config_reward_point_enabled') == setting('reward_point.disable')) {
             return;
         }
-        if (! session()->has('reward') || ! auth()->check()) {
+        if (! session()->has(getCoreConfig('session.reward')) || ! auth()->check()) {
             return;
         }
 
         $available = $this->rewardRepo->getTotalPoints((int) auth()->id());
-        $reward = (int) session()->get('reward');
+        $reward = (int) session()->get(getCoreConfig('session.reward'));
         if ($reward <= 0 || $reward > $available) {
             return;
         }
@@ -171,7 +171,7 @@ class CheckoutTotalService
         }
 
         $address = $this->extractAddress();
-        $cartShipping = (array) session()->get('cart_shipping', []);
+        $cartShipping = (array) session()->get(getCoreConfig('session.cart_shipping'), []);
 
         [$ok, $fee] = $this->shippingFee->calculate($method, $total, $cartShipping, $address);
         if (! $ok || $fee === null) {
@@ -288,3 +288,4 @@ class CheckoutTotalService
         return number_format($amount, 0, '', ',').'đ';
     }
 }
+                                                           

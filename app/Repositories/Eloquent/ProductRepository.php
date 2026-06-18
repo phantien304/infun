@@ -169,6 +169,20 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             ->first();
     }
 
+    public function findAddableToCart(int $id): ?Product
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return $this->resetModel()
+            ->where('id', $id)
+            ->where('is_add_cart', 1)
+            ->dateAvailable()
+            ->with('description')
+            ->first();
+    }
+
     public function incrementViewed(int $id): void
     {
         try {
@@ -277,9 +291,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             'stockStatus',
             'productCategories.category.description',
             'productSpecial',
-            // Default variant + its stock row powers ProductDTO::formatStock
-            // post unify_simple_product_stock. Eager-load here so the card
-            // path never N+1's onto product_variant / product_stock.
             'defaultVariant.productStock',
         ];
     }
@@ -305,45 +316,18 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 ->orderBy('sort_order', 'ASC')
                 ->orderBy('id', 'ASC'),
             'productVariants.productVariantAttributes.optionValue.description',
-            // Hướng B: trục biến thể suy từ product_variant_attribute → cần
-            // metadata option (name_display + type) ngay trên attribute thay vì
-            // qua product_option. Xem ProductOptionService::buildVariantOptions.
             'productVariants.productVariantAttributes.option.description',
             'productVariants.productStock',
             'productVariants.description',
-            // productVariantSpecial = hasOne ofMany (priority MAX +
-            // dateStartToEnd + userGroup). Load để
-            // ProductOptionService::buildVariantMatrix expose
-            // effective_price = COALESCE(special, variant.price); JS
-            // applyVariant render struck/badge dùng effective.
             'productVariants.productVariantSpecial',
         ]);
     }
 
-    /**
-     * Invalidate toàn bộ cache liên quan product. Gọi từ observer mỗi khi
-     * Product / ProductSpecial / ProductVariant / ProductVariantSpecial /
-     * ProductImage / ProductCategory mutate. Một call flush nguyên tag
-     * `product_root` → kéo theo:
-     *   - getProductDetail (per id)
-     *   - getProductLatest (per limit + user group + user type)
-     *   - getProductSpecialLatest
-     *   - getProductRelated (per id list)
-     *
-     * Bị no-op khi store đang ở file (không hỗ trợ tag) hoặc bypass — đó là
-     * hạn chế cố hữu, document để admin biết: chọn file store nghĩa là cache
-     * stale tới khi TTL hết hoặc `php artisan cache:clear`.
-     */
     public function flushCache(): void
     {
         $this->forgetCacheTagged([getCoreConfig('cache.product_root')]);
     }
 
-    /**
-     * Invalidate cache cho 1 product cụ thể — chỉ flush tag `product_{id}`
-     * (giữ nguyên cache các product khác). Dùng khi mutate ảnh hưởng đến 1
-     * product (vd ProductImage save), tránh quét tag root quá rộng.
-     */
     public function flushProductCache(int $id): void
     {
         $this->forgetCacheTagged([getCoreConfig('cache.products').$id]);

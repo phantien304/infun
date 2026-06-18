@@ -77,7 +77,7 @@ class CreateOrderService
 
     protected function buildOrderRow(CheckoutContext $ctx, array $params, int $total, string $uniqid): array
     {
-        $shipping = (array) session()->get('cart_shipping', []);
+        $shipping = (array) session()->get(getCoreConfig('session.cart_shipping'), []);
 
         return [
             'id'                => (int) ($params['id'] ?? 0),
@@ -168,37 +168,12 @@ class CreateOrderService
         }
     }
 
-    /**
-     * Decrement stock for one order line. Single path post-unify, no
-     * legacy fallback:
-     *
-     *  1. The cart pipeline always sets a variant id — CartService
-     *     resolves the default variant for simple products. A missing id
-     *     here means a data error, not "simple product"; log and skip
-     *     instead of silently touching product.quantity (the source of
-     *     the earlier drift bug).
-     *  2. Lock the product_stock row (FOR UPDATE) so two concurrent
-     *     checkouts cannot both read the same on_hand and oversell.
-     *  3. UNTRACKED → no-op. The row exists only to keep the pipeline
-     *     uniform; on_hand has no business meaning.
-     *  4. DENY      → decrement; on_hand may go to 0 but never below.
-     *                 (CartService::checkStock has already gated this;
-     *                 the lock protects against TOCTOU under load.)
-     *  5. BACKORDER → decrement freely. on_hand may go negative — that
-     *                 negative is the backorder backlog admins act on.
-     *                 Audit row records type=sale_backorder so admins
-     *                 can filter the log for "bán khống" sales.
-     *  6. Append a stock_movement row in every tracked case so on_hand
-     *     can be rebuilt from the log on data-corruption suspicion.
-     */
     protected function subtractStock(array $item): void
     {
         $variantId = $item['product_variant_id'] ?? null;
         $qty = (int) $item['quantity'];
 
         if (! $variantId) {
-            // Data error — the cart line escaped resolveVariantId. Surface
-            // it via the log instead of silently bumping product.quantity.
             logError(sprintf(
                 'subtractStock: order line for product %s has no product_variant_id; stock not decremented',
                 $item['id'] ?? 'unknown',
@@ -303,3 +278,4 @@ class CreateOrderService
         $this->rewardRepo->recordOrderReward((int) auth()->id(), $ctx->orderId, $points);
     }
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          

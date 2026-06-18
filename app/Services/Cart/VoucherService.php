@@ -63,7 +63,7 @@ class VoucherService
         }
 
         $applied[] = $voucher->code;
-        session()->put('checkout.applied_vouchers', $applied);
+        session()->put(getCoreConfig('session.applied_vouchers'), $applied);
 
         return ['ok' => true, 'message' => 'Đã áp voucher'];
     }
@@ -170,12 +170,12 @@ class VoucherService
     {
         $applied = $this->getAppliedCodes();
         $applied = array_values(array_filter($applied, fn ($c) => $c !== $code));
-        session()->put('checkout.applied_vouchers', $applied);
+        session()->put(getCoreConfig('session.applied_vouchers'), $applied);
     }
 
     public function clearAll(): void
     {
-        session()->forget('checkout.applied_vouchers');
+        session()->forget(getCoreConfig('session.applied_vouchers'));
     }
 
     /**
@@ -183,7 +183,7 @@ class VoucherService
      */
     public function getAppliedCodes(): array
     {
-        $codes = (array) session()->get('checkout.applied_vouchers', []);
+        $codes = (array) session()->get(getCoreConfig('session.applied_vouchers'), []);
         return array_values(array_filter(array_map('strval', $codes), fn ($c) => trim($c) !== ''));
     }
 

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Entities\Option;
+use App\Models\Entities\ProductVariant;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -659,18 +660,13 @@ class SeedProductVariantsCommand extends Command
     }
 
     /**
-     * MD5 các option_value_id sort theo option_id. Phải khớp 100% công thức
-     * trong migration 100007 + ProductVariantService để dedupe tổ hợp qua
-     * UNIQUE (product_id, attribute_signature).
+     * Delegate sang nguồn sự thật duy nhất ProductVariant::buildAttributeSignature()
+     * — KHÔNG copy lại công thức (tránh drift với CartService::resolveVariantId
+     * và migration 100007).
      */
     private function signature(array $optionToValue): string
     {
-        ksort($optionToValue);
-        $parts = [];
-        foreach ($optionToValue as $optionId => $valueId) {
-            $parts[] = $optionId . ':' . $valueId;
-        }
-        return md5(implode('|', $parts));
+        return ProductVariant::buildAttributeSignature($optionToValue);
     }
 
     /**

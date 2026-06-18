@@ -5,14 +5,6 @@ namespace App\Services\Checkout;
 use App\Helpers\ZaloPay;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 
-/**
- * Wrapper quanh ZaloPay helper — port từ trait CheckoutPayment cũ. Service
- * tách khỏi controller để controller chỉ orchestrate, không biết chi tiết
- * payload ZaloPay.
- *
- * Stateless. Mọi state (order_id, total, telephone) truyền tường minh qua
- * tham số method.
- */
 class CheckoutPaymentService
 {
     public function __construct(
@@ -21,10 +13,6 @@ class CheckoutPaymentService
     ) {
     }
 
-    /**
-     * Build payload cho ZaloPay::createOrder cho luồng checkout mới. Trả [] khi
-     * paymentCode là 'cod' (không cần thanh toán cổng).
-     */
     public function buildOrderPayload(string $paymentCode, int $orderId, int $total, ?string $phone, ?string $email): array
     {
         if ($paymentCode === 'cod' || $paymentCode === '') {
@@ -48,10 +36,6 @@ class CheckoutPaymentService
         return $this->zaloPay->buildOrderData($data);
     }
 
-    /**
-     * Build payload cho luồng REPAYMENT (account.detailOrder redirect). Giống
-     * buildOrderPayload nhưng redirect về trang chi tiết order thay vì success.
-     */
     public function buildRepaymentPayload(array $orderData): array
     {
         $code = $orderData['payment_code'] ?? '';
@@ -73,10 +57,6 @@ class CheckoutPaymentService
         return $this->zaloPay->buildOrderData($data);
     }
 
-    /**
-     * Gọi ZaloPay createOrder, update order với app_trans_id + status WAITING,
-     * trả URL redirect hoặc '' nếu thất bại.
-     */
     public function startPayment(int $orderId, array $payload): string
     {
         if (empty($payload)) {
@@ -93,10 +73,6 @@ class CheckoutPaymentService
         return (int) ($response['return_code'] ?? 0) === 1 ? (string) ($response['order_url'] ?? '') : '';
     }
 
-    /**
-     * Xử lý redirect callback từ ZaloPay (user sau khi thanh toán). Verify
-     * checksum + cập nhật order status theo getOrderStatus.
-     */
     public function processRedirect(array $params, string $appTransId): void
     {
         if (! $this->zaloPay->verifyRedirect($params)) {
@@ -129,10 +105,6 @@ class CheckoutPaymentService
         }
     }
 
-    /**
-     * Xử lý IPN callback từ ZaloPay (server-to-server). KHÔNG trả response
-     * cho ZaloPay ở đây — caller (controller) chịu trách nhiệm echo JSON.
-     */
     public function processCallback(string $rawBody): void
     {
         $params = json_decode($rawBody, true) ?: [];

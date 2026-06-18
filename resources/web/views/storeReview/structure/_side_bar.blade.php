@@ -52,11 +52,11 @@
                                 {!! $product->name !!}
                             </a>
                         </h6>
-                        @if (filled($product->productSpecial))
+                        @if (filled($product->productVariantSpecial))
                             <div class="mb-0 mt-5">
-                                <span class="price fs-6">{!! $product->productSpecial->pricePromotionLabel !!} </span>
+                                <span class="price fs-6">{!! $product->productVariantSpecial->pricePromotionLabel !!} </span>
                                 <span class="text-decoration-line-through old-price">
-                                    <small>{!! $product->productSpecial->priceRegularLabel !!}</small>
+                                    <small>{!! $product->productVariantSpecial->priceRegularLabel !!}</small>
                                 </span>
                             </div>
                         @else

@@ -23,11 +23,6 @@ class UserGroup extends Base
         return $this->hasMany(ProductReward::class, 'user_group_id', 'id');
     }
 
-    public function productSpecials()
-    {
-        return $this->hasMany(ProductSpecial::class, 'user_group_id', 'id');
-    }
-
     public function productDiscounts()
     {
         return $this->hasMany(ProductDiscount::class, 'user_group_id', 'id');

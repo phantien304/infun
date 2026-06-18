@@ -9,7 +9,6 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Interfaces\BannerRepositoryInterface;
 use App\Repositories\Interfaces\BlogRepositoryInterface;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
-use App\Repositories\Interfaces\ProductSpecialRepositoryInterface;
 use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
 
 class HomeController extends Controller
@@ -18,7 +17,6 @@ class HomeController extends Controller
         protected BannerRepositoryInterface $bannerRepo,
         protected BlogRepositoryInterface $blogRepo,
         protected ProductRepositoryInterface $productRepo,
-        protected ProductSpecialRepositoryInterface $productSpecialRepo,
         protected StoreReviewRepositoryInterface $storeReviewRepo
     ) {}
     public function index($slug = '')

@@ -4,11 +4,8 @@ namespace App\Services;
 
 use App\Models\Entities\Option;
 use App\Models\Entities\Product;
-use App\Models\Entities\ProductOption;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
-use App\Models\Entities\ProductVariantAttribute;
-use Illuminate\Support\Facades\DB;
 
 class CartService
 {
@@ -138,21 +135,21 @@ class CartService
             return $this->resolvedItems;
         }
 
-        $raw = session()->get(getCoreConfig('session.cart'), []);
-        if (empty($raw)) {
+        $cart = session()->get(getCoreConfig('session.cart'), []);
+        if (empty($cart)) {
             session()->put(getCoreConfig('session.cart_shipping'), $this->shipping);
 
             return $this->resolvedItems = [];
         }
 
-        $productIds = collect($raw)->pluck('product_id')->unique()->all();
-        $variantIds = collect($raw)->pluck('product_variant_id')->filter()->unique()->all();
+        $productIds = collect($cart)->pluck('product_id')->unique()->all();
+        $variantIds = collect($cart)->pluck('product_variant_id')->filter()->unique()->all();
 
         $products = Product::with([
             'description',
-            'productSpecial',
             'weightClass',
             'defaultVariant.productStock',
+            'defaultVariant.productVariantSpecial',
         ])->whereIn('id', $productIds)->dateAvailable()->get()->keyBy('id');
 
         $variants = $variantIds
@@ -168,7 +165,7 @@ class CartService
         $items = [];
         $this->shipping = ['width' => 0, 'height' => 0, 'length' => 0, 'weight' => 0];
 
-        foreach ($raw as $key => $row) {
+        foreach ($cart as $key => $row) {
             $product = $products->get($row['product_id'] ?? 0);
             if (! $product) {
                 $this->remove($key);
@@ -361,7 +358,7 @@ class CartService
             return (int) $variant->price;
         }
 
-        $special = $product->productSpecial;
+        $special = $product->defaultVariant?->productVariantSpecial;
         if ($special) {
             return (int) $special->price;
         }

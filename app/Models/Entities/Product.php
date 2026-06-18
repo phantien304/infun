@@ -28,7 +28,6 @@ class Product extends Base implements Auditable
         'productOptions',
         'productRelated',
         'productRewards',
-        'productSpecials',
         'userWishlists',
         'couponProducts'
     ];
@@ -51,20 +50,6 @@ class Product extends Base implements Auditable
     public function descriptions()
     {
         return $this->hasMany(ProductDescription::class, 'product_id', 'id');
-    }
-
-    public function productSpecials()
-    {
-        return $this->hasMany(ProductSpecial::class, 'product_id', 'id');
-    }
-
-    public function productSpecial()
-    {
-        return $this->hasOne(ProductSpecial::class, 'product_id', 'id')->ofMany(
-            ['priority' => 'max'],
-            fn ($q) => $q->dateStartToEnd()
-                ->where('user_group_id', getUserGroupId())
-        );
     }
 
     public function productRelated()
@@ -92,13 +77,6 @@ class Product extends Base implements Auditable
         return $this->hasMany(ProductVariant::class, 'product_id', 'id');
     }
 
-    /**
-     * Resolve the single "default" variant — always present after the
-     * unify_simple_product_stock migration: variant products mark their
-     * primary tuple is_default=1, simple products own a hidden no-attribute
-     * default variant. Cart / checkout / availability code uses this to
-     * read product_stock through one consistent relation chain.
-     */
     public function defaultVariant()
     {
         return $this->hasOne(ProductVariant::class, 'product_id', 'id')
@@ -162,22 +140,11 @@ class Product extends Base implements Auditable
 
     public function scopeHasActiveSpecial(Builder $query): Builder
     {
-        return $query->whereHas('productSpecials', function ($q) {
+        return $query->whereHas('productVariants.productVariantSpecials', function ($q) {
             $q->where('user_group_id', getUserGroupId())->dateStartToEnd();
         });
     }
 
-    /**
-     * Filter theo giá hiệu lực — range overlap.
-     *
-     * Variant product: khoảng giá là [min_variant_price, max_variant_price].
-     * Simple product: điểm giá COALESCE(special.price, product.price).
-     *
-     * Một product khớp filter [filter_min, filter_max] khi khoảng giá của nó
-     * GIAO với khoảng filter: LOW <= filter_max AND HIGH >= filter_min.
-     * Áo có variant 50k–500k vẫn match filter "200k–300k" vì user mua được
-     * variant trong khoảng đó. Anchor-on-min loại nhầm sản phẩm này.
-     */
     public function scopeEffectivePriceBetween(Builder $query, ?int $min, ?int $max): Builder
     {
         if ($min === null && $max === null) {
@@ -199,14 +166,6 @@ class Product extends Base implements Auditable
         return $query->whereRaw("({$lowSql}) <= ?", [...$lowBindings, $max]);
     }
 
-    /**
-     * Sort theo giá hiệu lực.
-     *
-     * ASC dùng LOW (min_variant_price cho variant, COALESCE cho simple) — đặt
-     * sản phẩm "giá khởi điểm rẻ nhất" lên đầu.
-     * DESC dùng HIGH (max_variant_price cho variant) — đặt sản phẩm "đỉnh giá
-     * cao nhất" lên đầu. Cùng anchor cho cả 2 phía gây bias variant về 1 đầu.
-     */
     public function scopeOrderByEffectivePrice(Builder $query, string $dir = 'asc'): Builder
     {
         $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
@@ -216,36 +175,6 @@ class Product extends Base implements Auditable
         return $query->orderByRaw("{$sql} $dir", $bindings);
     }
 
-    /**
-     * SQL fragment cho giá hiệu lực low/high.
-     *
-     * Variant product (has_variants=1 + min_variant_price IS NOT NULL):
-     *   Aggregate MIN/MAX của effective variant price ngay trong subquery,
-     *   không dựa min/max_variant_price denormalize. Effective per-variant =
-     *   COALESCE(active product_variant_special.price, product_variant.price).
-     *   product_special KHÔNG còn áp cho nhánh variant — quyết định Hướng B
-     *   (xem CLAUDE.md "Cluster variant special").
-     *
-     *   Lý do dùng aggregate tại chỗ thay vì denormalize: variant_special là
-     *   time-bound + per-user-group, không thể precompute aggregate cho mọi
-     *   tổ hợp. Index `idx_pvs_lookup` cover query bên trong; 20 rows/page →
-     *   chi phí chấp nhận được.
-     *
-     * Simple product hoặc variant product có data drift (has_variants=1 nhưng
-     * min_variant_price NULL):
-     *   COALESCE(active product_special.price, product.price). Giữ pattern cũ.
-     *
-     * Bindings: 6 placeholders theo thứ tự — [groupId, now, now] cho
-     * variant_special subquery, rồi [groupId, now, now] cho product_special.
-     * MySQL bind tất cả `?` trước khi CASE evaluate, KHÔNG short-circuit
-     * binding theo nhánh.
-     *
-     * Toán tử so sánh ngày: nhánh variant_special follow HasAdvancedScopes
-     * ('<=' start, '>' end strict — same scope ProductVariant::variantSpecial
-     * dùng để load relation). Nhánh product_special giữ '<=' / '>=' theo
-     * implementation cũ — đã có drift documented ở CLAUDE.md, sửa kèm task
-     * unify riêng để khỏi scope creep.
-     */
     protected static function effectivePriceExpression(string $which = 'low'): array
     {
         $agg = $which === 'high' ? 'MAX' : 'MIN';
@@ -268,17 +197,21 @@ class Product extends Base implements Auditable
               AND pv.deleted_at IS NULL
         )";
 
-        $productSpecialSql = '(
-            SELECT ps.price FROM product_special ps
-            WHERE ps.product_id    = product.id
-              AND ps.user_group_id = ?
-              AND (ps.date_start IS NULL OR ps.date_start <= ?)
-              AND (ps.date_end   IS NULL OR ps.date_end   >= ?)
-            ORDER BY ps.priority DESC
+        $defaultVariantSpecialSql = '(
+            SELECT pvs.price FROM product_variant_special pvs
+            JOIN product_variant dpv ON dpv.id = pvs.product_variant_id
+            WHERE dpv.product_id    = product.id
+              AND dpv.is_default    = 1
+              AND dpv.deleted_at IS NULL
+              AND pvs.user_group_id = ?
+              AND (pvs.date_start IS NULL OR pvs.date_start <= ?)
+              AND (pvs.date_end   IS NULL OR pvs.date_end   >  ?)
+              AND pvs.deleted_at IS NULL
+            ORDER BY pvs.priority DESC
             LIMIT 1
         )';
 
-        $simpleSql = "COALESCE({$productSpecialSql}, product.price)";
+        $simpleSql = "COALESCE({$defaultVariantSpecialSql}, product.price)";
 
         $sql = "CASE
             WHEN product.has_variants = 1 AND product.min_variant_price IS NOT NULL

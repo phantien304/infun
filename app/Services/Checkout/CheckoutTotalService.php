@@ -5,20 +5,6 @@ namespace App\Services\Checkout;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 use App\Services\Cart\VoucherService;
 
-/**
- * Tính toàn bộ các dòng trong "Hóa đơn của bạn": sub_total, coupon, voucher,
- * reward, shipping, total. Port logic từ trait CheckoutTotal cũ.
- *
- * Output: mảng `totalData` mỗi entry `{code, title, text, value}`. Blade
- * (cart.blade.php, index.blade.php) đọc đúng shape này — giữ contract.
- *
- * `total` được mutate qua reference theo từng step (giảm/cộng dồn) — match
- * semantics cũ. Order các step bắt buộc:
- *   sub_total → coupon → voucher → reward → shipping → total
- * vì coupon được tính trên sub_total, voucher trên (sub-coupon), reward
- * theo points (đại lượng riêng), shipping trên (sub-coupon-voucher-reward),
- * total là tổng cuối.
- */
 class CheckoutTotalService
 {
     public function __construct(
@@ -34,17 +20,12 @@ class CheckoutTotalService
         $running = (int) array_sum(array_column($ctx->items, 'total'));
 
         $this->lineSubTotal($totalData, $running);
-
-        // Shopee multi-coupon — single source of truth qua $ctx->appliedCoupons.
-        // Voucher (gift card) áp riêng ở lineVouchers (sau shipping).
         $this->linesAppliedCoupons($ctx, $totalData, $running);
         $this->lineGifts($totalData);
         $this->lineReward($ctx, $totalData, $running);
         if ($withShipping) {
             $this->lineShipping($ctx, $totalData, $running);
         }
-        // Voucher (gift card) áp SAU shipping — cover được cả phí ship.
-        // Stack nhiều voucher, cap tại residual (không "trả tiền dư").
         $this->lineVouchers($totalData, $running);
         $this->lineTotal($totalData, $running);
 
@@ -61,13 +42,6 @@ class CheckoutTotalService
         ];
     }
 
-    /**
-     * Phase 4 Shopee — render 1 line cho mỗi coupon đã áp (trừ freeship).
-     * Freeship type=3 KHÔNG add line ở đây — lineShipping xử lý (zero fee).
-     *
-     * Mỗi entry $ctx->appliedCoupons: {coupon, discount, type}. discount đã
-     * compute từ CouponService::applyCodes — chỉ việc trừ vào running total.
-     */
     protected function linesAppliedCoupons(CheckoutContext $ctx, array &$totalData, int &$total): void
     {
         $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
@@ -94,12 +68,6 @@ class CheckoutTotalService
         }
     }
 
-    /**
-     * Gift informational line — KHÔNG trừ vào total (quà miễn phí, không
-     * ảnh hưởng giá). Chỉ render để user thấy "Quà tặng: N quà" trên bill
-     * confirm đã chọn. Đọc trực tiếp session vì gift không có flow
-     * applyCodes phức tạp như coupon.
-     */
     protected function lineGifts(array &$totalData): void
     {
         $applied = (array) session()->get(getCoreConfig('session.applied_gifts'), []);
@@ -161,10 +129,6 @@ class CheckoutTotalService
     {
         $method = (string) request()->get('carrier_code');
 
-        // Carrier chưa chọn — vẫn render placeholder freeship để user biết
-        // mã đang áp + sẽ kích hoạt ở bước chọn vận chuyển. Tránh trường
-        // hợp user áp 2 mã (fixed + freeship) nhưng UI chỉ hiện 1 line vì
-        // freeship bị skip ở linesAppliedCoupons + lineShipping bail-out.
         if (! filled($method)) {
             $this->lineFreeshipPlaceholder($ctx, $totalData);
             return;
@@ -187,8 +151,6 @@ class CheckoutTotalService
         ];
         $total += $fee;
 
-        // Phase 4 — freeship coupon trừ phí ship. Add line riêng để user thấy
-        // "đã tiết kiệm bao nhiêu" thay vì thấy ship = 0 không rõ vì sao.
         if ($ctx->hasFreeshipCoupon && $fee > 0) {
             $freeshipCode = $this->findFreeshipCode($ctx);
             $totalData[] = [
@@ -203,11 +165,6 @@ class CheckoutTotalService
         }
     }
 
-    /**
-     * Hiển thị 1 line confirm freeship coupon đang áp khi chưa biết phí ship
-     * thật (chưa pick carrier hoặc shippingFee fail). value=0 để KHÔNG mutate
-     * `total` — discount thật áp khi fee tính được sau đó.
-     */
     protected function lineFreeshipPlaceholder(CheckoutContext $ctx, array &$totalData): void
     {
         if (! $ctx->hasFreeshipCoupon) {
@@ -235,10 +192,6 @@ class CheckoutTotalService
         return null;
     }
 
-    /**
-     * Render line cho mỗi voucher đã áp. Stack nhiều, cap tại residual total.
-     * Voucher amount đã pro-rate qua `VoucherService::resolveApplied`.
-     */
     protected function lineVouchers(array &$totalData, int &$total): void
     {
         if ($total <= 0) {
@@ -288,4 +241,3 @@ class CheckoutTotalService
         return number_format($amount, 0, '', ',').'đ';
     }
 }
-                                                           

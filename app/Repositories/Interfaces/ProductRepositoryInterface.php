@@ -39,7 +39,7 @@ interface ProductRepositoryInterface extends BaseRepositoryInterface
 
     public function getListSpecial(?Request $request = null): LengthAwarePaginator;
 
-    public function getProductSpecialLatest(int $limit = 8);
+    public function getProductVariantSpecialLatest(int $limit = 8);
 
     public function getSortMenu(): array;
 

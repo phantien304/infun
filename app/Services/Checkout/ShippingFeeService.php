@@ -8,23 +8,6 @@ use App\Models\Entities\Zone;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 
-/**
- * Tính phí ship qua các provider: flat, GHN, GHTK, VTP.
- *
- * Đã hợp nhất với `App\Services\FeeShipService` cũ — không còn delegate qua
- * BaseService. Guzzle HTTP call inline vào service này; mỗi provider có
- * method `fetchXxx` riêng để dễ mock/test.
- *
- * Signature ngoài: `calculate($method, $orderTotal, $cartShipping, $address)`
- * trả `[bool $ok, ?int $fee]`. `CheckoutTotalService` chỉ gắn dòng phí khi
- * `$ok = true` — provider lỗi (token sai, district không hợp lệ, network
- * timeout) trả `[false, null]` để UI bỏ qua dòng phí thay vì hiển thị 0đ
- * gây nhầm "free ship".
- *
- * Toàn bộ config (token, url, from address) đọc qua `setting()` để CMS
- * override được — convention mới thay `getCoreConfig()` cho phần config DB
- * không cố định.
- */
 class ShippingFeeService
 {
     protected Client $http;
@@ -164,10 +147,6 @@ class ShippingFeeService
         return [$zone?->vtp_id, $district?->vtp_id];
     }
 
-    /**
-     * Guzzle GET với query string + custom headers, parse JSON. Trả `[]` khi
-     * lỗi network / status != 2xx — caller check `empty()` để fallback.
-     */
     protected function fetchGet(?string $url, array $query, array $headers): array
     {
         if (! filled($url)) {
@@ -187,9 +166,6 @@ class ShippingFeeService
         }
     }
 
-    /**
-     * Guzzle POST JSON body. Cùng convention trả `[]` khi lỗi.
-     */
     protected function fetchPostJson(?string $url, array $body, array $headers): array
     {
         if (! filled($url)) {

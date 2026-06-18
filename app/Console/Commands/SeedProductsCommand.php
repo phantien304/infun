@@ -119,7 +119,7 @@ class SeedProductsCommand extends Command
                 // Truncate product cluster + taxonomy. Thứ tự không quan trọng
                 // vì foreign_key_checks đã off.
                 foreach ([
-                    'product_image', 'product_filter', 'product_special', 'product_category', 'product_description', 'product',
+                    'product_image', 'product_filter', 'product_category', 'product_description', 'product',
                     'category_description', 'category', 'manufacturer',
                 ] as $tbl) {
                     if (Schema::hasTable($tbl)) {
@@ -164,9 +164,6 @@ class SeedProductsCommand extends Command
                 }
                 if ($categories) {
                     DB::table('product_category')->insert($categories);
-                }
-                if ($specials && !$this->option('no-special')) {
-                    DB::table('product_special')->insert($specials);
                 }
                 if ($filters  && !$this->option('no-filter')) {
                     DB::table('product_filter')->insert($filters);

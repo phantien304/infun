@@ -9,12 +9,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-/**
- * Gửi email chứa link đặt lại mật khẩu (AuthService::sendResetLink).
- *
- * Job convention mới: implements ShouldQueue + 4 trait, inject JobMailer.
- * Link = config_domain + url.forgot_password + base64(code+'+'+email).
- */
 class ForgotPasswordJob implements ShouldQueue
 {
     use Dispatchable;

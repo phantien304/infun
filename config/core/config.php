@@ -88,10 +88,7 @@ return [
     ],
     'session' => [
         'total_wishlist'   => 'user_total_wishlist',
-        // Cart / checkout session keys — GIỮ NGUYÊN value (gồm dot-notation
-        // 'checkout.*' = mảng lồng). Đổi value = orphan session khách đang
-        // checkout + có thể tái phát bug prefix (xem CLAUDE.md).
-        'cart'             => 'cart',                    // prefix → cart.{key}
+        'cart'             => 'cart',
         'cart_header'      => 'total_cart_header',
         'cart_shipping'    => 'cart_shipping',
         'reward'           => 'reward',
@@ -156,8 +153,6 @@ return [
         'country_id_default' => 230
     ],
     'coupon' => [
-        // type values khớp DB-level `coupon.type TINYINT UNSIGNED`.
-        // KHÔNG dùng literal 1/2/3 trong code — đọc qua getCoreConfig.
         'type' => [
             'percent'  => 1, // discount_value = %, kèm discount_max cap VND.
             'fixed'    => 2, // discount_value = VND tuyệt đối.
@@ -174,8 +169,6 @@ return [
             'cancelled' => 2, // order cancel → trả quota lại.
         ],
         'stacking' => [
-            // 1 voucher discount (percent | fixed) + 1 voucher freeship/order.
-            // Set false để cấm stack hoàn toàn (chỉ 1 voucher).
             'allow_freeship_with_discount' => true,
         ],
         'cache' => [
@@ -183,20 +176,15 @@ return [
             'tag_user'   => 'coupon_user_', // concat user_id → tag riêng (saved list).
             'key_active' => 'coupon_active',
         ],
-        // TTL áp riêng cho cart pending — quá hạn auto chuyển status applied → expired
-        // (cron job) để giải phóng quota cho user khác.
         'cart_applied_ttl_minutes' => 30,
     ],
     'voucher' => [
-        // Thẻ quà tặng cá nhân (gift card), KHÔNG phải coupon marketing.
-        // status values khớp DB-level `voucher.status TINYINT UNSIGNED`.
         'status' => [
             'active'      => 1, // còn dùng được
             'expired'     => 2, // hết HSD (date_expire < now)
             'fully_used'  => 3, // balance = 0
             'revoked'     => 4, // admin thu hồi (fraud)
         ],
-        // history_status track lifecycle redeem:
         'history_status' => [
             'applied'   => 1, // đang ở cart, chưa thanh toán
             'confirmed' => 2, // order paid → balance trừ thật
@@ -209,12 +197,10 @@ return [
         ],
     ],
     'gift' => [
-        // trigger_type values khớp DB-level `gift.trigger_type TINYINT UNSIGNED`.
         'trigger_type' => [
             'min_subtotal'         => 1, // đơn từ X VND (đọc gift.min_subtotal).
             'buy_specific_product' => 2, // mua bất kỳ SP trong gift_trigger_product.
         ],
-        // pick_type — UX user chọn gift:
         'pick_type' => [
             'auto'          => 0, // tự áp tất cả gift_item khi đủ ĐK.
             'pick_1_of_n'   => 1, // radio: chọn 1 trong N gift_item.
@@ -255,7 +241,7 @@ return [
         'movement_type' => [
             'receive'         => 'receive',
             'sale'            => 'sale',
-            'sale_backorder'  => 'sale_backorder', // sale that drove on_hand negative
+            'sale_backorder'  => 'sale_backorder',
             'reserve'         => 'reserve',
             'release'         => 'release',
             'adjust'          => 'adjust',

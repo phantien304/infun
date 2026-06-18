@@ -9,36 +9,13 @@ use App\Repositories\Interfaces\GiftRepositoryInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Gift orchestration cho cart Shopee-style.
- *
- * Trách nhiệm:
- *  - `listForCart`     : list gift + cờ availableToCart + reason + picked items
- *  - `validatePicks`   : check pick_type rule (1_of_n, up_to_n, auto)
- *  - `applyPicks`      : set session(getCoreConfig('session.applied_gifts'))
- *  - `clearPicks`      : reset session
- *  - `recordOrderGifts`: persist order_gift rows + increment used_count
- *  - `revertOrderGifts`: rollback khi order cancel
- *
- * Session shape: `checkout.applied_gifts` = [
- *   ['gift_id' => 5, 'item_ids' => [10, 11]],
- *   ['gift_id' => 8, 'item_ids' => [15]],
- * ]
- *
- * Auto-pick gift (`pick_type=0`): không cần user thao tác — server tự pick
- * mọi gift_item vào session khi list, nhưng chỉ persist vào order khi user
- * submit checkout.
- */
 class GiftService
 {
     public function __construct(
         protected GiftRepositoryInterface $giftRepo,
-    ) {}
+    ) {
+    }
 
-    /**
-     * @param  array<int, array<string, mixed>>  $cartItems  từ CartService::getItems
-     * @return Collection<int, GiftDTO>
-     */
     public function listForCart(array $cartItems, int $cartSubtotal): Collection
     {
         $gifts = $this->giftRepo->listActive();
@@ -54,7 +31,6 @@ class GiftService
             $reason = $this->validateTrigger($gift, $cartSubtotal, $cartProductIds);
             $available = $reason === null;
 
-            // Pre-fill picked items từ session, nếu auto-pick thì pre-select tất cả items.
             $pickedItemIds = [];
             if ($available) {
                 $sessionEntry = $appliedByGift->get((int) $gift->id);
@@ -71,9 +47,6 @@ class GiftService
         ])->values();
     }
 
-    /**
-     * Trigger check (KHÔNG check pick — đó là service validatePicks).
-     */
     public function validateTrigger(Gift $gift, int $cartSubtotal, array $cartProductIds): ?string
     {
         $type = (int) $gift->trigger_type;
@@ -100,11 +73,6 @@ class GiftService
         return null;
     }
 
-    /**
-     * Validate pick rule. Trả NULL nếu OK hoặc reason string.
-     *
-     * @param  array<int, int>  $itemIds
-     */
     public function validatePicks(Gift $gift, array $itemIds): ?string
     {
         $itemIds = array_values(array_unique(array_map('intval', $itemIds)));
@@ -118,7 +86,6 @@ class GiftService
         $count = count($itemIds);
 
         if ($pickType === (int) getCoreConfig('gift.pick_type.auto')) {
-            // auto: cho phép pick TẤT CẢ items, KHÔNG pick từng phần.
             if ($count > 0 && $count !== count($allowedIds)) {
                 return 'Quà tự động — phải nhận tất cả';
             }
@@ -143,12 +110,6 @@ class GiftService
         return null;
     }
 
-    /**
-     * Apply user picks vào session sau khi validate.
-     *
-     * @param  array<int, array{gift_id:int, item_ids:array<int,int>}>  $picks
-     * @return array{ok: bool, errors: array<int, string>}
-     */
     public function applyPicks(array $picks, array $cartItems, int $cartSubtotal): array
     {
         $errors = [];
@@ -202,23 +163,6 @@ class GiftService
         return array_values(array_filter($raw, 'is_array'));
     }
 
-    /**
-     * Resolve gift picks ở session thành flat list để render trong danh sách
-     * SP của cart (Shopee-style "Quà tặng kèm" section). Mỗi entry chứa thông
-     * tin SP/variant + label gift gốc.
-     *
-     * Trả mảng:
-     *   [
-     *     {gift_id, gift_name, item_id, product_id, variant_id, name, image, quantity, variant_label},
-     *     ...
-     *   ]
-     *
-     * Không validate trigger ở đây — giả định caller đã pass cart context để
-     * pick → validate xong → session chỉ chứa pick hợp lệ. Khi cart thay đổi
-     * làm trigger fail, listForCart sẽ re-validate và filter ở render time.
-     *
-     * @return array<int, array<string, mixed>>
-     */
     public function resolveGiftDisplayItems(): array
     {
         $applied = $this->getAppliedGifts();
@@ -261,10 +205,6 @@ class GiftService
         return $items;
     }
 
-    /**
-     * Persist order_gift rows + increment gift.used_count khi order tạo.
-     * Gọi từ CreateOrderService trong cùng transaction.
-     */
     public function recordOrderGifts(int $orderId): void
     {
         $applied = $this->getAppliedGifts();
@@ -305,11 +245,6 @@ class GiftService
         }
     }
 
-    /**
-     * Revert quota khi order huỷ. Gọi từ AccountService::cancelOrder.
-     * order_gift CASCADE delete khi orders xoá thật, nhưng ở luồng cancel
-     * (UPDATE status) row vẫn còn → đếm rồi decrement used_count manual.
-     */
     public function revertOrderGifts(int $orderId): void
     {
         $gifts = OrderGift::query()
@@ -326,8 +261,6 @@ class GiftService
                 ->decrement('used_count');
         }
 
-        // Xoá order_gift rows để không double-revert nếu cancel idempotent.
         OrderGift::query()->forOrder($orderId)->delete();
     }
 }
-      

@@ -223,16 +223,8 @@ class ProductOptionService
                 'attributes'      => $attributes,
                 'price'           => (float) $variant->price,
                 'regular_price'   => $variant->regular_price !== null ? (float) $variant->regular_price : null,
-                // Giá user thực sự trả khi mua variant này tại thời điểm hiện
-                // tại — special > variant.price. Frontend chỉ đọc field này
-                // để show #price-product, không cần biết special tồn tại.
                 'effective_price' => $effectivePrice,
-                // Giá tham chiếu strike-through (= MSRP nếu set, fallback
-                // variant.price khi đang trong campaign). Frontend show khi
-                // strike > effective. Null = không có gì để strike.
                 'strike_price'    => $strikePrice,
-                // Campaign info (id + dates) cho countdown / badge "Đang sale
-                // tới HH:MM". null = không có campaign active.
                 'special'         => $special,
                 'image'           => $variant->image,
                 'is_default'      => (bool) $variant->is_default,
@@ -286,20 +278,6 @@ class ProductOptionService
         ];
     }
 
-    /**
-     * Tính ba mảnh hiển thị giá variant — gộp 1 chỗ để buildVariantMatrix +
-     * resolveDefaultVariant không drift logic:
-     *
-     *   effective_price = COALESCE(variantSpecial.price, variant.price)
-     *   strike_price    = giá để gạch ngang khi đang có giảm (variant.price
-     *                     khi special active; regular_price khi không có
-     *                     special; null khi không gạch ngang)
-     *   special         = ['id' => int, 'price' => float, 'date_end' => str|null]
-     *                     hoặc null
-     *
-     * Logic strike: chỉ trả giá tham chiếu nếu strike > effective. Tránh
-     * UI show "1.000.000đ" gạch ngang lên đè "1.000.000đ" giá hiện tại.
-     */
     protected function resolveVariantPricing(ProductVariant $productVariant): array
     {
         $basePrice = (float) $productVariant->price;

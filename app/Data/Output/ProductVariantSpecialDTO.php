@@ -2,10 +2,10 @@
 
 namespace App\Data\Output;
 
-use App\Models\Entities\ProductSpecial;
+use App\Models\Entities\ProductVariantSpecial;
 use Spatie\LaravelData\Data;
 
-class ProductSpecialDTO extends Data
+class ProductVariantSpecialDTO extends Data
 {
     public function __construct(
         public int $id,
@@ -18,23 +18,24 @@ class ProductSpecialDTO extends Data
         public ?int $discountPercent,
         public ?string $dateStart,
         public ?string $dateEnd
-    ) {}
+    ) {
+    }
 
-    public static function fromModel(ProductSpecial $productSpecial, float $priceRegular = 0): self
+    public static function fromModel(ProductVariantSpecial $special, float $priceRegular = 0): self
     {
-        $pricePromotion = (float) $productSpecial->price;
+        $pricePromotion = (float) $special->price;
 
         return new self(
-            id: (int) $productSpecial->id,
-            userGroupId: $productSpecial->user_group_id,
-            priority: (int) $productSpecial->priority,
+            id: (int) $special->id,
+            userGroupId: $special->user_group_id,
+            priority: (int) $special->priority,
             priceRegular: $priceRegular,
             pricePromotion: $pricePromotion,
             priceRegularLabel: self::formatPrice($priceRegular),
             pricePromotionLabel: self::formatPrice($pricePromotion),
             discountPercent: self::discountPercent($priceRegular, $pricePromotion),
-            dateStart: $productSpecial->date_start?->format('Y-m-d H:i:s'),
-            dateEnd: $productSpecial->date_end?->format('Y-m-d H:i:s')
+            dateStart: $special->date_start?->format('Y-m-d H:i:s'),
+            dateEnd: $special->date_end?->format('Y-m-d H:i:s')
         );
     }
 

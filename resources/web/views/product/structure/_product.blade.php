@@ -1,5 +1,5 @@
 @php
-    $special = $product->productSpecial;
+    $special = $product->productVariantSpecial;
 @endphp
 {{--
     Product card — KHÔNG còn col-* Bootstrap vì wrapper grid Tailwind đã lo

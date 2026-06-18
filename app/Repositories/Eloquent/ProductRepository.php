@@ -211,7 +211,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $this->list($request, null, fn (Builder $q) => $q->hasActiveSpecial());
     }
 
-    public function getProductSpecialLatest(int $limit = 8)
+    public function getProductVariantSpecialLatest(int $limit = 8)
     {
         return $this->rememberCache(
             $this->specialLatestCacheKey($limit),
@@ -290,8 +290,8 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             'manufacturer',
             'stockStatus',
             'productCategories.category.description',
-            'productSpecial',
             'defaultVariant.productStock',
+            'defaultVariant.productVariantSpecial',
         ];
     }
 
@@ -306,7 +306,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                     setting('product_image.type.zoom'),
                 ])
                 ->orderBy('sort_order'),
-            'productSpecials',
+            'defaultVariant.productVariantSpecial',
             'weightClass.description',
             'productOptions.option.description',
             'productOptions.option.optionValues.description',

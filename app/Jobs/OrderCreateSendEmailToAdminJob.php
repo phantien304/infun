@@ -9,13 +9,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-/**
- * Gửi email thông báo order mới cho admin. Dispatch khi
- * `config_email_notification` được set.
- *
- * Tham số: cùng shape với `OrderCreateSendEmailJob` — mailer template ở admin
- * (`mailer.order_create_to_admin`) đọc cùng cấu trúc.
- */
 class OrderCreateSendEmailToAdminJob implements ShouldQueue
 {
     use Dispatchable;

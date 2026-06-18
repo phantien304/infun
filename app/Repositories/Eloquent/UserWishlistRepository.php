@@ -20,7 +20,7 @@ class UserWishlistRepository extends QueryableRepository implements UserWishlist
             ->where('user_id', $userId)
             ->with([
                 'product.description',
-                'product.productSpecial',
+                'product.defaultVariant.productVariantSpecial',
                 'product.stockStatus',
             ])
             ->get();

@@ -9,15 +9,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-/**
- * Gửi email xác thực tài khoản sau khi đăng ký (AuthService::register).
- *
- * Job convention mới (xem CLAUDE.md "Jobs"): implements ShouldQueue + 4 trait
- * Laravel, inject JobMailer qua handle(). KHÔNG còn extends
- * `BaseInfunStudioJob` / method `_handle()` legacy.
- *
- * Link xác thực = config_domain + url.verify_email + base64(code+'+'+email).
- */
 class VerifyEmailJob implements ShouldQueue
 {
     use Dispatchable;

@@ -10,13 +10,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-/**
- * Gửi email xác nhận "tư vấn ký hợp đồng" cho khách. Cặp với
- * `ConsultSignEmailToAdmin`.
- *
- * Hiện tại `JobMailer::consultSignToCustomer()` chưa implement body — job
- * vẫn dispatch để giữ chỗ; khi mailer hoàn thiện sẽ tự chạy.
- */
 class ConsultSignEmailToCustomer implements ShouldQueue
 {
     use Dispatchable;

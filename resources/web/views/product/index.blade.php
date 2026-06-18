@@ -1,11 +1,6 @@
 @php
-    $special = $entity->productSpecial;
+    $special = $entity->productVariantSpecial;
     $priceFinal = $defaultVariant['price'] ?? ($special?->pricePromotion ?: $entity->price);
-    // Giá tham chiếu cho discount Shopee-style:
-    //  - Có variant: regular = product.price (MSRP/niêm yết), current = variant.price.
-    //  - Không có variant: regular = special.priceRegular (= product.price khi ngữ cảnh
-    //    special tính từ đó), current = special.pricePromotion.
-    // JS dùng `productBasePrice` để compute discount khi user pick variant.
     $basePriceForDiscount = (float) $entity->price;
 @endphp
 @section('script_header')
@@ -59,10 +54,6 @@
 @stop
 @section('content')
     @include('web::share.structure._breadcrumb_v2')
-    {{-- Layout chi tiết SP:
-         - 2 cột 50/50: image trái + info phải (md+), stack mobile.
-         - Modal "Liên hệ mua hàng" dùng Alpine x-data thay Bootstrap modal.
-         - Tabs Mô tả / Đánh giá dùng Alpine để switch panel. --}}
     <div class="container mx-auto max-w-7xl px-4 mb-30" x-data="{ contactOpen: false, tab: 'description' }">
         <div class="w-full m-auto">
             <div class="product-detail accordion-detail">
@@ -72,7 +63,6 @@
                     </div>
                     <div class="mb-md-0 mb-sm-5">
                         <div class="detail-info pr-30 pl-30">
-                            {{-- Badge "Tiết kiệm" Shopee-style. --}}
                             @php
                                 $currentPrice = $defaultVariant['price'] ?? ($special?->pricePromotion ?? 0);
                                 $refPrice = $defaultVariant['regular_price'] ?? $basePriceForDiscount;
@@ -95,12 +85,10 @@
                                     class="inline-flex items-center gap-2">
                                     <span class="rating-stars"
                                         style="position: relative; display: inline-block; font-size: 18px; line-height: 1; letter-spacing: 2px;">
-                                        {{-- Layer xám full 5 sao --}}
                                         <span style="color: #d4d4d4;">
                                             <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
                                                 class="fa fa-star"></i><i class="fa fa-star"></i>
                                         </span>
-                                        {{-- Layer cam overlay, clip theo width = rating × 20% --}}
                                         <span
                                             style="position: absolute; top: 0; left: 0; width: {{ $ratingPct }}%; color: #ee4d2d; overflow: hidden; white-space: nowrap;">
                                             <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
@@ -260,10 +248,6 @@
                         </div>
                     </div>
                 @endif
-
-                {{-- Tabs Mô tả / Đánh giá — Alpine `tab` state thay
-                     `data-bs-toggle="tab"` cũ. Class `.nav-tabs`, `.tab-pane`,
-                     `.active` giữ cho theme CSS styling. --}}
                 <div class="product-info mt-50">
                     <div class="tab-style3">
                         <ul class="nav nav-tabs uppercase flex justify-center list-none p-0 m-0">
@@ -361,9 +345,6 @@
                         </div>
                     </div>
                 @endif
-
-                {{-- Modal "Liên hệ mua hàng" — Alpine thay Bootstrap modal.
-                     Click backdrop hoặc Đồng ý → close. --}}
                 <div x-show="contactOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4"
                     x-transition>
                     <div class="absolute inset-0 bg-black/50" @click="contactOpen = false"></div>
@@ -390,4 +371,3 @@
         </div>
     </div>
 @endsection
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 

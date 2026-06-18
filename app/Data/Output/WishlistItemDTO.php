@@ -5,19 +5,6 @@ namespace App\Data\Output;
 use App\Models\Entities\UserWishlist;
 use Spatie\LaravelData\Data;
 
-/**
- * 1 dòng wishlist của user.
- *
- * Trả thẳng các field hiển thị blade cần (name / url / priceLabel / stockLabel)
- * thay vì trả ProductDTO đầy đủ — vì wishlist không cần `gallery`, `content`,
- * `metaTitle` ... → tiết kiệm allocation. Logic giá hiệu lực dựa
- * `product.productSpecial` (singular ofMany, đã filter theo
- * dateStartToEnd + getUserGroupId ở model).
- *
- * Repo eager-load `product.description`, `product.productSpecial`,
- * `product.stockStatus` — DTO check `relationLoaded` để chịu được caller
- * skip eager-load (vd userWishlist() AJAX không cần đầy đủ).
- */
 class WishlistItemDTO extends Data
 {
     public function __construct(
@@ -41,8 +28,9 @@ class WishlistItemDTO extends Data
         $slug = resolveSlug($desc->slug ?? null, $name);
 
         $effective = (float) ($product?->price ?? 0);
-        if ($product && $product->relationLoaded('productSpecial') && $product->productSpecial) {
-            $effective = (float) $product->productSpecial->price;
+        $variantSpecial = $product?->defaultVariant?->productVariantSpecial;
+        if ($variantSpecial) {
+            $effective = (float) $variantSpecial->price;
         }
 
         $currency = (string) getConfigDb('config_currency');

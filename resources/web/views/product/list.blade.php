@@ -1,7 +1,3 @@
-{{--
-    Global product list page (/san-pham). Shared listing skeleton in
-    web::share.structure._product_listing handles the grid + sidebar.
---}}
 @extends('web::layouts.main')
 
 @section('meta')

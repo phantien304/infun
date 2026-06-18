@@ -40,10 +40,6 @@ class ProductDTO extends Data
         public ?float $minVariantPrice,
         public ?float $maxVariantPrice,
         public ?int $maxVariantDiscountPercent,
-        // Aggregated availability signal — true when at least one variant
-        // (or the default variant for simple products) is sellable under
-        // its inventory_policy. Replaces the legacy `quantity > 0` check
-        // that blade pages used to gate the "Mua hàng" button.
         public bool $inStock,
         public ?int $isAddCart,
         public ?int $isCustom,
@@ -59,7 +55,7 @@ class ProductDTO extends Data
         public string $modifiedDate,
         public Collection $categories,
         public ?ManufacturerDTO $manufacturer,
-        public ?ProductSpecialDTO $productSpecial,
+        public ?ProductVariantSpecialDTO $productVariantSpecial,
         public array $matchedFilterNames,
         public float $ratingAvg,
         public int $reviewCount,
@@ -78,7 +74,9 @@ class ProductDTO extends Data
     {
         $desc = $product->description;
         $manufacturer = $product->manufacturer;
-        $productSpecial = $product->productSpecial;
+        $productVariantSpecial = ($product->has_variants ?? false)
+            ? null
+            : $product->defaultVariant?->productVariantSpecial;
         $name = (string) ($desc->name ?? '');
         $slug = resolveSlug($desc->slug ?? null, $name);
         $description = (string) ($desc->description ?? '');
@@ -132,7 +130,7 @@ class ProductDTO extends Data
             modifiedDate: $product->updated_at?->format('d/m/Y') ?? '',
             categories: $categories,
             manufacturer: isset($manufacturer) ? ManufacturerDTO::fromModel($manufacturer) : null,
-            productSpecial: isset($productSpecial) ? ProductSpecialDTO::fromModel($productSpecial, (float) $product->price) : null,
+            productVariantSpecial: isset($productVariantSpecial) ? ProductVariantSpecialDTO::fromModel($productVariantSpecial, (float) $product->price) : null,
             matchedFilterNames: $matchedFilterNames,
             ratingAvg: (float) ($product->rating_avg ?? 0),
             reviewCount: (int) ($product->review_count ?? 0),

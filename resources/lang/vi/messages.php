@@ -88,6 +88,8 @@ return [
     'ErrorSaveAction' => 'Opt, có lỗi đã xảy ra. Vui lòng kiểm tra lại.',
     'SuccessCreateOrder' => 'Tạo đơn hàng thành công.',
     'TextAddCartSuccess' => 'Bạn đã thêm thành công <a href="%s"><b>%s</b></a> vào giỏ hàng.',
+    'TextAddToCartError' => 'Sản phẩm <b style="color: #d81800;">%s</b>: bạn đã có %d trong giỏ, yêu cầu thêm %d (tổng %d) nhưng kho chỉ còn %d.',
+    'TextAddToCartError2' => 'Sản phẩm <b style="color: #d81800;">%s</b>: bạn yêu cầu %d nhưng kho chỉ còn %d.',
     'TextConsultSignSuccess' => 'Bạn đã gửi yêu cầu tư vấn khắc dấu <a href="%s"><b>%s</b></a> thành công.',
     'MemberNotFound' => 'Email không tồn tại',
     'HasSendMailForgetPassword' => 'Một email đã được gửi vào địa chỉ email của bạn.',

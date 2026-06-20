@@ -38,7 +38,7 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::post('consult-sign', 'CheckoutController@consultSign')->name('checkout.consultSign');
         Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder');
         Route::get('success', 'CheckoutController@success')->name('checkout.success');
-        Route::get('shipping', 'CheckoutController@shipping')->name('checkout.shipping');
+        Route::get('shipping', 'CheckoutController@recalcTotals')->name('checkout.shipping');
         Route::post('payment/call-back', 'CheckoutController@paymentCallBack')->name('checkout.paymentCallBack')->withoutMiddleware(['cache_page']);
         Route::get('/', 'CheckoutController@index')->name('checkout.index');
         Route::get('coupons', 'CheckoutCouponController@list')->name('checkout.coupons');

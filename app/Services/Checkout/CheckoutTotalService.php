@@ -3,18 +3,17 @@
 namespace App\Services\Checkout;
 
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
-use App\Services\Cart\VoucherService;
 
 class CheckoutTotalService
 {
     public function __construct(
         protected ShippingFeeService $shippingFee,
         protected UserRewardRepositoryInterface $rewardRepo,
-        protected VoucherService $voucherService,
+        protected PromotionService $promotions,
     ) {
     }
 
-    public function build(CheckoutContext $ctx, bool $withShipping = true): array
+    public function build(CheckoutPromotions $ctx, bool $withShipping = true): array
     {
         $totalData = [];
         $running = (int) array_sum(array_column($ctx->items, 'total'));
@@ -42,7 +41,7 @@ class CheckoutTotalService
         ];
     }
 
-    protected function linesAppliedCoupons(CheckoutContext $ctx, array &$totalData, int &$total): void
+    protected function linesAppliedCoupons(CheckoutPromotions $ctx, array &$totalData, int &$total): void
     {
         $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
 
@@ -80,13 +79,13 @@ class CheckoutTotalService
         }
         $totalData[] = [
             'code'  => 'gifts',
-            'title' => 'Quà tặng',
-            'text'  => $count . ' quà',
+            'title' => trans('messages.checkout.gift'),
+            'text'  => sprintf(trans('messages.checkout.gift_count'), $count),
             'value' => 0,
         ];
     }
 
-    protected function lineReward(CheckoutContext $ctx, array &$totalData, int &$total): void
+    protected function lineReward(CheckoutPromotions $ctx, array &$totalData, int &$total): void
     {
         if (getConfigDb('config_reward_point_enabled') == setting('reward_point.disable')) {
             return;
@@ -125,11 +124,11 @@ class CheckoutTotalService
         $total -= $discountTotal;
     }
 
-    protected function lineShipping(CheckoutContext $ctx, array &$totalData, int &$total): void
+    protected function lineShipping(CheckoutPromotions $ctx, array &$totalData, int &$total): void
     {
-        $method = (string) request()->get('carrier_code');
+        $carrierCode = (string) request()->get('carrier_code');
 
-        if (! filled($method)) {
+        if (! filled($carrierCode)) {
             $this->lineFreeshipPlaceholder($ctx, $totalData);
             return;
         }
@@ -137,14 +136,14 @@ class CheckoutTotalService
         $address = $this->extractAddress();
         $cartShipping = (array) session()->get(getCoreConfig('session.cart_shipping'), []);
 
-        [$ok, $fee] = $this->shippingFee->calculate($method, $total, $cartShipping, $address);
+        [$ok, $fee] = $this->shippingFee->calculate($carrierCode, $total, $cartShipping, $address);
         if (! $ok || $fee === null) {
             $this->lineFreeshipPlaceholder($ctx, $totalData);
             return;
         }
 
         $totalData[] = [
-            'code'  => $method,
+            'code'  => $carrierCode,
             'title' => trans('messages.TextFeeShipping'),
             'text'  => '+'.$this->money($fee),
             'value' => $fee,
@@ -152,44 +151,68 @@ class CheckoutTotalService
         $total += $fee;
 
         if ($ctx->hasFreeshipCoupon && $fee > 0) {
-            $freeshipCode = $this->findFreeshipCode($ctx);
-            $totalData[] = [
-                'code'  => 'coupon_freeship',
-                'title' => $freeshipCode !== null
-                    ? sprintf(trans('messages.TextCoupon'), $freeshipCode)
-                    : trans('messages.TextCoupon', ['code' => 'FREESHIP']),
-                'text'  => '-' . $this->money($fee),
-                'value' => -$fee,
-            ];
-            $total -= $fee;
+            $entry = $this->findFreeshipEntry($ctx);
+            $shipDiscount = $this->freeshipShipDiscount($entry, $fee);
+            if ($shipDiscount > 0) {
+                $code = $entry['coupon']->code ?? null;
+                $totalData[] = [
+                    'code'  => 'coupon_freeship',
+                    'title' => $code !== null
+                        ? sprintf(trans('messages.TextCoupon'), $code)
+                        : trans('messages.TextCoupon', ['code' => 'FREESHIP']),
+                    'text'  => '-' . $this->money($shipDiscount),
+                    'value' => -$shipDiscount,
+                ];
+                $total -= $shipDiscount;
+            }
         }
     }
 
-    protected function lineFreeshipPlaceholder(CheckoutContext $ctx, array &$totalData): void
+    protected function lineFreeshipPlaceholder(CheckoutPromotions $ctx, array &$totalData): void
     {
-        if (! $ctx->hasFreeshipCoupon) {
+        $entry = $this->findFreeshipEntry($ctx);
+        if ($entry === null) {
             return;
         }
-        $code = $this->findFreeshipCode($ctx);
+        $code = $entry['coupon']->code ?? null;
+        $cap = $this->freeshipCap($entry['coupon']);
         $totalData[] = [
             'code'  => 'coupon_freeship_pending',
             'title' => $code !== null
                 ? sprintf(trans('messages.TextCoupon'), $code)
-                : 'Voucher freeship',
-            'text'  => 'Áp dụng khi chọn vận chuyển',
+                : trans('messages.checkout.freeship_voucher'),
+            'text'  => $cap > 0
+                ? sprintf(trans('messages.checkout.freeship_cap'), $this->money($cap))
+                : trans('messages.checkout.freeship_apply'),
             'value' => 0,
         ];
     }
 
-    protected function findFreeshipCode(CheckoutContext $ctx): ?string
+    protected function findFreeshipEntry(CheckoutPromotions $ctx): ?array
     {
         $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
         foreach ($ctx->appliedCoupons as $entry) {
             if ((int) ($entry['type'] ?? $entry['coupon']->type) === $typeFreeship) {
-                return $entry['coupon']->code;
+                return $entry;
             }
         }
+
         return null;
+    }
+
+    protected function freeshipCap($coupon): int
+    {
+        return (int) ($coupon->discount_max ?: $coupon->discount);
+    }
+
+    protected function freeshipShipDiscount(?array $entry, int $fee): int
+    {
+        if ($entry === null || $fee <= 0) {
+            return 0;
+        }
+        $cap = $this->freeshipCap($entry['coupon']);
+
+        return $cap > 0 ? min($fee, $cap) : $fee;
     }
 
     protected function lineVouchers(array &$totalData, int &$total): void
@@ -197,7 +220,7 @@ class CheckoutTotalService
         if ($total <= 0) {
             return;
         }
-        $result = $this->voucherService->resolveApplied($total);
+        $result = $this->promotions->resolveVouchers($total);
         if (empty($result['applied'])) {
             return;
         }
@@ -209,7 +232,7 @@ class CheckoutTotalService
             $voucher = $entry['voucher'];
             $totalData[] = [
                 'code'  => 'voucher:' . $voucher->code,
-                'title' => sprintf('Thẻ quà tặng %s', $voucher->code),
+                'title' => sprintf(trans('messages.checkout.gift_card'), $voucher->code),
                 'text'  => '-' . $this->money($amount),
                 'value' => -$amount,
             ];

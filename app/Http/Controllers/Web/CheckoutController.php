@@ -13,14 +13,12 @@ use App\Models\Entities\OrdersStatus;
 use App\Repositories\Interfaces\CarrierRepositoryInterface;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\PaymentRepositoryInterface;
-use App\Services\Cart\CouponService;
-use App\Services\Cart\GiftService;
-use App\Services\Cart\VoucherService;
 use App\Services\CartService;
-use App\Services\Checkout\CheckoutContext;
 use App\Services\Checkout\CheckoutPaymentService;
+use App\Services\Checkout\CheckoutPromotions;
 use App\Services\Checkout\CheckoutTotalService;
 use App\Services\Checkout\CreateOrderService;
+use App\Services\Checkout\PromotionService;
 use Illuminate\Http\Request;
 
 class CheckoutController extends Controller
@@ -33,9 +31,7 @@ class CheckoutController extends Controller
         protected CarrierRepositoryInterface $carrierRepo,
         protected PaymentRepositoryInterface $paymentRepo,
         protected OrderRepositoryInterface $orderRepo,
-        protected CouponService $couponService,
-        protected GiftService $giftService,
-        protected VoucherService $voucherService,
+        protected PromotionService $promotions,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -48,25 +44,13 @@ class CheckoutController extends Controller
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.checkout'), 'href' => route('checkout.index'), 'separator' => true]);
         $this->processMetaSeo('buildForSeoBySetting', 'seo_title_checkout', 'seo_description_checkout');
 
-        $ctx = $this->buildContext(hasShipping: true);
-        [$error, $items] = $this->extractItems($ctx);
+        $ctx = $this->buildPromotions(hasShipping: true);
+        [$error, $items] = $this->validateCart($ctx);
         $this->syncCartHeader($items);
         [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
 
-        $coupons = $this->couponService->listForCart(
-            $items ?: [],
-            (int) $this->cart->getSubtotal(),
-            (int) getCurrentUserId() ?: null,
-            getUserGroupId() ?: null,
-            contextHasShipping: true,
-        );
-        $gifts = $this->giftService->listForCart($items ?: [], (int) $this->cart->getSubtotal());
-        $giftItems = $this->giftService->resolveGiftDisplayItems();
         $userEmail = auth()->check() ? (string) auth()->user()->email : '';
-        $myVouchers = $userEmail !== ''
-            ? $this->voucherService->listMyVouchers($userEmail, (int) $this->cart->getSubtotal())
-            : collect();
-        $appliedVoucherCodes = $this->voucherService->getAppliedCodes();
+        $promo = $this->promotions->viewData($ctx, (int) $this->cart->getSubtotal(), $userEmail, hasShipping: true);
 
         return $this->render('web::checkout.index', [
             'carriers'           => $this->carrierRepo->listAllCached(),
@@ -76,13 +60,13 @@ class CheckoutController extends Controller
             'totalData'          => $totalData,
             'total'              => $total,
             'countProduct'       => $this->cart->countItems(),
-            'coupons'            => $coupons,
+            'coupons'            => $promo['coupons'],
             'appliedCouponCodes' => (array) session()->get(getCoreConfig('session.applied_coupons'), []),
             'couponContext'      => 'checkout',
-            'gifts'              => $gifts,
-            'giftItems'          => $giftItems,
-            'myVouchers'         => $myVouchers,
-            'appliedVoucherCodes' => $appliedVoucherCodes,
+            'gifts'              => $promo['gifts'],
+            'giftItems'          => $promo['giftItems'],
+            'myVouchers'         => $promo['myVouchers'],
+            'appliedVoucherCodes' => $promo['appliedVoucherCodes'],
         ]);
     }
 
@@ -112,31 +96,23 @@ class CheckoutController extends Controller
         $total = 0;
         $ctx = null;
         if ($this->cart->hasItems()) {
-            $ctx = $this->buildContext(hasShipping: false);
-            [$error, $items] = $this->extractItems($ctx);
+            $ctx = $this->buildPromotions(hasShipping: false);
+            [$error, $items] = $this->validateCart($ctx);
             [$totalData, $total] = $this->totalService->build($ctx, withShipping: false);
         }
         $this->syncCartHeader($items);
-
-        $coupons = $this->couponService->listForCart(
-            $items ?: [],
-            (int) $this->cart->getSubtotal(),
-            (int) getCurrentUserId() ?: null,
-            getUserGroupId() ?: null,
-            contextHasShipping: false,
-        );
 
         $effectiveCodes = $ctx
             ? array_map(fn ($a) => (string) $a['coupon']->code, $ctx->appliedCoupons)
             : [];
 
-        $gifts = $this->giftService->listForCart($items ?: [], (int) $this->cart->getSubtotal());
-        $giftItems = $this->giftService->resolveGiftDisplayItems();
         $userEmail = auth()->check() ? (string) auth()->user()->email : '';
-        $myVouchers = $userEmail !== ''
-            ? $this->voucherService->listMyVouchers($userEmail, (int) $this->cart->getSubtotal())
-            : collect();
-        $appliedVoucherCodes = $this->voucherService->getAppliedCodes();
+        $promo = $this->promotions->viewData(
+            $ctx ?? new CheckoutPromotions(),
+            (int) $this->cart->getSubtotal(),
+            $userEmail,
+            hasShipping: false,
+        );
 
         return $this->render('web::checkout.cart', [
             'error'              => $error,
@@ -144,13 +120,13 @@ class CheckoutController extends Controller
             'totalData'          => $totalData,
             'total'              => $total,
             'countProduct'       => $this->cart->countItems(),
-            'coupons'            => $coupons,
+            'coupons'            => $promo['coupons'],
             'appliedCouponCodes' => $effectiveCodes,
             'couponContext'      => 'cart',
-            'gifts'              => $gifts,
-            'giftItems'          => $giftItems,
-            'myVouchers'         => $myVouchers,
-            'appliedVoucherCodes' => $appliedVoucherCodes,
+            'gifts'              => $promo['gifts'],
+            'giftItems'          => $promo['giftItems'],
+            'myVouchers'         => $promo['myVouchers'],
+            'appliedVoucherCodes' => $promo['appliedVoucherCodes'],
         ]);
     }
 
@@ -238,8 +214,8 @@ class CheckoutController extends Controller
 
     public function saveOrder(CheckoutSaveOrderRequest $request)
     {
-        $ctx = $this->buildContext();
-        [$error, $items] = $this->extractItems($ctx);
+        $ctx = $this->buildPromotions();
+        [$error, $items] = $this->validateCart($ctx);
         if ($error !== '' || empty($items)) {
             return redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
         }
@@ -250,7 +226,7 @@ class CheckoutController extends Controller
             $orderId = $this->createOrderService->create($ctx, $request->validated(), $totalData, $total);
 
             $params = $request->validated();
-            $this->sendNotifications($items, $totalData, $this->buildMailData($params, $orderId));
+            $this->sendOrderEmails($items, $totalData, $this->buildOrderMailData($params, $orderId));
 
             $payload = $this->paymentService->buildOrderPayload(
                 $params['payment_code'],
@@ -349,10 +325,10 @@ class CheckoutController extends Controller
         }
     }
 
-    public function shipping()
+    public function recalcTotals()
     {
-        $ctx = $this->buildContext();
-        $this->extractItems($ctx);
+        $ctx = $this->buildPromotions();
+        $this->validateCart($ctx);
         [$totalData] = $this->totalService->build($ctx, withShipping: true);
 
         return successData('SearchSuccess', $totalData, 0);
@@ -380,35 +356,16 @@ class CheckoutController extends Controller
         ]);
     }
 
-    protected function buildContext(bool $hasShipping = true): CheckoutContext
+    protected function buildPromotions(bool $hasShipping = true): CheckoutPromotions
     {
-        $items = $this->cart->getItems();
-        $subtotal = $this->cart->getSubtotal();
-
-        $ctx = new CheckoutContext();
-        $ctx->setItems($items);
-
-        $codes = (array) session()->get(getCoreConfig('session.applied_coupons'), []);
-        if (! empty($codes)) {
-            $applyResult = $this->couponService->applyCodes(
-                $codes,
-                $items,
-                (int) $subtotal,
-                (int) getCurrentUserId() ?: null,
-                getUserGroupId() ?: null,
-                contextHasShipping: $hasShipping,
-            );
-            $ctx->setAppliedCoupons(
-                $applyResult['applied'],
-                $applyResult['freeship'],
-                $applyResult['total_discount'],
-            );
-        }
-
-        return $ctx;
+        return $this->promotions->buildContext(
+            $this->cart->getItems(),
+            (int) $this->cart->getSubtotal(),
+            $hasShipping,
+        );
     }
 
-    protected function extractItems(CheckoutContext $ctx): array
+    protected function validateCart(CheckoutPromotions $ctx): array
     {
         if (! $this->cart->hasItems()) {
             return [trans('messages.ErrorProduct'), []];
@@ -436,7 +393,7 @@ class CheckoutController extends Controller
         }
     }
 
-    protected function sendNotifications(array $items, array $totalData, array $mailData): void
+    protected function sendOrderEmails(array $items, array $totalData, array $mailData): void
     {
         if (filled($mailData['email'] ?? null)) {
             dispatch(new OrderCreateSendEmailJob($items, $totalData, $mailData));
@@ -446,10 +403,10 @@ class CheckoutController extends Controller
         }
     }
 
-    protected function buildMailData(array $params, int $orderId): array
+    protected function buildOrderMailData(array $params, int $orderId): array
     {
         $status = OrdersStatus::where('id', getConfigDb('order_status_id'))
-            ->where('language_code', app()->getLocale())
+            ->forLocale()
             ->first();
         $payment = $this->paymentRepo->findByCode((string) ($params['payment_code'] ?? ''));
 

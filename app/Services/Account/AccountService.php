@@ -32,9 +32,7 @@ class AccountService
         protected UserPhoneRepositoryInterface $phoneRepo,
         protected OrderRepositoryInterface $orderRepo,
         protected RefundService $refundService,
-        protected \App\Services\Cart\CouponService $couponService,
-        protected \App\Services\Cart\GiftService $giftService,
-        protected \App\Services\Cart\VoucherService $voucherService,
+        protected \App\Services\Checkout\PromotionService $promotions,
     ) {
     }
 
@@ -139,14 +137,8 @@ class AccountService
             $this->orderRepo->appendHistory($order->id, $cancelStatusId, $userId);
             $this->orderRepo->recordCancel($order->id, $userId, $reason, $comment);
 
-            // Trả quota coupon đã trừ khi order paid → cho user khác dùng được.
-            $this->couponService->revertOrderCoupons((int) $order->id);
-
-            // Trả quota gift đã trừ + xoá order_gift rows.
-            $this->giftService->revertOrderGifts((int) $order->id);
-
-            // Trả balance voucher (gift card) đã redeem.
-            $this->voucherService->revertOrderVouchers((int) $order->id);
+            // Trả quota cả 3 loại KM (coupon / gift / voucher) qua một cổng.
+            $this->promotions->revertForOrder((int) $order->id);
 
             return $order->refresh();
         });

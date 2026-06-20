@@ -83,6 +83,11 @@ class Product extends Base implements Auditable
             ->ofMany(['is_default' => 'max']);
     }
 
+    public function getPriceAttribute(): float
+    {
+        return (float) ($this->defaultVariant?->price ?? 0);
+    }
+
     public function productFilters()
     {
         return $this->hasMany(ProductFilter::class, 'product_id', 'id');
@@ -211,7 +216,15 @@ class Product extends Base implements Auditable
             LIMIT 1
         )';
 
-        $simpleSql = "COALESCE({$defaultVariantSpecialSql}, product.price)";
+        $defaultVariantPriceSql = '(
+            SELECT pv.price FROM product_variant pv
+            WHERE pv.product_id = product.id
+              AND pv.is_default = 1
+              AND pv.deleted_at IS NULL
+            LIMIT 1
+        )';
+
+        $simpleSql = "COALESCE({$defaultVariantSpecialSql}, {$defaultVariantPriceSql})";
 
         $sql = "CASE
             WHEN product.has_variants = 1 AND product.min_variant_price IS NOT NULL

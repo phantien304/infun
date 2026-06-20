@@ -9,20 +9,14 @@ use App\Services\Checkout\CheckoutTotalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * AJAX endpoints cho voucher (gift card cá nhân).
- *
- * Routes:
- *   POST /checkout/vouchers/apply   → nhập mã + áp
- *   POST /checkout/vouchers/remove  → bỏ 1 mã cụ thể (hoặc tất cả nếu code trống)
- */
 class CheckoutVoucherController extends Controller
 {
     public function __construct(
         protected CartService $cart,
         protected VoucherService $voucherService,
         protected CheckoutTotalService $totalService,
-    ) {}
+    ) {
+    }
 
     public function apply(Request $request): JsonResponse
     {
@@ -55,10 +49,6 @@ class CheckoutVoucherController extends Controller
         ]);
     }
 
-    /**
-     * Voucher tính residual theo orderTotal đang dự kiến (subtotal - coupon
-     * discount). Service applyCode dùng giá trị này validate.
-     */
     private function estimateOrderTotal(): int
     {
         return (int) $this->cart->getSubtotal();

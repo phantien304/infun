@@ -9,12 +9,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-/**
- * Gửi email "tài khoản đã được kích hoạt" sau khi user xác thực email thành
- * công (AuthService::verifyEmail).
- *
- * Job convention mới: implements ShouldQueue + 4 trait, inject JobMailer.
- */
 class AuthenticatedEmailJob implements ShouldQueue
 {
     use Dispatchable;

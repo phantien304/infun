@@ -2,7 +2,6 @@
 
 namespace App\Services\Checkout;
 
-use App\Models\Entities\CouponHistory;
 use App\Models\Entities\OrdersProduct;
 use App\Models\Entities\OrdersProductOption;
 use App\Models\Entities\OrdersTotal;
@@ -30,10 +29,11 @@ class CreateOrderService
     public function __construct(
         protected OrderRepositoryInterface $orderRepo,
         protected UserRewardRepositoryInterface $rewardRepo,
+        protected PromotionService $promotions,
     ) {
     }
 
-    public function create(CheckoutContext $ctx, array $params, array $totalData, int $total): int
+    public function create(CheckoutPromotions $ctx, array $params, array $totalData, int $total): int
     {
         return DB::transaction(function () use ($ctx, $params, $totalData, $total) {
             $uniqid = strtoupper(uniqid());
@@ -45,37 +45,14 @@ class CreateOrderService
 
             $this->writeOrderItems($ctx, $order->id);
             $this->writeOrderTotals($order->id, $totalData);
-            $this->writeCouponHistory($ctx);
-            $this->writeNewVouchers($order->id, $total);
-            $this->writeGifts($order->id);
+            $this->promotions->recordForOrder($ctx, $order->id, $total);
             $this->writeUserReward($ctx);
 
             return $order->id;
         });
     }
 
-    /**
-     * Persist voucher (gift card) Shopee-style — insert voucher_history rows
-     * status=applied. Sau payment success, observer / payment callback flip
-     * status=confirmed + cộng vào redeemed_balance.
-     */
-    protected function writeNewVouchers(int $orderId, int $orderTotal): void
-    {
-        app(\App\Services\Cart\VoucherService::class)->recordOrderVouchers($orderId, $orderTotal);
-    }
-
-    /**
-     * Persist gift picks vào order_gift + increment gift.used_count.
-     * Delegate hoàn toàn cho GiftService (đã wrap logic + idempotent).
-     * Trong cùng DB transaction với buildOrderRow / writeOrderItems → rollback
-     * sạch nếu bất kỳ bước nào fail.
-     */
-    protected function writeGifts(int $orderId): void
-    {
-        app(\App\Services\Cart\GiftService::class)->recordOrderGifts($orderId);
-    }
-
-    protected function buildOrderRow(CheckoutContext $ctx, array $params, int $total, string $uniqid): array
+    protected function buildOrderRow(CheckoutPromotions $ctx, array $params, int $total, string $uniqid): array
     {
         $shipping = (array) session()->get(getCoreConfig('session.cart_shipping'), []);
 
@@ -127,7 +104,7 @@ class CreateOrderService
      * through product_stock (see subtractStock); the order_id is forwarded
      * so the audit row in stock_movement can point back to the order.
      */
-    protected function writeOrderItems(CheckoutContext $ctx, int $orderId): void
+    protected function writeOrderItems(CheckoutPromotions $ctx, int $orderId): void
     {
         foreach ($ctx->items as $item) {
             $this->subtractStock($item + ['order_id' => $orderId]);
@@ -237,34 +214,7 @@ class CreateOrderService
         }
     }
 
-    protected function writeCouponHistory(CheckoutContext $ctx): void
-    {
-        if (! $ctx->orderId) {
-            return;
-        }
-
-        if (! empty($ctx->appliedCoupons)) {
-            $statusUsed = (int) getCoreConfig('coupon.history_status.used');
-            $userId = (int) getCurrentUserId() ?: null;
-
-            foreach ($ctx->appliedCoupons as $entry) {
-                $coupon = $entry['coupon'];
-                CouponHistory::create([
-                    'coupon_id' => (int) $coupon->id,
-                    'order_id'  => $ctx->orderId,
-                    'user_id'   => $userId,
-                    'amount'    => (int) $entry['discount'],
-                    'status'    => $statusUsed,
-                ]);
-                DB::table('coupon')
-                    ->where('id', $coupon->id)
-                    ->increment('used_count');
-            }
-            return;
-        }
-    }
-
-    protected function writeUserReward(CheckoutContext $ctx): void
+    protected function writeUserReward(CheckoutPromotions $ctx): void
     {
         if (! auth()->check() || ! $ctx->orderId) {
             return;

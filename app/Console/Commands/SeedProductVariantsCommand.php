@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Schema;
  *  - Size: 5 size (S/M/L/XL/XXL), type='radio', role=variant.
  *
  * Cluster tạo cho mỗi variant:
- *  - 1 row product_variant (price = product.price × random 0.9–1.15)
+ *  - 1 row product_variant (price = base tự sinh × random 0.85–1.15)
  *  - 2 rows product_variant_attribute (1 cho Color, 1 cho Size)
  *  - 1 row product_stock (warehouse_id=1, on_hand 1–200)
  *  - 1 row stock_movement type='receive' để khởi tạo audit log
@@ -49,6 +49,7 @@ class SeedProductVariantsCommand extends Command
         {--max=3 : Số variant tối đa mỗi product (chỉ áp dụng khi KHÔNG --full)}
         {--full : Sinh ĐẦY ĐỦ Cartesian (mọi tổ hợp Color × Size). Khuyến nghị khi test UX variant availability — tránh false "hết hàng" do combo không tồn tại}
         {--with-custom-fields=0 : % product nhận 1-2 option custom field (text/email/phone/textarea/radio/select). 0 = skip}
+        {--special-percent=30 : % product được gắn product_variant_special trên default variant (0 = skip)}
         {--truncate : Xóa cluster variant + custom field declaration trước khi seed}';
 
     protected $description = 'Seed product_variant + cluster (attribute, stock, movement) + custom field options cho test schema mới';
@@ -140,7 +141,7 @@ class SeedProductVariantsCommand extends Command
 
             DB::table('product')
                 ->whereNull('deleted_at')
-                ->select('id', 'price')
+                ->select('id')
                 ->orderBy('id')
                 ->chunk($chunk, function ($products) use (
                     $percent,
@@ -158,7 +159,7 @@ class SeedProductVariantsCommand extends Command
                     &$totalVariantsCreated,
                     $bar,
                 ) {
-                    [$variants, $attributes, $stocks, $movements, $touched] =
+                    [$variants, $attributes, $stocks, $movements, $variantSpecials, $touched] =
                         $this->buildBatch(
                             $products,
                             $percent,
@@ -185,6 +186,9 @@ class SeedProductVariantsCommand extends Command
                     }
                     if ($movements) {
                         DB::table('stock_movement')->insert($movements);
+                    }
+                    if ($variantSpecials) {
+                        DB::table('product_variant_special')->insert($variantSpecials);
                     }
 
                     $nextVariantId        += count($variants);
@@ -479,6 +483,7 @@ class SeedProductVariantsCommand extends Command
             'product_stock',
             'product_variant_attribute',
             'product_variant_description',
+            'product_variant_special',
             'product_variant',
         ];
         foreach ($tables as $tbl) {
@@ -524,8 +529,9 @@ class SeedProductVariantsCommand extends Command
         int $startMovementId,
     ): array {
         $now = Carbon::now();
-        $variants = $attributes = $stocks = $movements = [];
+        $variants = $attributes = $stocks = $movements = $variantSpecials = [];
         $touched = [];
+        $specialPercent = (int) $this->option('special-percent');
 
         $variantId  = $startVariantId;
         $stockId    = $startStockId;
@@ -556,9 +562,10 @@ class SeedProductVariantsCommand extends Command
             // (kể cả thứ tự Color trước Size) suy từ product_variant_attribute +
             // option.sort_order — xem ProductOptionService::buildVariantOptions.
 
-            $basePrice = (float) $product->price;
+            $basePrice = (float) $this->randomBasePrice();
             $isFirst = true;
             $idx = 0;
+            $defaultVariantGetsSpecial = $specialPercent > 0 && rand(1, 100) <= $specialPercent;
 
             foreach ($combos as [$colorValueId, $sizeValueId]) {
                 $sig = $this->signature([
@@ -630,6 +637,21 @@ class SeedProductVariantsCommand extends Command
                     'created_at'         => $now,
                 ];
 
+                if ($isFirst && $defaultVariantGetsSpecial) {
+                    $variantSpecials[] = [
+                        'product_variant_id' => $variantId,
+                        'product_id'         => $product->id,
+                        'user_group_id'      => 1,
+                        'priority'           => rand(1, 10),
+                        'price'              => max(1000, (int) round($variantPrice * (rand(50, 90) / 100))),
+                        'date_start'         => rand(0, 1) ? $now->copy()->subDays(rand(0, 30)) : null,
+                        'date_end'           => rand(0, 1) ? $now->copy()->addDays(rand(1, 60)) : null,
+                        'created_at'         => $now,
+                        'updated_at'         => $now,
+                        'deleted_at'         => null,
+                    ];
+                }
+
                 $variantId++;
                 $stockId++;
                 $movementId++;
@@ -638,7 +660,22 @@ class SeedProductVariantsCommand extends Command
             }
         }
 
-        return [$variants, $attributes, $stocks, $movements, $touched];
+        return [$variants, $attributes, $stocks, $movements, $variantSpecials, $touched];
+    }
+
+    private function randomBasePrice(): int
+    {
+        $r = rand(1, 100);
+        if ($r <= 60) {
+            return rand(100_000, 1_000_000);
+        }
+        if ($r <= 85) {
+            return rand(1_000_000, 3_000_000);
+        }
+        if ($r <= 95) {
+            return rand(50_000, 100_000);
+        }
+        return rand(3_000_000, 10_000_000);
     }
 
     /**

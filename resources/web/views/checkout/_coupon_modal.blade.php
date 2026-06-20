@@ -3,18 +3,13 @@
 @endphp
 <div x-data="couponModal()" @open-coupon-modal.window="open()" @remove-coupon.window="remove()" x-show="show" x-cloak
     class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0" style="display:none;">
-    {{-- Backdrop --}}
     <div class="absolute inset-0 bg-black/50" @click="show = false"></div>
 
-    {{-- Panel --}}
     <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-lg sm:max-h-[85vh] flex flex-col shadow-2xl">
-        {{-- Header --}}
         <header class="flex items-center justify-between px-4 py-3 border-b">
             <h3 class="text-lg font-semibold">Chọn Voucher</h3>
             <button @click="show = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </header>
-
-        {{-- Code input --}}
         <div class="px-4 py-3 border-b bg-gray-50 flex gap-2">
             <input type="text" x-model="manualCode" placeholder="Nhập mã voucher"
                 class="flex-1 form-control h-10 px-3 rounded border-gray-300">
@@ -23,8 +18,6 @@
                 Áp dụng
             </button>
         </div>
-
-        {{-- Tabs --}}
         <div class="flex border-b">
             <button @click="tab='all'"
                 :class="tab === 'all' ? 'border-b-2 border-brand text-brand' : 'text-gray-500'"
@@ -37,22 +30,18 @@
                 Mã của tôi
             </button>
         </div>
-
-        {{-- List — Shopee-style 2 section: Discount (percent/fixed) + Freeship.
-             Group ở blade level để render section header + empty state riêng,
-             tránh trộn lẫn 2 loại với UX khác nhau (freeship trừ ship fee,
-             discount trừ subtotal). --}}
         @php
-            $typePercent  = (int) getCoreConfig('coupon.type.percent');
-            $typeFixed    = (int) getCoreConfig('coupon.type.fixed');
+            $typePercent = (int) getCoreConfig('coupon.type.percent');
+            $typeFixed = (int) getCoreConfig('coupon.type.fixed');
             $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
-            $discountCoupons = $coupons->filter(fn ($c) => in_array($c->type, [$typePercent, $typeFixed], true))->values();
-            $shippingCoupons = $coupons->filter(fn ($c) => $c->type === $typeFreeship)->values();
+            $discountCoupons = $coupons
+                ->filter(fn($c) => in_array($c->type, [$typePercent, $typeFixed], true))
+                ->values();
+            $shippingCoupons = $coupons->filter(fn($c) => $c->type === $typeFreeship)->values();
             $discountSavedCount = $discountCoupons->where('savedByUser', true)->count();
             $shippingSavedCount = $shippingCoupons->where('savedByUser', true)->count();
         @endphp
         <div class="flex-1 overflow-y-auto p-3 bg-gray-50">
-            {{-- Section 1: Mã giảm giá (percent + fixed) --}}
             <div class="mb-4" x-show="tab === 'all' || {{ $discountSavedCount > 0 ? 'true' : 'false' }}">
                 <div class="flex items-center gap-2 mb-2 px-1">
                     <i class="fi-rs-ticket text-orange-500"></i>
@@ -69,8 +58,6 @@
                     @endforelse
                 </div>
             </div>
-
-            {{-- Section 2: Mã miễn phí vận chuyển --}}
             <div class="mb-4" x-show="tab === 'all' || {{ $shippingSavedCount > 0 ? 'true' : 'false' }}">
                 <div class="flex items-center gap-2 mb-2 px-1">
                     <i class="fi-rs-truck text-green-500"></i>
@@ -87,25 +74,19 @@
                     @endforelse
                 </div>
             </div>
-
-            {{-- Empty state khi không có voucher nào ở cả 2 section --}}
             @if ($discountCoupons->isEmpty() && $shippingCoupons->isEmpty())
                 <div class="text-center text-gray-400 py-12">
                     <i class="fi-rs-ticket text-4xl"></i>
                     <p class="mt-2">Chưa có voucher nào</p>
                 </div>
             @endif
-
-            {{-- Empty state cho tab "Mã của tôi" khi chưa lưu voucher nào --}}
-            <div x-show="tab === 'mine' && {{ ($discountSavedCount + $shippingSavedCount) === 0 ? 'true' : 'false' }}"
-                 class="text-center text-gray-400 py-12">
+            <div x-show="tab === 'mine' && {{ $discountSavedCount + $shippingSavedCount === 0 ? 'true' : 'false' }}"
+                class="text-center text-gray-400 py-12">
                 <i class="fi-rs-bookmark text-4xl"></i>
                 <p class="mt-2">Bạn chưa lưu voucher nào</p>
                 <p class="text-xs mt-1">Bấm "+ Lưu" trên voucher ở tab "Mã của Shop" để lưu lại</p>
             </div>
         </div>
-
-        {{-- Footer --}}
         <footer class="px-4 py-3 border-t flex items-center justify-between bg-white">
             <span class="text-sm text-gray-600">
                 Đã chọn <b x-text="selected.length"></b> voucher
@@ -130,9 +111,6 @@
             manualCode: '',
             loading: false,
             selected: @json($appliedCouponCodes ?? []),
-            // Page context — server uses it to decide whether free-ship
-            // coupons are accepted (only on /checkout, where shipping
-            // is part of the running total).
             context: @json($couponContext),
 
             open() {
@@ -191,11 +169,11 @@
                 evt.preventDefault();
                 const btn = evt.currentTarget;
                 btn.disabled = true;
-                const res = await this.post('{{ route('checkout.couponsSave') }}', { coupon_id: couponId });
+                const res = await this.post('{{ route('checkout.couponsSave') }}', {
+                    coupon_id: couponId
+                });
                 btn.disabled = false;
                 if (res.success) {
-                    // Mark UI optimistic — toggle text from "+ Lưu" → "Đã lưu".
-                    // Avoid reload to preserve modal scroll/state.
                     btn.innerHTML = '<i class="fi-rs-bookmark"></i> Đã lưu';
                     btn.classList.remove('text-brand', 'hover:underline');
                     btn.classList.add('text-gray-400', 'hover:text-red-500');
@@ -208,7 +186,9 @@
                 evt.preventDefault();
                 const btn = evt.currentTarget;
                 btn.disabled = true;
-                const res = await this.post('{{ route('checkout.couponsUnsave') }}', { coupon_id: couponId });
+                const res = await this.post('{{ route('checkout.couponsUnsave') }}', {
+                    coupon_id: couponId
+                });
                 btn.disabled = false;
                 if (res.success) {
                     btn.innerHTML = '+ Lưu';
@@ -228,22 +208,10 @@
                 }
             },
 
-            /**
-             * Đọc carrier_code radio đang chọn (chỉ có trên /checkout — cart
-             * page không có form vận chuyển). Trả '' nếu chưa pick để server
-             * lineShipping bỏ qua phí ship, chuyển sang lineFreeshipPlaceholder
-             * nếu có freeship coupon.
-             */
             currentCarrierCode() {
                 return document.querySelector('input[name="carrier_code"]:checked')?.value || '';
             },
 
-            /**
-             * Swap DOM bằng HTML từ server trả về thay vì reload trang.
-             *  - #total-data tbody: rows mới (subtotal + coupon lines + total)
-             *  - #coupon-promo-row-container: chip strip + applied count mới
-             *  - this.selected: sync lại từ applied_codes server đã filter
-             */
             swapDom(data) {
                 if (data.total_data_html) {
                     const tbody = document.querySelector('#total-data');

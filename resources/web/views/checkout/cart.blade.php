@@ -55,8 +55,7 @@
         <div class="row">
             <div class="col-xl-9 cart-list">
                 @if (count($products))
-                    <form action="{{ route('checkout.cart') }}" method="post" enctype="multipart/form-data"
-                        role="form">
+                    <form action="{{ route('checkout.cart') }}" method="post" enctype="multipart/form-data" role="form">
                         <div class="cart-info table-responsive shopping-summery">
                             <table class="table table-wishlist">
                                 <thead>
@@ -72,8 +71,9 @@
                                         <tr class="pt-30">
                                             <td class="image product-thumbnail pt-40">
                                                 <a href="{!! $product['url'] !!}">
-                                                    <img src="{{ thumbnail((string) ($product['image'] ?? ''), 100, 100) }}" alt="{!! $product['name'] !!}"
-                                                        title="{!! $product['name'] !!}"> </a>
+                                                    <img src="{{ thumbnail((string) ($product['image'] ?? ''), 100, 100) }}"
+                                                        alt="{!! $product['name'] !!}" title="{!! $product['name'] !!}">
+                                                </a>
                                             </td>
                                             <td class="product-des product-name">
                                                 <h6 class="mb-5">
@@ -109,7 +109,7 @@
                                             <td class="detail-info quantity" data-title="Số lượng">
                                                 <input type="number" name="quantity[{{ $product['key'] }}]"
                                                     value="{{ $product['quantity'] }}" size="2" class="form-control">
-                                                &nbsp;&nbsp;<input type="image" src="/client/images/applys.png"
+                                                &nbsp;&nbsp;<input type="image" src="/web/images/applys.png"
                                                     alt="Cập nhật" title="Cập nhật">
                                                 &nbsp;&nbsp;<a
                                                     href="{{ route('checkout.cart', ['remove' => $product['key']]) }}"><i
@@ -193,8 +193,6 @@
                                 </div>
                             </div>
                         </div>
-                        {{-- Shopee promo row — container stable id để JS replace
-                             innerHTML sau khi AJAX apply (không reload trang). --}}
                         <div class="col-xl-12">
                             <div id="coupon-promo-row-container">
                                 @include('web::checkout._coupon_promo_row')
@@ -208,9 +206,6 @@
                                 @include('web::checkout._voucher_promo_row')
                             </div>
                         </div>
-                        {{-- Form "Nhập mã quà tặng" legacy đã bỏ — modal voucher
-                             (_voucher_modal.blade.php) đã có input mã thủ công
-                             + tab "Thẻ của tôi" thay thế hoàn toàn. --}}
                         <div class="col-xl-12 mt-3">
                             <div class="d-grid gap-2 col-12 mx-auto text-center">
                                 <a class="btn btn-lg btn-block" href="{{ route('checkout.index') }}">

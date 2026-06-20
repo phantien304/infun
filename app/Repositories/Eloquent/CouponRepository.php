@@ -21,9 +21,7 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
         return Coupon::class;
     }
 
-    // === Shopee-style API ===
-
-    public function listActiveForUser(?int $userId, ?int $userGroupId): Collection
+    public function listActiveForUser(?int $userGroupId): Collection
     {
         return $this->rememberCache(
             $this->cacheKeyActive($userGroupId),
@@ -42,9 +40,6 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
 
     public function listSavedByUser(int $userId): Collection
     {
-        // KHÔNG cache: user-specific data + thay đổi nhanh (save/unsave) →
-        // cache value invalidate quá thường. Acceptable cost: 1 query JOIN
-        // user_coupon với indexed lookup user_id.
         return $this->resetModel()
             ->newQuery()
             ->savedBy($userId)
@@ -77,13 +72,6 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
             ->count();
     }
 
-    /**
-     * Batch đếm số lần dùng (applied + used) của 1 user trên nhiều coupon —
-     * 1 query GROUP BY thay vì countUsedByUser mỗi coupon (N+1 ở listForCart).
-     *
-     * @param  array<int, int>  $couponIds
-     * @return array<int, int>  [coupon_id => count]
-     */
     public function countUsedByUserForCoupons(int $userId, array $couponIds): array
     {
         if (empty($couponIds)) {
@@ -111,13 +99,6 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
         return getCoreConfig('coupon.cache.key_active') . ':' . ($userGroupId ?? 'public');
     }
 
-    // === Legacy API (backward-compat trait CheckoutMarketing) ===
-
-    /**
-     * Resolve coupon — port nguyên logic từ trait CheckoutMarketing::getCoupon
-     * cũ. KHÔNG dùng cho flow Shopee mới — service mới gọi `findByCode` +
-     * `CouponService::validateForCart` + `computeDiscount`.
-     */
     public function resolveCoupon(?string $code, array $cartItems, int $cartSubtotal): array
     {
         if (! filled($code)) {

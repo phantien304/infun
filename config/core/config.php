@@ -154,14 +154,14 @@ return [
     ],
     'coupon' => [
         'type' => [
-            'percent'  => 1, // discount_value = %, kèm discount_max cap VND.
-            'fixed'    => 2, // discount_value = VND tuyệt đối.
-            'freeship' => 3, // bỏ qua discount_value, set shipping_fee=0.
+            'percent'  => 1, // discount_value = %
+            'fixed'    => 2, // discount_value = VND.
+            'freeship' => 3, // skip discount_value, set shipping_fee=0.
         ],
         'apply_scope' => [
-            'all'        => 0, // áp mọi SP trong cart.
-            'products'   => 1, // chỉ SP có row trong coupon_product.
-            'categories' => 2, // chỉ SP thuộc category có row trong coupon_category.
+            'all'        => 0,
+            'products'   => 1,
+            'categories' => 2,
         ],
         'history_status' => [
             'applied'   => 0, // đang trong cart, chưa thanh toán.

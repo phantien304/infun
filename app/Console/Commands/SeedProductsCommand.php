@@ -21,7 +21,6 @@ use Illuminate\Support\Str;
  *   php artisan products:seed 10000                   # tạo 10000
  *   php artisan products:seed 50000 --chunk=2000      # chunk size
  *   php artisan products:seed 50000 --truncate        # xóa data cũ trước
- *   php artisan products:seed 50000 --no-special      # không sinh product_special
  *   php artisan products:seed 50000 --no-filter       # không sinh product_filter
  */
 class SeedProductsCommand extends Command
@@ -30,7 +29,6 @@ class SeedProductsCommand extends Command
         {count=50000 : Số product cần tạo}
         {--chunk=2000 : Số row mỗi batch insert}
         {--truncate : Truncate product + taxonomy (category, manufacturer) trước khi seed}
-        {--no-special : Không sinh product_special}
         {--no-filter : Không sinh product_filter}
         {--no-taxonomy : KHÔNG auto-seed category/manufacturer kể cả khi pool rỗng}';
 
@@ -155,7 +153,7 @@ class SeedProductsCommand extends Command
                 $batchSize = min($chunk, $count - $offset);
                 $batchStartId = $startId + $offset;
 
-                [$products, $descriptions, $categories, $specials, $filters, $images]
+                [$products, $descriptions, $categories, $filters, $images]
                     = $this->buildBatch($batchStartId, $batchSize, $pools, $nextImageId);
 
                 DB::table('product')->insert($products);
@@ -361,14 +359,13 @@ class SeedProductsCommand extends Command
     private function buildBatch(int $startId, int $size, array $pools, int $imageStartId): array
     {
         $now      = Carbon::now();
-        $products = $descriptions = $categories = $specials = $filters = $images = [];
+        $products = $descriptions = $categories = $filters = $images = [];
         $imagePool = self::IMAGE_PRODUCTS;
         $poolCount = count($imagePool);
         $imageId = $imageStartId;
 
         for ($i = 0; $i < $size; $i++) {
             $id    = $startId + $i;
-            $price = $this->randomPrice();
 
             // Main image: pick 1 random từ pool. Gallery: pick 2-3 distinct
             // shuffle slice (cho phép trùng với main — realistic: ảnh đại diện
@@ -389,7 +386,6 @@ class SeedProductsCommand extends Command
                 'video'             => null,
                 'shipping'          => 1,
                 'link_sale'         => null,
-                'price'             => $price,
                 'points'            => 0,
                 'date_available'    => $now->copy()->subDays(rand(0, 365))->toDateString(),
                 'weight'            => rand(50, 5000),
@@ -438,20 +434,6 @@ class SeedProductsCommand extends Command
                 }
             }
 
-            // ~30% có 1 product_special
-            if (rand(1, 100) <= 30) {
-                $promo = (int) round($price * (rand(50, 90) / 100)); // sale 10–50%
-                $specials[] = [
-                    'product_id'    => $id,
-                    'user_group_id' => 1, // mặc định guest group
-                    'priority'      => rand(1, 10),
-                    'price'         => $promo,
-                    'date_start'    => rand(0, 1) ? $now->copy()->subDays(rand(0, 30)) : null,
-                    'date_end'      => rand(0, 1) ? $now->copy()->addDays(rand(1, 60)) : null,
-                    'created_at'    => $now,
-                    'updated_at'    => $now,
-                ];
-            }
 
             // 0–3 filter random; mỗi filter pick 1 filter_value (tránh đụng composite PK)
             if (!empty($pools['filter_values_by_filter'])) {
@@ -495,7 +477,7 @@ class SeedProductsCommand extends Command
             }
         }
 
-        return [$products, $descriptions, $categories, $specials, $filters, $images];
+        return [$products, $descriptions, $categories, $filters, $images];
     }
 
     /**

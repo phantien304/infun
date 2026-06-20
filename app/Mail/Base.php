@@ -31,22 +31,33 @@ class Base extends Mailable
 
     protected function _send($from, $sender, $to, $subject, $content, $cc = [], $contentHtml = '', $bcc = [])
     {
-        $sendType = $this->getSendType();
-        if ($sendType == 'send') {
-            Mail::send([], [], function ($message) use ($from, $sender, $to, $subject, $content, $cc, $contentHtml, $bcc) {
-                $message->to($to)->subject($subject);
-                $message->cc($cc);
-                $message->bcc($bcc);
-                $message->from($from, $sender); // address and name
-                $message->setContentType("text/plain");
-                $message->setBody($content)->setCharset('utf8')->setEncoder(new \Swift_Mime_ContentEncoder_PlainContentEncoder('7bit'));
-                if (!empty($contentHtml)) {
-                    $message->addPart($contentHtml, 'text/html');
-                }
-            });
-        } elseif ($sendType == 'send_later') {
-            //@todo send mail later
+        if ($this->getSendType() !== 'send') {
+            // @todo send_later — đẩy vào queue thay vì gửi ngay.
+            return $this;
         }
+
+        // Swift Mailer đã bị gỡ từ Laravel 9 (dự án đang Laravel 12 + Symfony
+        // Mailer). Gửi HTML qua Mail::html(); thêm phần text thuần nếu có.
+        $html = $contentHtml instanceof \Illuminate\Contracts\Support\Renderable
+            ? $contentHtml->render()
+            : (string) $contentHtml;
+
+        Mail::html($html, function ($message) use ($from, $sender, $to, $subject, $content, $cc, $bcc) {
+            $message->to($to)
+                ->subject($subject)
+                ->from($from, $sender); // address and name
+
+            if (! empty($cc)) {
+                $message->cc($cc);
+            }
+            if (! empty($bcc)) {
+                $message->bcc($bcc);
+            }
+            if (filled($content)) {
+                // Illuminate\Mail\Message::__call → Symfony\Component\Mime\Email::text()
+                $message->text($content);
+            }
+        });
 
         return $this;
     }

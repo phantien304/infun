@@ -2,7 +2,7 @@
 
 namespace App\Services\Checkout;
 
-class CheckoutContext
+class CheckoutPromotions
 {
     public array $items = [];
 
@@ -10,11 +10,11 @@ class CheckoutContext
 
     public bool $hasFreeshipCoupon = false;
 
-    public int $totalCouponDiscount = 0;
+    public array $appliedVoucherCodes = [];
+
+    public array $appliedGifts = [];
 
     public ?int $orderId = null;
-
-    public int $userGroupId = 0;
 
     public function setItems(array $items): static
     {
@@ -23,11 +23,24 @@ class CheckoutContext
         return $this;
     }
 
-    public function setAppliedCoupons(array $applied, bool $hasFreeship, int $totalDiscount): static
+    public function setAppliedCoupons(array $applied, bool $hasFreeship): static
     {
         $this->appliedCoupons = $applied;
         $this->hasFreeshipCoupon = $hasFreeship;
-        $this->totalCouponDiscount = $totalDiscount;
+
+        return $this;
+    }
+
+    public function setVoucherCodes(array $codes): static
+    {
+        $this->appliedVoucherCodes = $codes;
+
+        return $this;
+    }
+
+    public function setGifts(array $gifts): static
+    {
+        $this->appliedGifts = $gifts;
 
         return $this;
     }

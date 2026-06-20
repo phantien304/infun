@@ -6,17 +6,6 @@ use App\Models\Entities\Coupon;
 use Illuminate\Support\Carbon;
 use Spatie\LaravelData\Data;
 
-/**
- * Coupon DTO cho voucher card modal Shopee-style.
- *
- * Pre-compute label hiển thị + cờ trạng thái (savedByUser, applicableToCart,
- * notApplicableReason) trong DTO — blade chỉ render, không tính.
- *
- * `applicableToCart` + `notApplicableReason` cần cart context → set qua
- * factory `fromModelWithCart(Coupon, $userId, $isApplicable, $reason)`. Khi
- * chỉ liệt kê (vd "tất cả voucher khả dụng" KHÔNG check cart) → dùng
- * `fromModel()` thường, mặc định applicable=true.
- */
 class CouponDTO extends Data
 {
     public function __construct(
@@ -24,35 +13,29 @@ class CouponDTO extends Data
         public string $code,
         public string $name,
         public ?string $description,
-
         public int $type,                    // 1=percent, 2=fixed, 3=freeship
-        public string $typeLabel,            // "Giảm theo %", "Giảm cố định", "Miễn phí ship"
-        public string $typeIcon,             // "%", "₫", "🚚" — cho ribbon trái voucher card
-
+        public string $typeLabel,
+        public string $typeIcon,
         public float $discountValue,
         public ?float $discountMax,
-        public string $discountLabel,        // "Giảm 10% tối đa 50,000đ" / "Giảm 30,000đ" / "Miễn phí vận chuyển"
-
+        public string $discountLabel,
         public ?float $minSubtotal,
-        public string $minSubtotalLabel,     // "Đơn từ 200,000đ" hoặc "Không giới hạn"
-
+        public string $minSubtotalLabel,
         public int $applyScope,              // 0=all, 1=products, 2=categories
-        public string $applyScopeLabel,      // "Tất cả SP", "Một số SP", "Một số ngành hàng"
-
-        public ?string $badge,               // "HOT", "MỚI", ...
-        public ?string $dateStart,           // ISO
-        public ?string $dateEnd,             // ISO
-        public string $expiresAtLabel,       // "HSD: 31/12/2026" hoặc "Còn 3 ngày"
-
+        public string $applyScopeLabel,
+        public ?string $badge,
+        public ?string $dateStart,
+        public ?string $dateEnd,
+        public string $expiresAtLabel,
         public ?int $usesTotal,
         public int $usedCount,
-        public ?int $usesRemaining,          // NULL nếu unlimited
+        public ?int $usesRemaining,
         public ?int $usesPerCustomer,
-
         public bool $savedByUser,
         public bool $applicableToCart,
-        public ?string $notApplicableReason, // "Chưa đủ đơn tối thiểu", "Hết lượt", ...
-    ) {}
+        public ?string $notApplicableReason,
+    ) {
+    }
 
     public static function fromModel(
         Coupon $coupon,

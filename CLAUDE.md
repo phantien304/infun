@@ -218,6 +218,44 @@ Khi thêm cache mới:
 
 ## Giá hiệu lực (effective price)
 
+> **CẬP NHẬT 2026-06-18 — hợp nhất về `product_variant`** (phần mô tả 2 nhánh
+> bên dưới là LỊCH SỬ, đọc để hiểu ngữ cảnh; trạng thái hiện tại là dưới đây):
+>
+> **Pha 1 — bỏ bảng `product_special`.** Special của simple product giờ nằm ở
+> `product_variant_special` của **default variant** (relation `Product::defaultVariant`,
+> `hasOne ofMany is_default`). Migration `2026_06_18_000000_merge_product_special_into_variant_special`
+> migrate mọi row sang variant_special rồi `DROP TABLE product_special`. Đã xoá
+> `ProductSpecial` model + repo + interface; `ProductSpecialDTO` repurpose nhận
+> `ProductVariantSpecial` (sau đó linter đổi tên → `ProductVariantSpecialDTO`).
+>
+> **Pha 2 — bỏ cột `product.price`.** Giá gốc đọc từ default variant qua accessor
+> `Product::getPriceAttribute()` → `$this->defaultVariant?->price`. Migration
+> `2026_06_18_000001_drop_price_from_product`. Mọi reader `$product->price` giữ
+> nguyên (accessor lo); raw SQL KHÔNG dùng accessor → `effectivePriceExpression`
+> nhánh simple lấy base từ **subquery giá default variant** (không còn `product.price`).
+>
+> **`effectivePriceExpression` hiện tại** (cả 2 nhánh từ `product_variant_special`):
+>   - Variant: `MIN/MAX(COALESCE(active product_variant_special.price, pv.price))` aggregate qua variant.
+>   - Simple: `COALESCE(active special của DEFAULT variant, (SELECT pv.price WHERE is_default=1))`.
+>   - Toán tử ngày thống nhất 2 nhánh: `date_start <=`, `date_end >` (hết drift cũ).
+>
+> **N+1 + accessor — bắt buộc nhớ:**
+>   - Accessor `$product->price` đọc `defaultVariant` → **N+1 nếu chưa eager-load
+>     `defaultVariant`**. Hot path đã cover (`cardRelations`/`detailRelations` +
+>     CartService + UserWishlistRepository đều eager-load `defaultVariant.*`). Code
+>     mới đọc giá PHẢI `->with('defaultVariant')`, hoặc cân nhắc thêm `defaultVariant`
+>     vào `Product::$with`.
+>   - Filter/sort theo giá dùng correlated subquery (1 query, không N+1).
+>   - `OrderItemDTO` đọc `$ordersProduct->price` (cột giá lưu lúc đặt) — KHÔNG đụng accessor.
+>   - **RỦI RO STACK**: CLAUDE.md đã ghi `getXxxAttribute` có thể KHÔNG fire trên
+>     Base+Compoships+Laravel12 (vụ `$stock->available`). PHẢI test `$product->price`
+>     trả đúng giá variant TRƯỚC khi chạy migration drop cột; nếu accessor không fire
+>     sau drop → giá = 0 toàn site → revert sang đọc `$product->defaultVariant?->price` tường minh.
+>
+> **Seed:** `products:seed` KHÔNG set price; `variants:seed` tự sinh base
+> (`randomBasePrice`) + sinh `product_variant_special` trên default variant qua flag
+> `--special-percent=30`.
+
 - Định nghĩa (2 nhánh):
   - **Simple product** (`product.has_variants = 0`): `effective_price =
     COALESCE(active product_special.price, product.price)`. Special là row
@@ -2278,6 +2316,49 @@ nguồn = hết drift, hết check thừa.
 - Cột `orders.coupon` / `orders.voucher` = legacy denormalized, **giờ luôn ghi
   null** (dữ liệu KM thật nằm ở `coupon_history` / `voucher_history`). Nếu muốn
   tra cứu ở cấp order thì cần populate mã đầu tiên — đó là *thêm hành vi*.
+
+## Đổi tên CheckoutContext → CouponCheckoutContext + dọn tên hàm (2026-06-19)
+
+- `CheckoutContext` → **`CouponCheckoutContext`** (file đổi theo). Lý do: miền
+  checkout có coupon/voucher/gift nhưng object này CHỈ mang state coupon
+  (`appliedCoupons` / `hasFreeshipCoupon`); voucher & gift đọc thẳng từ session
+  trong `CheckoutTotalService` / `CreateOrderService`. Tên cũ quá rộng → hiểu
+  nhầm nó giữ toàn bộ state checkout.
+- **Bỏ** 2 field chết: `totalCouponDiscount` (có ghi, 0 caller đọc) +
+  `userGroupId` (0 ghi 0 đọc). `setAppliedCoupons()` bỏ tham số `$totalDiscount`
+  → còn `(array $applied, bool $hasFreeship)`. Caller: `CheckoutController` +
+  `CheckoutCouponController`.
+- `CheckoutController` đổi tên hàm cho đúng nhiệm vụ: `extractItems()` →
+  **`validateCart()`** (thực chất validate stock + tối thiểu, trả `[lỗi, items]`);
+  `shipping()` → **`recalcTotals()`** (endpoint tính lại tổng theo carrier; route
+  `checkout.shipping` + URL `shipping` GIỮ NGUYÊN, chỉ đổi `@shipping` →
+  `@recalcTotals` trong `routes/web.php`); `sendNotifications()` →
+  **`sendOrderEmails()`**; `buildMailData()` → **`buildOrderMailData()`**;
+  `buildContext()` → **`buildCouponContext()`** (sau đó gộp tiếp, xem mục dưới).
+
+## Gộp KM: PromotionService facade + CheckoutPromotions (2026-06-19)
+
+- **Bối cảnh:** 3 cơ chế KM (coupon / voucher / gift) trước đây rải rác — coupon
+  trong context, voucher/gift đọc thẳng session — lại có 3 service + 3
+  sub-controller đối xứng. Gộp ở tầng "đường ống", KHÔNG gộp tầng dữ liệu (mỗi
+  loại giữ bảng + lifecycle riêng: `coupon_history` / `voucher_history` /
+  `order_gift`).
+- **`PromotionService`** (mới, `App/Services/Checkout`) = 1 cổng gói 3 service con
+  (delegation thuần, KHÔNG đổi logic): `buildContext()`, `viewData()`,
+  `resolveVouchers()`, `recordForOrder()`, `revertForOrder()`, `recordCoupons()`.
+- **`CouponCheckoutContext` → `CheckoutPromotions`** (broad name nay hợp lý vì
+  ôm cả 3): thêm `appliedVoucherCodes` + `appliedGifts` (+ setters) bên cạnh
+  `items` / `appliedCoupons` / `hasFreeshipCoupon` / `orderId`.
+- **Rewire:** `CheckoutController` inject DUY NHẤT `PromotionService` (bỏ 3
+  service); `buildCouponContext()` → **`buildPromotions()`** (delegate facade);
+  index/cart dựng view qua `viewData()`. `CheckoutTotalService` inject facade,
+  voucher qua `resolveVouchers()` (gift line vẫn đọc session — hành vi giữ
+  nguyên). `CreateOrderService` thay 3 hàm `writeCouponHistory/writeNewVouchers/
+  writeGifts` bằng `recordForOrder()`. `AccountService::cancelOrder` thay 3
+  revert bằng `revertForOrder()`.
+- 3 sub-controller (`CheckoutCoupon/Voucher/GiftController`) GIỮ service con của
+  mình (mỗi cái chỉ 1 loại KM) — facade dành cho pipeline gộp. Có thể gộp tiếp
+  sau nếu muốn.
 
 ## Cart flow — session/key + hiệu năng N+1 (2026-06-17)
 

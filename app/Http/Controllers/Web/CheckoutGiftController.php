@@ -8,16 +8,6 @@ use App\Services\CartService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * Endpoint AJAX cho modal Shopee-style "Chọn Quà".
- *
- * Routes:
- *   POST /checkout/gifts/pick    → user submit picks
- *   POST /checkout/gifts/remove  → clear all picks
- *
- * Input pick: `picks[]` array với mỗi entry là JSON string `{gift_id, item_ids[]}`,
- * hoặc field `picks[gift_id_X][]=item_id` dạng nested array.
- */
 class CheckoutGiftController extends Controller
 {
     public function __construct(
@@ -27,7 +17,6 @@ class CheckoutGiftController extends Controller
 
     public function pick(Request $request): JsonResponse
     {
-        // Nhận input shape: { picks: { "5": [10, 11], "8": [15] } }
         $rawPicks = (array) $request->input('picks', []);
         $picks = [];
         foreach ($rawPicks as $giftId => $itemIds) {

@@ -75,25 +75,40 @@ từ bảng cũ `permissions` sang `sp_*`, tạo role `admin` (đủ quyền) v�
 php artisan db:seed --class=Database\\Seeders\\SpatiePermissionSeeder
 ```
 
-## 7. Gắn kiểm tra quyền vào CategoryController (REST)
+## 7. Base tự phân quyền (KHUYẾN DÙNG) — REST + spatie, 0 dòng auth/method
 
-spatie đăng ký mỗi permission thành ability của Gate → dùng `Gate::authorize()` ngay
-trong từng method (không cần sửa base Controller). Thêm `use Illuminate\Support\Facades\Gate;`
-rồi đặt 1 dòng đầu mỗi method:
+Thay vì gắn quyền tay từng method, nhánh này có sẵn **base** lấy lại sự tiện lợi
+"tự suy mã quyền theo route" nhưng chạy trên spatie:
+
+- `app/Http/Controllers/Api/Cms/BaseCmsController.php` — controller con chỉ khai báo `protected string $permission = 'category';`
+- `app/Http/Middleware/CmsPermission.php` (alias `cms.permission`) — đọc tên method route → map action (index→list, show→detail, store→create, update→edit, destroy/restore/bulk→del) → `Gate::authorize("{action}-{permission}")` (spatie).
+- Macro `Route::cmsApiResource(...)` — gom apiResource + restore + bulk + tự gắn `cms.permission`.
+
+Controller:
 
 ```php
-public function index(Request $request)      { Gate::authorize('list-category');   /* ... */ }
-public function show(Category $category)      { Gate::authorize('detail-category'); /* ... */ }
-public function store(CategoryRequest $r)     { Gate::authorize('create-category'); /* ... */ }
-public function update(CategoryRequest $r, Category $category) { Gate::authorize('edit-category'); /* ... */ }
-public function destroy(Category $category)   { Gate::authorize('del-category');    /* ... */ }
-public function restore($id)                  { Gate::authorize('del-category');    /* ... */ }
-public function bulk(Request $request)        { Gate::authorize('del-category');    /* ... */ }
+class CategoryController extends BaseCmsController
+{
+    protected string $permission = 'category';
+    // index/store/show/update/destroy/restore/bulk — KHÔNG cần Gate::authorize
+}
 ```
 
-Quyền sai → spatie/Gate tự trả **403** (đúng REST).
+Route (1 dòng/entity):
 
-**Cách khác (route middleware)** — nếu muốn khai báo ở route thay vì controller:
+```php
+Route::cmsApiResource('category', CategoryController::class);
+```
+
+Quyền sai → 403 tự động. Entity REST mới chỉ cần: controller `extends BaseCmsController`
++ đặt `$permission` + 1 dòng `cmsApiResource`. **Đây là phần "base permission" bạn yêu cầu.**
+
+---
+
+**Cách thủ công (tham khảo)** — nếu muốn kiểm soát từng method, bỏ middleware và tự gọi:
+`Gate::authorize('list-category')` ở đầu method (cần `use Illuminate\Support\Facades\Gate;`).
+
+**Cách route middleware riêng lẻ** — nếu muốn khai báo ở route thay vì controller:
 
 ```php
 Route::get('category',        [CategoryController::class, 'index'])->middleware('permission:list-category');

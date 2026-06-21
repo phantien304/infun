@@ -8,27 +8,11 @@ use App\Helpers\Facades\ExtendedRoute as Route;
 class RouteServiceProvider extends ServiceProvider
 {
     protected $module = '';
-    /**
-     * This namespace is applied to your controller routes.
-     *
-     * In addition, it is set as the URL generator's root namespace.
-     *
-     * @var string
-     */
+
     protected $namespace = 'App\Http\Controllers';
 
-    /**
-     * The path to the "home" route for your application.
-     *
-     * @var string
-     */
     public const HOME = '/home';
 
-    /**
-     * Define your route model bindings, pattern filters, etc.
-     *
-     * @return void
-     */
     public function boot()
     {
         parent::boot();
@@ -37,33 +21,32 @@ class RouteServiceProvider extends ServiceProvider
         }
     }
 
-    /**
-     * Define the routes for the application.
-     *
-     * @return void
-     */
     public function map()
     {
-        $this->mapApiWebRoutes();
+        $this->mapCmsApiRoutes();
+
+        $this->mapMobileRoutes();
 
         $this->mapCmsRoutes();
 
         $this->mapWebRoutes();
     }
 
-    /**
-     * Define the "web" routes for the application.
-     *
-     * These routes all receive session state, CSRF protection, etc.
-     *
-     * @return void
-     */
     protected function mapWebRoutes()
     {
         Route::middleware('web')
             ->namespace($this->namespace . '\Web')
             ->area('web')
             ->group(base_path('routes/web.php'));
+    }
+
+    protected function mapMobileRoutes()
+    {
+        Route::middleware('api')
+            ->prefix('api/v1')
+            ->area('api')
+            ->namespace($this->namespace . '\Api\Mobile')
+            ->group(base_path('routes/mobile.php'));
     }
 
     protected function mapCmsRoutes()
@@ -75,20 +58,12 @@ class RouteServiceProvider extends ServiceProvider
             ->group(base_path('routes/cms.php'));
     }
 
-    /**
-     * Define the "api" routes for the application.
-     *
-     * These routes are typically stateless.
-     *
-     * @return void
-     */
-
-    protected function mapApiWebRoutes()
+    protected function mapCmsApiRoutes()
     {
         Route::middleware('api')
-            ->prefix('api')
-            ->area('api')
+            ->prefix('rcms')
+            ->area('rcms')
             ->namespace($this->namespace . '\Api')
-            ->group(base_path('routes/api.php'));
+            ->group(base_path('routes/rcms.php'));
     }
 }

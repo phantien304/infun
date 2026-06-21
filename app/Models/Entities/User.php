@@ -5,11 +5,13 @@ namespace App\Models\Entities;
 use App\Models\Base\Auth\User as CmsUser;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends CmsUser
 {
     use HasApiTokens;
     use SoftDeletes;
+    use HasRoles;
     protected $table = 'user';
     protected $hidden = ['password', 'confirm_code'];
     protected $primaryKeyAutoIncrement = 'id';

@@ -28,6 +28,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'maintenance' => \App\Http\Middleware\Maintenance::class,
             'cache_page' => \App\Http\Middleware\CachePage::class,
             'limit_access' => \App\Http\Middleware\LimitAccess::class,
+            // Sanctum: kiểm tra ability/scope của token (vd 'abilities:mobile').
+            'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
+            'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
+            // Tự phân quyền REST CMS theo spatie (BaseCmsController + macro cmsApiResource).
+            'cms.permission' => \App\Http\Middleware\CmsPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {})

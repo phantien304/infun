@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\Route;
 use File;
 use Illuminate\Support\Str;
 
@@ -24,8 +25,30 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerViewNamespaces();
+        $this->registerRouteMacros();
         $this->logSql();
         $this->registerObservers();
+    }
+
+    protected function registerRouteMacros(): void
+    {
+        Route::macro('cmsResource', function (string $name, string $controller) {
+            Route::get($name . '/list', [$controller, 'list']);
+            Route::post($name . '/save', [$controller, 'save']);
+            Route::post($name . '/del', [$controller, 'del']);
+            Route::get($name . '/{id}', [$controller, 'detail']);
+        });
+
+        // REST chuẩn + spatie: gom apiResource + restore + bulk, tự gắn
+        // middleware 'cms.permission' để phân quyền theo action (BaseCmsController).
+        // 1 dòng / entity:  Route::cmsApiResource('category', CategoryController::class);
+        Route::macro('cmsApiResource', function (string $name, string $controller) {
+            Route::middleware('cms.permission')->group(function () use ($name, $controller) {
+                Route::patch($name . '/{id}/restore', [$controller, 'restore']);
+                Route::post($name . '/bulk', [$controller, 'bulk']);
+                Route::apiResource($name, $controller)->withTrashed();
+            });
+        });
     }
 
     protected function registerViewNamespaces(): void

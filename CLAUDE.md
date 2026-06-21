@@ -1076,6 +1076,95 @@ try { ... } catch (\Throwable $exception) {
 Cutoff đại khái: closure 1-3 dòng dùng tên ngắn cũng được; quá đó hoặc nested
 nhiều cấp → đặt tên đầy đủ.
 
+## Convention: hàm KHÔNG quá nhiều tham số → Parameter Object
+
+**Rule — quá ~4 tham số (nhất là khi có "data clump" đi cùng nhau qua nhiều
+hàm) thì gom thành 1 value object, đừng truyền rời.**
+
+Dấu hiệu cần gom:
+
+- Một cụm tham số luôn đi cùng nhau, tính 1 lần rồi *thả xuyên* qua nhiều method
+  (vd cụm cart: `subtotal` + `productIds` + `categoryIds` + `userId` +
+  `hasShipping`).
+- Nhiều tham số cùng kiểu cạnh nhau (`int`, `?int`, `?int`...) → dễ tráo thứ tự.
+- Thêm 1 thuộc tính phải sửa chữ ký ở mọi call site.
+
+```php
+// BAD — 7 tham số, cụm cart thả rời, dễ nhầm thứ tự
+public function validateForCart(
+    Coupon $coupon,
+    int $cartSubtotal,
+    array $cartProductIds,
+    array $cartCategoryIds,
+    ?int $userId,
+    bool $contextHasShipping = true,
+    ?int $usedByUser = null,
+): ?string
+
+// GOOD — gom cụm cart thành value object → còn 3 tham số
+public function validateForCart(
+    Coupon $coupon,
+    CartCouponContext $cart,   // subtotal/productIds/categoryIds/userId/hasShipping
+    ?int $usedByUser = null,
+): ?string
+```
+
+Value object = `final class` + constructor promoted `readonly`, và **một class
+một file** (PSR-4 — KHÔNG nhét 2 class chung 1 file kể cả khi ngại tạo file).
+Tham chiếu thực: `app/Services/Cart/CartCouponContext.php`, dùng ở
+`CouponService::validateForCart` / `listForCart` / `applyCodes` (build context
+1 lần qua `buildCartContext()`, hết lặp tính `productIds`/`categoryIds`).
+
+KHÔNG over-engineer:
+
+- ~2-4 tham số khác nhau, không phải clump → để nguyên (vd
+  `recordApplied(couponId, userId, amount)`).
+- PHP 8 named arguments đã giảm rủi ro thứ tự — nếu chỉ vướng readability mà
+  không có clump/không mở rộng thì named args là đủ, khỏi tạo VO.
+- Giảm tham số bằng *suy ra nội bộ* khi giá trị luôn là "hiện tại" (vd
+  `userId`/`userGroupId` resolve từ `getCurrentUserId()`/`getUserGroupId()` ngay
+  trong hàm) — nhưng KHÔNG inject `CartService` để đọc giỏ ngầm (coupling +
+  khó test).
+
+## Convention: KHÔNG hard-code text hiển thị → i18n
+
+**Rule — mọi chuỗi hiển thị cho người dùng (label, thông báo, lỗi) PHẢI nằm
+trong file lang và gọi qua `trans()`; KHÔNG viết literal trong code.**
+
+Áp cho cả service/controller, không riêng blade. Lý do: gom 1 chỗ, đa ngôn ngữ,
+tránh trùng lặp, sửa wording không phải lục code.
+
+```php
+// BAD — literal trong service
+$errors[] = "Mã '{$code}' không tồn tại";
+return 'Cần đăng nhập';
+
+// GOOD — key i18n; chuỗi có biến thì sprintf
+$errors[] = sprintf(trans('messages.checkout.coupon.not_found'), $code);
+return trans('messages.checkout.coupon.need_login');
+```
+
+Quy ước key:
+
+- Gom theo **nhóm lồng (2 chiều)** theo domain, không để phẳng prefix-soup:
+  `messages.checkout.coupon.*`, `messages.checkout.gift`... (xem
+  `resources/lang/vi/messages.php`). Cụm lớn có thể tách file riêng
+  (`lang/vi/checkout.php` → `trans('checkout.coupon.x')`).
+- Chuỗi có biến: dùng `%s` + `sprintf(trans(...), $x)` (đồng bộ convention sẵn
+  có), hoặc placeholder `:name` của Laravel.
+- Locale dự án: `vi` (`APP_LOCALE` / `APP_FALLBACK_LOCALE = vi`).
+
+Ngoại lệ — KHÔNG cần i18n:
+
+- "code"/key nội bộ không hiển thị: `'sub_total'`, `'coupon_freeship'`,
+  `'voucher:'.$code`...
+- Ký hiệu định dạng số thuần (vd `'đ'` trong `money()`) — tuỳ, có thể đọc
+  `config_currency`.
+- Log / exception message kỹ thuật cho dev (không show cho khách).
+
+Tham chiếu thực: `CheckoutTotalService` + `CouponService` đã chuyển toàn bộ text
+hiển thị vào `messages.checkout.*` (2026-06-19).
+
 ## Seed commands (refactor 2026-06-03)
 
 `SeedProductsCommand` (products:seed):

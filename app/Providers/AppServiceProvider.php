@@ -108,8 +108,10 @@ class AppServiceProvider extends ServiceProvider
 
     protected function logSql()
     {
-        if ((!env('local') || !env('development')) && !getSystemConfig('sql_log')) {
-            return true;
+        // Toggle chủ động: bật/tắt qua config 'system.sql_log' (env SQL_LOG),
+        // độc lập môi trường — SQL_LOG=true để bật, =false để tắt ở bất kỳ đâu.
+        if (! getSystemConfig('sql_log')) {
+            return;
         }
 
         \Illuminate\Support\Facades\DB::enableQueryLog();

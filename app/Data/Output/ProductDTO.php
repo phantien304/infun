@@ -26,7 +26,7 @@ class ProductDTO extends Data
         public ?string $video,
         public ?int $shipping,
         public ?string $linkSale,
-        public float $price,
+        public ?float $price,
         public ?float $points,
         public ?string $dateAvailable,
         public ?float $weight,

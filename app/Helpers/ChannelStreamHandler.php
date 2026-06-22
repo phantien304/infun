@@ -49,11 +49,11 @@ class ChannelStreamHandler extends StreamHandler
      */
     public function isHandling(LogRecord $record): bool
     {
-        //Handle if Level high enough to be handled (default mechanism)
-        //AND CHANNELS MATCHING!
-        if (isset($record['channel'])) {
-            return $record['level'] >= $this->level && $record['channel'] == $this->channel;
-        }
-        return $record['level'] >= $this->level;
+        $recordLevel  = $record->level->value;
+        $handlerLevel = $this->level instanceof \Monolog\Level
+            ? $this->level->value
+            : $this->level;
+        return $recordLevel >= $handlerLevel
+            && ($record->channel === '' || $record->channel === $this->channel);
     }
 }

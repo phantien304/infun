@@ -72,13 +72,8 @@ class AuthController extends Controller
 
     private function resolvePermissions(User $user): array
     {
-        // Ví dụ khung (điều chỉnh theo schema role/permission thực tế):
-        // return $user->roleUsers()
-        //     ->with('permissions')
-        //     ->get()
-        //     ->flatMap(fn ($role) => $role->permissions->pluck('code'))
-        //     ->unique()->values()->all();
-
-        return [];
+        // spatie: gộp quyền trực tiếp + quyền qua role → mảng mã ('list-category'...).
+        // Frontend dùng để ẩn/hiện nút theo quyền.
+        return $user->getAllPermissions()->pluck('name')->all();
     }
 }

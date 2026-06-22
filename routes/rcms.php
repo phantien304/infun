@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\Cms\AuthController;
 use App\Http\Controllers\Api\Cms\CategoryController;
+use App\Http\Controllers\Api\Cms\ProductController;
+use App\Http\Controllers\Api\Cms\ResourceController;
 use App\Http\Controllers\Api\Cms\SystemController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,6 +30,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // cms.permission tự map action → quyền spatie ({list,detail,create,edit,del}-category).
     Route::cmsApiResource('category', CategoryController::class);
 
-    // Entity REST khác: chỉ cần controller extends BaseCmsController + đặt $permission.
-    // Route::cmsApiResource('product', ProductController::class);
+    // --- Product (đợt 1: read + delete; store/update ở đợt 2) ---
+    Route::get('resource', [ResourceController::class, 'index']);          // dropdown cho form
+    Route::post('product/bulk-update', [ProductController::class, 'bulkUpdate']);
+    Route::post('product/{id}/approve', [ProductController::class, 'approve']);
+    Route::cmsApiResource('product', ProductController::class);
 });

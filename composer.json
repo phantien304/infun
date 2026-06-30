@@ -14,8 +14,10 @@
         "intervention/image": "^3.11",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.0",
+        "laravel/scout": "^11.3",
         "laravel/socialite": "^5.27",
         "laravel/tinker": "^2.10.1",
+        "meilisearch/meilisearch-php": "^1.16",
         "owen-it/laravel-auditing": "14.0",
         "predis/predis": "*",
         "spatie/laravel-data": "^4.23",
@@ -23,8 +25,10 @@
         "spatie/laravel-query-builder": "^6.4"
     },
     "require-dev": {
+        "barryvdh/laravel-debugbar": "^4.3",
         "fakerphp/faker": "^1.23",
         "friendsofphp/php-cs-fixer": "^3.95",
+        "itsgoingd/clockwork": "^5.3",
         "laravel/pail": "^1.2.2",
         "laravel/sail": "^1.41",
         "mockery/mockery": "^1.6",

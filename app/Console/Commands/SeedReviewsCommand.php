@@ -45,7 +45,8 @@ class SeedReviewsCommand extends Command
         {--product-id= : Chỉ seed cho 1 product_id duy nhất (nếu rỗng: random từ toàn bộ product)}
         {--no-media : Không sinh review_media}
         {--no-helpful : Không sinh review_helpful}
-        {--no-tag : Không sinh review_tag_pivot}';
+        {--no-tag : Không sinh review_tag_pivot}
+        {--no-aggregate : Skip UPDATE product.rating_avg cuối flow. Dùng khi chạy split-run nhiều process — gọi `reviews:rebuild-aggregate` 1 lần sau khi tất cả seed xong}';
 
     protected $description = 'Seed N review giả lập (bulk insert) — multi-criteria + media + tags + helpful vote';
 
@@ -163,6 +164,12 @@ class SeedReviewsCommand extends Command
             $startReviewId = (int) DB::table('review')->max('id');  // chỉ để log
             $bar = $this->output->createProgressBar($count);
             $bar->start();
+
+            // Reconnect định kỳ — PDO buffer + prepared statement metadata tích tụ
+            // sau N insert lớn, không gc_collect_cycles() giải được. Cứ 50 batch
+            // (mỗi batch ~7k child row) reset connection, RAM PHP về baseline ~80MB.
+            $batchesSinceReconnect = 0;
+            $reconnectEvery = 50;
 
             for ($offset = 0; $offset < $count; $offset += $chunk) {
                 $batch = min($chunk, $count - $offset);
@@ -344,6 +351,15 @@ class SeedReviewsCommand extends Command
                 // Buộc GC dọn dẹp cycles giữa các batch — chống OOM ở dataset 100k+.
                 gc_collect_cycles();
 
+                // Reconnect định kỳ để giải phóng PDO statement cache (xem comment
+                // ở khai báo $reconnectEvery). SET FOREIGN_KEY_CHECKS là session-level
+                // → connection mới phải re-apply.
+                if (++$batchesSinceReconnect >= $reconnectEvery) {
+                    DB::disconnect();
+                    DB::statement('SET FOREIGN_KEY_CHECKS=0');
+                    $batchesSinceReconnect = 0;
+                }
+
                 $bar->advance($batch);
             }
             $bar->finish();
@@ -365,6 +381,14 @@ class SeedReviewsCommand extends Command
 
             // Rebuild aggregate cache trên product — chỉ run 1 lần cho mọi product
             // chạm bởi seed (tận dụng SQL group by, không loop observer N lần).
+            // Skip khi chạy split-run; cuối cùng gọi reviews:rebuild-aggregate.
+            if ($this->option('no-aggregate')) {
+                $this->warn('Skip aggregate UPDATE (--no-aggregate). Nhớ chạy:');
+                $this->warn('  php artisan reviews:rebuild-aggregate');
+                $maxId = (int) DB::table('review')->max('id');
+                $this->info("Done — seeded {$count} review (max id = {$maxId}).");
+                return self::SUCCESS;
+            }
             $this->info('Rebuild aggregate (review_count, rating_avg, rating_sum, rating_distribution) trên product…');
             DB::statement('
                 UPDATE product p

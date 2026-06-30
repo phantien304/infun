@@ -13,5 +13,9 @@ return [
     'name'       => 'Tên A → Z',
     '-name'      => 'Tên Z → A',
 
+    'viewed'      => 'Xem ít nhất',
     '-viewed'     => 'Xem nhiều nhất',
+
+    'rating_avg'  => 'Đánh giá thấp nhất',
+    '-rating_avg' => 'Đánh giá cao nhất',
 ];

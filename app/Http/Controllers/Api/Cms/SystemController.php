@@ -20,10 +20,13 @@ class SystemController extends Controller
             (array) getConfigDb()
         );
 
-        return successData('InitSuccess', [
-            'config'        => $config,
-            'languageTexts' => $texts,
-            'languages'     => Language::query()->get(),
+        // Contract REST thống nhất: { data }.
+        return response()->json([
+            'data' => [
+                'config'        => $config,
+                'languageTexts' => $texts,
+                'languages'     => Language::query()->get(),
+            ],
         ]);
     }
 }

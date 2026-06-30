@@ -10,10 +10,14 @@
                     </div>
                     <div class="header-right flex items-center gap-6 flex-1 justify-end">
                         <div class="search-style-2 flex-1 max-w-xl">
-                            <form action="/san-pham" method="get">
-                                <input type="text" name="product_description[name_cons]" class="form-control"
-                                    value="{{ data_get(request()->get('product_description'), 'name_cons') }}"
-                                    placeholder="Tìm sản phẩm...">
+                            {{-- Header search → route qua Meilisearch (filter[keyword]).
+                                 Repo ProductRepository::list() detect filter.keyword ≠ rỗng
+                                 → dispatch Scout::search; rỗng → fallback Eloquent. --}}
+                            <form action="{{ route('product.getList') }}" method="get" role="search">
+                                <input type="search" name="filter[keyword]" class="form-control"
+                                    value="{{ request()->input('filter.keyword') }}"
+                                    placeholder="Tìm sản phẩm..." autocomplete="off"
+                                    aria-label="Tìm sản phẩm">
                             </form>
                         </div>
                         <div class="header-action-right">
@@ -172,8 +176,11 @@
             </div>
             <div class="mobile-header-content-area p-4">
                 <div class="mobile-search search-style-3 mobile-header-border mb-4">
-                    <form action="/san-pham" method="get">
-                        <input type="text" placeholder="Tìm sản phẩm..." class="form-control">
+                    <form action="{{ route('product.getList') }}" method="get" role="search">
+                        <input type="search" name="filter[keyword]"
+                            value="{{ request()->input('filter.keyword') }}"
+                            placeholder="Tìm sản phẩm..." class="form-control"
+                            autocomplete="off" aria-label="Tìm sản phẩm">
                         <button type="submit" class="btn btn-md mt-2"><i class="fi-rs-search"></i> Tìm</button>
                     </form>
                 </div>

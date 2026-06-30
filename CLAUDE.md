@@ -2153,77 +2153,56 @@ tưởng "30 = đủ".
    - `deny` → decrement (CartService đã gate sẵn, lock chống concurrency).
    - `backorder` → decrement, cho `on_hand` âm. `stock_movement.type =
      sale_backorder` để admin filter ra backlog.
-4. `version` tăng 1 mỗi UPDATE → optimistic lock infrastructure sẵn sàng.
-5. Append `stock_movement` cho mọi tracked sale → rebuild on_hand được từ log.
+4. `version` tăng 1 mỗi UPDATE → optimistic lock infrastructure sẵn s�
+## CMS REST API (`rcms`) — migration Vue2 → React (2026-06)
 
-### `ProductDTO` aggregation across variants
+CMS admin tách hẳn thành SPA React standalone (`infun_cms`, repo riêng cạnh `infun`),
+gọi API qua prefix **`/rcms`**. Storefront web giữ nguyên (Blade + envelope cũ).
+Xem thêm `infun_cms/CLAUDE.md` cho phía frontend.
 
-- `formatStock(Product)`: variant product duyệt `productVariants`, lấy
-  label của variant đầu tiên `canSell(1)`. Fallback `defaultVariant` cho
-  simple. Không còn nhánh `product.quantity`.
-- `resolveInStock(Product)`: boolean aggregator — true nếu BẤT KỲ variant
-  còn sellable, hoặc defaultVariant sellable (cho simple).
-- Blade chi tiết product gate button "Mua hàng" / "Liên hệ mua hàng" qua
-  `$entity->inStock` (KHÔNG `$entity->quantity > 0` nữa — quantity của
-  parent variant product luôn 0).
-- `stockLabelFromPolicy(Product, ProductStock)`: helper decision tree
-  untracked → instock label / backorder + available=0 → "Đặt trước -
-  giao sau" / available=0 + deny → stockStatus name / else → count hoặc
-  instock label.
+### Route + area
+- `routes/rcms.php`, nạp ở `RouteServiceProvider::mapCmsApiRoutes()` — prefix `rcms`,
+  **area `rcms`**, middleware `auth:sanctum` (trừ `login`, `system/init` public).
+- Macro `Route::cmsApiResource('product', ProductController::class)` =
+  `apiResource` + route phụ `restore` + `bulk`, tất cả bọc middleware group
+  `cms.permission`. (Định nghĩa ở `AppServiceProvider::registerRouteMacros()`.)
+- App khách (Android) tách riêng: prefix `api/v1`, `mapMobileRoutes()`, ability `mobile`.
 
-### Filter `in_stock` ở list page
+### Phân quyền — spatie/laravel-permission v6
+- Middleware `CmsPermission` map HTTP method → action:
+  `index→list, show→detail, store→create, update→edit, destroy/restore/bulk→del`,
+  rồi `Gate::authorize("$action-$slug")`. `$slug` lấy từ `controller->permissionName()`
+  (khai ở `BaseCmsController::$permission`). Bảng cấu hình `sp_*`.
 
-`ProductRepository::allowedFilters('in_stock')`: dùng `EXISTS` subquery
-qua `product_variant + product_stock`:
+### Output — Spatie Data DTO ở `app/Data/Cms/`
+- KHÔNG dùng `JsonResource` cho CMS nữa (các `*Resource` cũ bỏ được). Dùng DTO
+  `extends Spatie\LaravelData\Data`, **property snake_case** (khác `app/Data/Output`
+  storefront dùng camelCase) để khớp contract REST FE. `fromModel()` map tay.
+- Response REST: `{data}` cho item, `{data,meta,links}` cho list
+  (`XxxData::collect($paginator)`). Web storefront **GIỮ envelope cũ**
+  `{success,validator,code,message,data,totalRow}` — cố ý, rủi ro đụng checkout/tiền.
 
-```sql
-EXISTS (
-    SELECT 1 FROM product_variant pv
-    JOIN product_stock ps ON ps.product_variant_id = pv.id
-    WHERE pv.product_id = product.id
-      AND pv.deleted_at IS NULL
-      AND (
-        ps.inventory_policy IN (backorder, untracked)
-        OR (ps.on_hand - ps.reserved) > 0
-      )
-)
-```
+### Repository CMS — quy ước split
+- **Mặc định**: read CMS trộn chung repo entity (vd Category — entity nhỏ).
+- **Tách `XxxCmsRepository` riêng** chỉ cho entity nặng / 2 audience phân kỳ
+  (vd Product: no-cache vs cache, đa-ngôn-ngữ vs forLocale, withTrashed vs active).
+- ⚠️ **Repo CMS phải `extends QueryableRepository`, KHÔNG `extends BaseRepository`** —
+  `BaseRepository implements BaseRepositoryInterface` nhưng KHÔNG định nghĩa
+  `list/listAll/getSortMenu/getPerPageMenu` (4 method này ở `QueryableRepository` +
+  trait `HasListFilterToolbar`). Extends thẳng `BaseRepository` → class concrete
+  thiếu 4 method → fatal lúc container resolve.
+- Cache invalidation vẫn tập trung 1 chỗ: `$cacheMap` map model → repo **storefront**
+  + observer; repo CMS KHÔNG cache. Interface CMS (`ProductCmsRepositoryInterface`)
+  KHÔNG extends `BaseRepositoryInterface` (chỉ khai các method read CMS cần).
 
-`= '1'` → `whereExists`, `= '0'` → `whereNotExists`. Hoạt động cho cả
-simple + variant qua cùng predicate. Mọi giá trị enum đọc qua
-`getCoreConfig('stock.policy.xxx')`.
-
-### `ProductOptionService::buildVariantMatrix` — UI affordance
-
-Khi `productStock` null (data drift / seed thiếu): trả `available = 999`,
-`subtract = false` (= "untracked" về UX) cho swatch vẫn pickable. **KHÁC**
-với `CartService::checkStock` strict — đây là affordance cho detail page,
-gate thật chạy lúc add-to-cart. Document có chủ ý, không nhầm với
-"missing stock = OOS" của cart pipeline.
-
-### Việc còn nợ — stock cluster
-
-- Drop `product.quantity` + `product.subtract` cột legacy sau khi observe
-  1-2 sprint không còn caller (search `->quantity` / `->subtract` ngoài
-  DTO/seed phải = 0).
-- `SeedProductsCommand` chưa tạo default variant + stock cho product mới
-  → newly seeded product rơi vào strict-deny đến khi chạy lại unify
-  migration. Patch seed command tạo cả cluster.
-- Observer `ProductVariantSpecial::saved/deleted` chưa có để recompute
-  `min_effective_variant_price / max_effective_variant_price` (cột mới
-  sẽ thêm). Hiện list page card vẫn show base range, không reflect
-  campaign — trade-off documented.
-- Reservation pattern (`stock_reservation` table + TTL sweeper) — pattern
-  Magento/Shopee chống oversell concurrent thực sự ở Black Friday. Cluster
-  hiện đã có cột `reserved` nhưng chưa có flow nào ghi. Roadmap.
-- Admin CMS chưa có UI chọn `inventory_policy` per variant + warehouse
-  picker khi nhập kho. Backend ready.
-- Dashboard "Backorder backlog" — `WHERE stock_movement.type =
-  sale_backorder` group by variant — admin xem cần nhập bù bao nhiêu.
-
-## Cache key cho entity composite-PK — `rememberEntity()`
-
-`CacheableRepository::rememberEntity($entity, $prefix, $resolver, $ttl,
+### Product write — Service + Writer (tránh god class)
+- `ProductWriteService::save(?Product, array)` trong transaction: sync
+  descriptions / categories / filters / related / ingredients / attributes / images /
+  discounts / rewards (Eloquent) + `ProductVariantWriter::sync()` (cluster variant mới:
+  `product_variant` + `_attribute` + `product_stock`, role-based `product_option`).
+- Dùng **Eloquent** (không `DB::table` bulk) để observer bắn → flush cache.
+  `product.price` đã DROP → giá đọc/ghi qua `defaultVariant`.
+y::rememberEntity($entity, $prefix, $resolver, $ttl,
 $tags, $perLocale)` — helper canonical để cache "1 row entity" qua
 `HasCompositeKey::getKeyAsString()`:
 
@@ -2470,6 +2449,175 @@ nguồn = hết drift, hết check thừa.
 - `GiftService::getAppliedFromSession()` → `getAppliedGifts()` (nhất quán với
   `VoucherService::getAppliedCodes()`).
 
+## Docker dev workflow — toàn bộ stack chạy local (2026-06-24)
+
+Refactor từ XAMPP (Apache/MySQL trên Windows) sang full-Docker stack. Mọi
+service chạy container, code mount qua bind volume cho hot reload.
+
+### Layout file Docker
+
+```
+infun/
+  docker/
+    php/Dockerfile          # PHP 8.2-FPM Alpine + ext (pdo_mysql, redis,
+                            # gd, intl, bcmath, zip) + Composer
+    php/entrypoint.sh       # auto composer install + fix quyền storage/
+    nginx/default.conf      # nginx vhost forward .php → FPM
+    nginx/default.lb.conf   # phiên bản LB: upstream pool + DNS resolver
+                            # (cho load balance test, scale FPM)
+    k6/load-test.js         # k6 load test script
+  docker-compose.yml        # stack chính (php, nginx, vite, cms, mysql,
+                            # redis, redis-insight, meilisearch)
+  docker-compose.lb.yml     # override: bỏ container_name FPM để scale +
+                            # swap nginx LB + service k6
+  DOCKER.md                 # hướng dẫn đầy đủ end-user (chạy, seed, test)
+```
+
+### Services chạy
+
+| Service | Port host | Vai trò |
+|---|---|---|
+| `infun-php` | — (qua FPM socket) | PHP-FPM 8.2 |
+| `infun-web` | 8000 | nginx serve public/ |
+| `infun-vite` | 5174 | Vite dev cho Laravel @vite |
+| `infun-cms` | 5173 | React CMS standalone (Vite) |
+| `mysql` | 3306 | MariaDB 10.11 |
+| `redis` | 6379 | Redis 7-alpine |
+| `redis-insight` | 5540 | GUI debug Redis |
+| `meilisearch` | 7700 | Search engine cho Scout |
+
+PHP container có `memory_limit=1024M` + `max_execution_time=0` để chịu
+được seed lớn (xem OOM note bên dưới).
+
+### Console command seed/test perf (tận dụng tối đa)
+
+Project có 6 command chuyên dụng cho seed data test perf — KHÔNG viết
+lại, KHÔNG tạo seeder mới trùng:
+
+| Command | Vai trò |
+|---|---|
+| `products:seed N` | Bulk insert N product + taxonomy (category, manufacturer, filter). KHÔNG variant. Default 50k. |
+| `variants:seed --percent=X` | Gắn variant Color×Size cho X% product có sẵn. |
+| `simple-variants:seed` | Fill 1 default variant + product_stock cho product chưa có variant (theo Shopify pattern unified stock). |
+| `specials:seed --percent=Y` | Gắn campaign giảm giá lên Y% variant. |
+| `products:seed-all` | **Wrapper 1 lệnh** orchestrate 4 cái trên. Default 500k product, 40% variant + 30% special. |
+| `products:purge` | Truncate sạch product cluster + reset AUTO_INCREMENT. `--keep-taxonomy` / `--keep-options` để giữ category/option. |
+| `products:schema-check` | Diagnostic in cột thật của bảng product, so với expected list, cảnh báo cột đã drop. **Chạy trước khi seed nếu nghi schema drift.** |
+
+Review cluster:
+
+| Command | Vai trò |
+|---|---|
+| `reviews:seed N` | Seed N review + cluster (rating, media, tag, helpful). `--no-aggregate` skip UPDATE cuối khi chạy split-run. |
+| `reviews:seed-bulk N` | **Wrapper chia N thành nhiều process**, mỗi process exit free memory → vượt qua leak nội bộ PHP. Default 200k/process. **Dùng cho 1M+ review.** |
+| `reviews:rebuild-aggregate` | Rebuild `product.review_count` + `rating_avg` etc. bằng 1 SQL UPDATE GROUP BY. |
+
+### Cột đã DROP khỏi `product` table — KHÔNG ghi/đọc nữa
+
+Mọi seeder mới + DTO + service phải tránh các cột này:
+
+| Cột | Drop bởi | Thay thế |
+|---|---|---|
+| `price` | `2026_06_18_000001` | `product_variant.price` (accessor `$product->price` → `defaultVariant?->price`) |
+| `quantity` | Legacy drop (sau `unify_simple_product_stock`) | `product_stock.on_hand` |
+| `subtract` | Legacy drop | `product_stock.inventory_policy` (enum 0=deny, 1=backorder, 2=untracked) |
+| `rating` | Legacy drop | `product.rating_avg` (DECIMAL 3,2) — observer cập nhật |
+| `total_rating` | Legacy drop | `product.rating_sum` / `product.review_count` |
+| `video` | Legacy drop | (nếu cần multimedia → `product_image` với `type='video'` hoặc tách bảng) |
+
+`product_special` table đã DROP (merged vào `product_variant_special`).
+
+`ProductWriteService::FLAT_FIELDS` là source of truth — KHÔNG include
+các cột đã drop. `Product::$auditExclude` đã thay rating/total_rating
+bằng rating_avg/rating_sum + min/max_variant_price.
+
+### Architecture giá (sau drop)
+
+```
+product                              ← KHÔNG có price. Chỉ aggregate:
+  min_variant_price                    min/max_variant_price + max_variant_discount_percent
+  max_variant_price                    (denormalized cho list/filter, observer cập nhật)
+  max_variant_discount_percent
+    │
+    │ 1..N
+    ▼
+product_variant                      ← GIÁ THẬT (kể cả simple cũng có default variant)
+  price                                price          = giá đang bán
+  regular_price                        regular_price  = basis tính sale %
+    │
+    │ 0..N
+    ▼
+product_variant_special              ← Override time-window + user_group
+  price                                priority cao nhất thắng
+  date_start/date_end                  KHÔNG ghi đè variant.price, chỉ runtime
+  user_group_id, priority
+```
+
+Filter/sort theo giá → `Product::scopeEffectivePriceBetween` /
+`scopeOrderByEffectivePrice` (CASE WHEN has_variants → aggregate variant
+prices, ELSE → default variant + special). 1 query, không N+1.
+
+### Load balance + k6 (test perf)
+
+```bash
+# Scale 3 PHP-FPM backend
+docker compose -f docker-compose.yml -f docker-compose.lb.yml up -d --build --scale infun-php=3
+
+# Bắn tải
+docker compose run --rm k6 run /scripts/load-test.js
+docker compose run --rm -e VUS=100 -e DURATION=60s k6 run /scripts/load-test.js
+```
+
+nginx LB conf dùng `resolver 127.0.0.11` (DNS embedded Docker) +
+`upstream least_conn` → tự discover replicas khi scale, không reload.
+
+### Scout + Meilisearch
+
+`Product` có trait `Searchable` + `toSearchableArray()` index aggregate
+giá (min/max_variant_price). KHÔNG đẩy variant lên Meilisearch (500k×3
+= 1.5M doc, không cần). `makeAllSearchableUsing()` eager-load
+`description` để tránh N+1 khi `scout:import` chạy 500k row.
+
+### Debugbar + Clockwork
+
+- `barryvdh/laravel-debugbar` — widget HTML cho web routes
+- `itsgoingd/clockwork` — header-based, cho API/SPA (React CMS gọi
+  `/rcms/...` JSON, Debugbar không hiện)
+
+Auto-discovery enable khi `APP_DEBUG=true` + `APP_ENV=local`. Prod
+phải set `DEBUGBAR_ENABLED=false`, `CLOCKWORK_ENABLE=false`.
+
+### OOM khi seed lớn — split-process pattern
+
+PHP có memory leak ngầm (Carbon static + framework boot + PDO buffer)
+không API nào free được trong cùng process. Ở 1M+ review, kể cả
+`memory_limit=4G` cũng die ở ~50% tiến độ.
+
+**Cách duy nhất chắc ăn:** chia thành nhiều process độc lập, mỗi process
+exit → OS free memory tận gốc.
+
+→ Đó là lý do tồn tại `reviews:seed-bulk` (wrapper) + `--no-aggregate`
+flag + `reviews:rebuild-aggregate` (rebuild 1 lần cuối). KHÔNG seed
+2M+ review bằng 1 process duy nhất.
+
+### Fix container conflict khi rebuild
+
+```
+Error: Conflict. The container name "/infun-mysql" is already in use
+```
+
+→ compose `up` mặc định touch dependencies (mysql, redis) qua
+`depends_on`, gặp container cũ cùng tên = conflict.
+
+**Fix 1 dòng — chỉ rebuild + recreate `infun-php`, không đụng MySQL/Redis:**
+
+```bash
+docker compose up -d --build --no-deps --force-recreate infun-php
+```
+
+`--no-deps` = skip dependencies, `--force-recreate` = recreate container
+mới với image vừa build. Mysql/Redis giữ nguyên đang chạy, data còn.
+
 ## Ghi chú công cụ khi sửa repo này
 
 - **Một số file có byte binary** (vd `CheckoutContext.php`, nhiều `*.blade.php`,
@@ -2492,3 +2640,183 @@ nguồn = hết drift, hết check thừa.
     * Lỡ clobber file tracked → khôi phục bằng `git show HEAD:path > path`
       (sandbox chặn `rm`/`git checkout` vì không unlink được), rồi áp lại thay
       đổi bằng Edit tool.
+
+## Meilisearch / Scout — trang list product (2026-06-30)
+
+Trang list sản phẩm dùng **dual engine**: Meilisearch cho keyword/manufacturer/
+price/sort (attribute đã index), DB cho category/filter_value/in_stock (relation
+chưa index). 500k document đã import sẵn vào index `products`.
+
+### Entry point — `filter[keyword]`
+
+`ProductRepository::list()` route theo `filter.keyword`:
+
+1. Rỗng → `parent::list()` (pipeline Spatie/Eloquent gốc — category/manufacturer
+   landing page không bị ảnh hưởng).
+2. ≠ rỗng + `config('scout.driver') === 'meilisearch'` → `searchViaMeilisearch()`
+   dispatch qua Scout.
+3. Scout throw `\Throwable` (server down / index lỗi) → `logError(...)` + flash
+   session `search_unavailable` → fallback `parent::list()`. **KHÔNG silent drop**
+   keyword: callback `AllowedFilter::callback('keyword', ...)` chạy LIKE %name/sku/
+   model% (chậm 1-3s trên 500k vì không có FTS index B-tree, nhưng giữ semantic).
+4. `SCOUT_DRIVER != meilisearch` (vd dev tắt) → fallback luôn, cùng LIKE callback.
+
+Khi keyword có giá trị + đi qua DB pipeline, `baseQuery()` tự `leftJoin
+product_description` để LIKE trên `product_description.name` (cùng cơ chế với
+sort=name). Meilisearch path bypass `baseQuery()` nên fast path không tốn join.
+
+### `searchViaMeilisearch` — chia filter theo nơi có data
+
+Filter ĐẨY MEILISEARCH (đã khai báo `filterableAttributes` trong `config/scout.php`):
+
+- `manufacturer_id` → `whereIn`
+- `price_min/price_max` → `where max_variant_price >= min`, `where min_variant_price <= max`
+  (overlap test cho range — KHÔNG chỉ check min hoặc max một chiều)
+- `sort` → `sortMap[token]['meili']`
+
+Filter GIỮ DB (chạy trong `$builder->query()` callback sau khi Meilisearch trả IDs):
+
+- `category_id`, `filter_value_id` — `whereHas` relation, KHÔNG index
+- `in_stock` — `whereExists` join `product_stock`, value động không nên index
+- `cardRelations` eager-load + `dateAvailable` scope + `$modifyBase` closure
+
+**Trade-off**: `paginator->total()` báo theo Meilisearch result count, KHÔNG phải
+DB post-filter count. Khi user combine keyword + category/filter_value, số trang
+hiển thị có thể overcount (Meilisearch trả 10k items, DB lọc còn 8k). Acceptable
+cho FTS discovery; nếu cần count chính xác phải push category/filter_value vào
+Meilisearch index (refactor lớn — phải observer ProductCategory/ProductFilter
+re-sync product khi relation đổi).
+
+### `sortMap()` — single source of truth
+
+`ProductRepository::sortMap()` declare TỪNG TOKEN với 3 mặt:
+- `db` → `Spatie\QueryBuilder\AllowedSort` (cột DB hoặc callback scope) cho pipeline DB
+- `meili` → tên attribute trong Meilisearch index, hoặc `null` nếu không index được
+- `menu` → bool, có xuất hiện ở dropdown UI hay không
+
+`allowedSorts()`, `sortMenu()`, `searchViaMeilisearch::sort` đều đọc từ map này
+→ thêm sort mới = thêm 1 row, không drift giữa 2 engine. Token `created_at`
+phải lên đầu vì `HasListFilterToolbar` dùng phần tử đầu của `sortMenu()` làm
+default selection khi URL chưa có `?sort=`.
+
+`null` ở `meili` (vd `name`, hiện chưa index) → khi user search Meilisearch, sort
+đó bị bỏ qua âm thầm, Meilisearch fallback ranking theo relevance score. KHÔNG
+ném error.
+
+### `config/scout.php` — index-settings
+
+File CỐ Ý KHÔNG `new Product` để lấy `searchableAs()` — config load TRƯỚC khi
+service provider boot, instantiate Eloquent model trigger trait `Searchable` +
+`Auditable` cần `view` service chưa register → `ReflectionException: Class "view"
+does not exist`. Hardcode `'products'` làm key cho `index-settings`.
+
+4 vai trò Meilisearch độc lập, một attribute có thể có 0/1/nhiều vai trò:
+
+| Khai báo | Vai trò |
+|---|---|
+| `toSearchableArray()` model | Field nào được lưu trong document |
+| `searchableAttributes` (config) | Field tham gia FTS ranking |
+| `filterableAttributes` (config) | Field xài được trong `filter=` |
+| `sortableAttributes` (config) | Field xài được trong `sort=` |
+
+Mỗi attribute thêm vào filter/sort = thêm index riêng → tốn RAM + chậm write.
+Chỉ khai báo capability thực sự dùng.
+
+### Quy trình thêm field mới vào index
+
+1. Thêm vào `Product::toSearchableArray()` → đẩy data lên doc.
+2. Thêm vào `searchableAttributes`/`filterableAttributes`/`sortableAttributes`
+   tương ứng trong `config/scout.php`.
+3. `php artisan config:clear`
+4. `php artisan scout:sync-index-settings` — push settings (KHÔNG re-index doc).
+5. `php artisan scout:import "App\Models\Entities\Product"` — re-push 500k doc
+   với field mới (5-15 phút, chunk theo `SCOUT_CHUNK_SEARCHABLE=500`).
+
+Bỏ qua step 5 = doc cũ KHÔNG có field mới → filter/sort theo field đó luôn rỗng.
+
+### Verify Meilisearch settings
+
+```
+curl -s "http://localhost:7700/indexes/products/settings" -H "Authorization: Bearer $MEILISEARCH_KEY" | jq '.filterableAttributes, .sortableAttributes'
+```
+
+phải thấy đủ các field đã khai báo. Thiếu → chưa chạy `scout:sync-index-settings`.
+
+### `positiveIntList` helper — trust shape or skip
+
+`private static function positiveIntList(mixed $value): array` trong
+`ProductRepository` chuẩn hoá input "danh sách id" từ request:
+- `!is_array($value)` → return `[]` (skip filter, KHÔNG cố parse scalar/object).
+  Form HTML đúng convention luôn gửi array; URL sai shape ≠ lỗi server, chỉ skip.
+- Array → `array_map('intval')` + `array_filter(fn $v > 0)` + `array_values()`.
+
+Triết lý chung cho list page (GET browse): KHÔNG validate-or-422 như FormRequest
+POST mutation. Sai filter = ignore, vẫn render danh sách đầy đủ.
+
+## Sidebar danh mục — accordion cha–con (2026-06-30)
+
+`resources/web/views/category/structure/_side_bar_node.blade.php` — partial đệ
+quy render 1 node trong cây, accordion dọc + boxed pill mỗi item.
+
+### Lý do KHÔNG dùng class theme `widget-category-2`
+
+Theme `public/web/sass/layout/_sidebar.scss` có rule:
+```scss
+.widget-category-2 ul li {
+    display: flex;
+    justify-content: space-between;
+    border: 1px solid; padding: 9px 18px;
+}
+```
+áp dụng cả children — biến submenu lồng thành box floating ngang → tràn ra ngoài
+sidebar. Wrapper `_side_bar.blade.php` cố ý chỉ giữ `sidebar-widget` (không có
+`widget-category-2`), tree dùng Tailwind thuần.
+
+### Build tree từ flat list
+
+`$categories` từ `Controller::buildDataCommon()` là flat `Collection<CategoryDTO>`
+với `parent_id`. Block `@php` trong `_side_bar.blade.php` build:
+- `$byParent`: map `parent_id → Collection<CategoryDTO>` cho lookup con
+- `$byId`: map `id → CategoryDTO` để trace ancestors
+- `$openIds`: set `parent_id → true` cho chuỗi tổ tiên của active node, để node
+  cha auto-expand ở first render (KHÔNG chờ Alpine boot rồi mới expand).
+
+Partial node nhận `byParent`, `openIds`, `activeId`, `depth` và recurse.
+
+### Rotate icon — inline `:style` thay vì `rotate-90` class
+
+Dự án dùng Tailwind v4 với `@tailwindcss/vite` (JIT scan blade ở build time).
+Bundle CSS hiện tại trong `public/build/` được build trước khi tôi add partial
+mới → `rotate-90` KHÔNG có trong CSS output. Class tag SVG nhưng không có rule
+áp dụng → không xoay.
+
+Workaround: Alpine bind inline `:style="open ? 'transform: rotate(90deg)' :
+'transform: rotate(0deg)'"`. KHÔNG phụ thuộc Tailwind compile state — reload là
+xong, không cần `npm run build`. Nếu sau này rebuild, có thể quay về `:class="{
+'rotate-90': open }"` cũng hoạt động.
+
+Rút ra: với Tailwind v4 JIT, **class dùng trong attribute động (`:class`,
+`x-bind`) chưa chắc được compile vào CSS bundle** nếu blade không xuất hiện ở
+build time. An toàn nhất là inline `:style` cho dynamic transform/color.
+
+## `logError` / ChannelWriter — không phải broken, chỉ ít gọi
+
+Triệu chứng trước đây: `storage/logs/{area}/{date}/errors.log` chưa từng tồn
+tại bất kỳ ngày nào (chỉ có `debug.log`) → tưởng `logError` silent fail.
+
+Test verify (gọi trực tiếp `ChannelLog::error('error', 'TEST')` từ controller):
+file `errors.log` được tạo bình thường. **ChannelWriter OK**.
+
+Nguyên nhân lịch sử: 38 caller `logError` trong codebase đều ở rare error path
+(payment fail, auth error...), chưa fire trong 9 ngày dev. `logDebug` ngược lại
+fire mỗi query qua `AppServiceProvider::logSql()` → `DB::listen` → debug.log
+luôn populated.
+
+Khi debug `logError` không chạy, kiểm theo thứ tự:
+1. Code path có thực sự được trigger? (try block có vào không?)
+2. File source có ParseError không? (đã từng có `var_dump` syntax error chặn cả
+   class compile → logError trong đó cũng không chạy).
+3. Cuối cùng mới nghi `ChannelWriter` — confirm bằng direct call test.
+
+`logError` đang dùng `ChannelLog::error('error', ...)` chuẩn — đừng đổi sang
+`\Log::error` (laravel.log) trừ khi cần universal log access.

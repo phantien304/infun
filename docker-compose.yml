@@ -1,50 +1,173 @@
-# Local infrastructure cho dự án `infun` — chạy bằng Docker Desktop trên
-# Windows. Cùng cấu trúc translate trực tiếp sang AWS:
-#   - redis              → AWS ElastiCache for Redis (managed)
-#   - redis-insight      → AWS ElastiCache có Memory DB Console riêng, không
-#                          cần chạy GUI ở production (chỉ debug local).
+# Stack dev đầy đủ cho infun + infun_cms — chạy hoàn toàn trong Docker, không
+# cần XAMPP. Trên Windows mở Docker Desktop rồi chạy ở thư mục này:
 #
-# Cách dùng:
-#   docker compose up -d              # start ngầm
-#   docker compose ps                 # xem service đang chạy
-#   docker compose logs -f redis      # tail log redis
-#   docker compose exec redis redis-cli   # vào CLI test PING/keys
-#   docker compose down               # stop + remove containers (volume giữ)
-#   docker compose down -v            # xoá luôn volume (mất data cache)
+#   docker compose up -d --build
+#   docker compose logs -f infun-php infun-vite infun-cms
+#   docker compose down            # giữ volume
+#   docker compose down -v         # xoá luôn data MySQLdoc/Redis
 #
 # Truy cập:
-#   Redis            : 127.0.0.1:6379
-#   Redis Insight UI : http://127.0.0.1:5540   (browser)
+#   Laravel API/web        http://localhost:8000
+#   Vite (Laravel assets)  http://localhost:5174   (do @vite trong blade gọi)
+#   infun_cms (React SPA)  http://localhost:5173
+#   MariaDB                127.0.0.1:3306  (root/root, db = infun)
+#   Redis                  127.0.0.1:6379
+#   Redis Insight          http://localhost:5540
+#
+# Lưu ý .env của infun khi chạy Docker:
+#   DB_HOST=mysql      (tên service, không phải 127.0.0.1)
+#   REDIS_HOST=redis
+#
+# .env của infun_cms (file infun_cms/.env):
+#   VITE_API_BASE_URL=http://localhost:8000/rcms
+#   VITE_LARAVEL_ORIGIN=http://localhost:8000
+
+name: infun-stack
 
 services:
-  # ----------------------------------------------------------------------
-  # Redis 7 (Alpine) — cache + session + queue cho Laravel.
-  # ----------------------------------------------------------------------
-  # `--appendonly yes`: bật AOF persistence, khôi phục data sau khi
-  # container restart. Phù hợp dev (không mất cache khi reboot máy).
-  # Production AWS ElastiCache có RDB+AOF managed riêng — flag này chỉ ở
-  # local.
-  #
-  # `--maxmemory 256mb` + `allkeys-lru` evict policy: giới hạn RAM redis
-  # dùng cho local, evict key cũ nhất khi đầy. Test data large (50k+
-  # product cache) sẽ chạm trần — đúng case muốn quan sát eviction
-  # behaviour.
+  # ──────────────────────────────────────────────────────────────────────
+  # PHP-FPM cho Laravel infun
+  # ──────────────────────────────────────────────────────────────────────
+  infun-php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: infun-php
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    environment:
+      # Override để app trỏ vào service trong network (ưu tiên hơn .env)
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: infun
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SCOUT_DRIVER: meilisearch
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_KEY: ""
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Nginx serve public/ + proxy PHP-FPM
+  # ──────────────────────────────────────────────────────────────────────
+  infun-web:
+    image: nginx:1.27-alpine
+    container_name: infun-web
+    restart: unless-stopped
+    ports:
+      # Để Herd giữ port 80 phục vụ infun.test. Docker nginx chỉ là backup/test,
+      # truy cập qua localhost:8000 nếu cần so sánh với Herd.
+      - "8000:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - infun-php
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Vite dev server cho Laravel infun (resources/js, @vite trong blade)
+  # ──────────────────────────────────────────────────────────────────────
+  # Cùng dùng image PHP-FPM (đã có Node? KHÔNG → tách image Node riêng).
+  infun-vite:
+    image: node:20-alpine
+    container_name: infun-vite
+    restart: unless-stopped
+    working_dir: /app
+    # Vite Laravel chạy nội bộ port 5174 (khác 5173 của infun-cms).
+    # Host map 5174:5174 → URL trong public/hot mà Vite ghi
+    # (http://localhost:5174) khớp với port host browser fetch được.
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./:/app
+      - infun_node_modules:/app/node_modules
+    command: sh -c "([ -d node_modules ] && [ -n \"$$(ls -A node_modules)\" ] || npm install --no-audit --no-fund) && npm run dev -- --host 0.0.0.0 --port 5174"
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # infun_cms — React SPA độc lập (port 5173)
+  # ──────────────────────────────────────────────────────────────────────
+  infun-cms:
+    build:
+      context: ../infun_cms
+      dockerfile: Dockerfile
+    container_name: infun-cms
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../infun_cms:/app
+      - cms_node_modules:/app/node_modules
+    environment:
+      # Cho phép Vite HMR thấy host từ Windows
+      CHOKIDAR_USEPOLLING: "true"
+      # LAN access: set LAN_HOST khi up nếu cần browser ở máy khác kết nối
+      # HMR được. Ví dụ:
+      #   $env:LAN_HOST = "192.168.1.100"; docker compose up -d infun-cms
+      # Không set → fallback Herd 'cms.infun.test' (mặc định local-only).
+      VITE_HMR_HOST: ${LAN_HOST:-}
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # MariaDB
+  # ──────────────────────────────────────────────────────────────────────
+  mysql:
+    image: mariadb:10.11
+    container_name: infun-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_DATABASE: infun
+      MARIADB_ROOT_PASSWORD: root
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=1G
+      - --innodb-log-file-size=256M
+      - --innodb-flush-log-at-trx-commit=2
+      - --innodb-flush-method=O_DIRECT
+      - --max-connections=300
+      - --tmp-table-size=64M
+      - --max-heap-table-size=64M
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Redis
+  # ──────────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: infun-redis
-    restart: unless-stopped
+    # always thay vì unless-stopped — sau hibernate, WSL2 network corrupt
+    # nhiều khi daemon thấy container "stopped" do networking lỗi → always
+    # khôi phục được, unless-stopped không.
+    restart: always
     ports:
       - "6379:6379"
-    # `--protected-mode no`: Redis 7 mặc định protected-mode=yes → khi bind
-    # 0.0.0.0 + không password + connect từ NON-loopback IP, server accept
-    # TCP rồi DISCONNECT NGẦM không trả response. Predis đọc tiếp → lỗi
-    # "Stream is already at the end".
-    #
-    # Trong Docker, PHP host kết nối qua NAT bridge (172.x.x.x) — KHÔNG phải
-    # 127.0.0.1 từ góc nhìn Redis → trigger protected-mode. Tắt cho local dev.
-    #
-    # Production AWS ElastiCache: bảo mật bằng VPC + Security Group, không
-    # cần protected-mode flag.
     command:
       - redis-server
       - --protected-mode
@@ -59,18 +182,33 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      # Sau hibernate, healthcheck đầu thường timeout — start_period cho
+      # 30s khoan chấm fail. Interval 5s để phát hiện sớm.
+      interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 3
+      start_period: 30s
+    labels:
+      # Marker cho autoheal container nhận biết → restart khi unhealthy.
+      autoheal: "true"
+    networks:
+      - infun-net
 
-  # ----------------------------------------------------------------------
-  # Redis Insight — GUI debug, browse keys, run command, xem memory map.
-  # ----------------------------------------------------------------------
-  # Optional. Tắt bằng `docker compose up -d redis` (chỉ start redis).
-  # Lần đầu vào http://127.0.0.1:5540 → "Add Redis Database" → host =
-  # `redis` (tên service trong network) hoặc `host.docker.internal`,
-  # port 6379. KHÔNG dùng 127.0.0.1 vì insight chạy trong container
-  # khác, 127.0.0.1 của nó là chính nó.
+  # Watcher restart mọi container có label autoheal=true khi unhealthy.
+  # Image willfarrell/autoheal nhẹ ~10MB, mount docker.sock để gọi API.
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: infun-autoheal
+    restart: always
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "10"      # check mỗi 10s
+      AUTOHEAL_START_PERIOD: "30"  # chờ 30s sau container start
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - infun-net
+
   redis-insight:
     image: redis/redisinsight:latest
     container_name: infun-redis-insight
@@ -82,41 +220,47 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - infun-net
 
-  # ----------------------------------------------------------------------
-  # MariaDB 10.11 — thay MySQL của XAMPP.
-  # ----------------------------------------------------------------------
-  # Dùng MariaDB (KHÔNG phải MySQL 8) vì XAMPP chạy MariaDB → dump/import
-  # khớp 1-1, và schema legacy OpenCart dùng đặc thù MariaDB (CHECK
-  # constraint enforce từ 10.2.1+, FULLTEXT InnoDB). App (Apache/PHP của
-  # XAMPP) vẫn chạy NGOÀI container, connect vào đây qua cổng map
-  # 127.0.0.1:3306 — chỉ MySQL chuyển vào Docker.
-  #
-  # LƯU Ý: phải TẮT MySQL trong XAMPP Control Panel trước khi `up`, nếu
-  # không cổng 3306 bị chiếm → container không bind được.
-  #
-  # Production: trỏ DB_HOST sang RDS/Aurora endpoint, giữ nguyên schema.
-  mysql:
-    image: mariadb:10.11
-    container_name: infun-mysql
+  # ──────────────────────────────────────────────────────────────────────
+  # Meilisearch — full-text search cho Product (Laravel Scout driver).
+  # ──────────────────────────────────────────────────────────────────────
+  # Web UI tích hợp sẵn: http://localhost:7700 (cần master key nếu set).
+  # Dev: bỏ key cho gọn; prod BẮT BUỘC set MEILI_MASTER_KEY.
+  # Index data persist trong volume → seed 500k product chỉ build index 1 lần.
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: infun-meilisearch
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "7700:7700"
     environment:
-      MARIADB_DATABASE: infun
-      MARIADB_ROOT_PASSWORD: root
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
+      MEILI_ENV: development        # development: KHÔNG cần master key
+      MEILI_NO_ANALYTICS: "true"
+      # MEILI_MASTER_KEY: "change-me-in-prod"   # uncomment cho prod
     volumes:
-      - mysql_data:/var/lib/mysql
+      - meilisearch_data:/meili_data
+    # KHÔNG dùng wget/curl — image meilisearch slim không có cả 2. Healthcheck
+    # qua chính binary meilisearch (`--version` trả 0 khi container sống) đủ
+    # để depends_on: service_healthy của infun-php không kẹt vĩnh viễn.
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "meilisearch --version >/dev/null 2>&1 || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 10
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - infun-net
 
 volumes:
+  mysql_data:
   redis_data:
   redis_insight_data:
-  mysql_data:
+  meilisearch_data:
+  infun_node_modules:
+  cms_node_modules:
+
+networks:
+  infun-net:
+    driver: bridge

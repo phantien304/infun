@@ -52,6 +52,26 @@ class SeedProductsCommand extends Command
     ];
 
     /**
+     * 5 filter group + value pool. Realistic cho test filter sidebar:
+     *   - Màu sắc:    8 value
+     *   - Kích thước: 5 value
+     *   - Chất liệu:  5 value
+     *   - Xuất xứ:    5 value
+     *   - Bảo hành:   4 value
+     * Tổng 27 filter_value spread đều — đủ phong phú để test whereHas + sort.
+     *
+     * Tên filter là key, mảng value làm seed. Service thật có thể đặt label
+     * khác cho từng locale; ở seed dùng 1 locale 'vi'.
+     */
+    private const FILTERS = [
+        'Màu sắc'    => ['Đỏ', 'Xanh', 'Vàng', 'Đen', 'Trắng', 'Xám', 'Hồng', 'Nâu'],
+        'Kích thước' => ['S', 'M', 'L', 'XL', 'XXL'],
+        'Chất liệu'  => ['Cotton', 'Polyester', 'Da', 'Vải lanh', 'Lụa'],
+        'Xuất xứ'    => ['Việt Nam', 'Trung Quốc', 'Hàn Quốc', 'Nhật Bản', 'Mỹ'],
+        'Bảo hành'   => ['6 tháng', '12 tháng', '24 tháng', '36 tháng'],
+    ];
+
+    /**
      * 50 manufacturer. Mix brand quốc tế phổ biến + brand Việt để test
      * filter/group theo nhãn hiệu.
      */
@@ -114,11 +134,12 @@ class SeedProductsCommand extends Command
 
         try {
             if ($this->option('truncate')) {
-                // Truncate product cluster + taxonomy. Thứ tự không quan trọng
-                // vì foreign_key_checks đã off.
+                // Truncate product cluster + taxonomy + filter. Thứ tự không
+                // quan trọng vì foreign_key_checks đã off.
                 foreach ([
                     'product_image', 'product_filter', 'product_category', 'product_description', 'product',
                     'category_description', 'category', 'manufacturer',
+                    'filter_value_description', 'filter_value', 'filter_description', 'filter',
                 ] as $tbl) {
                     if (Schema::hasTable($tbl)) {
                         DB::table($tbl)->truncate();
@@ -222,6 +243,123 @@ class SeedProductsCommand extends Command
         } else {
             $this->line("  manufacturer đã có {$manufacturerCount} row — skip seed.");
         }
+
+        // Filter chỉ seed khi user KHÔNG dùng --no-filter (đỡ tốn time/db nếu
+        // không cần filter cho test cụ thể).
+        if (! $this->option('no-filter')) {
+            $filterCount = (int) DB::table('filter')->count();
+            if ($filterCount === 0) {
+                $this->seedFilters();
+            } else {
+                $this->line("  filter đã có {$filterCount} row — skip seed.");
+            }
+        }
+    }
+
+    /**
+     * Seed 5 filter + 27 filter_value (mỗi group có description i18n 'vi').
+     *
+     * Schema (legacy OpenCart):
+     *   filter                    (id, sort_order, timestamps)
+     *   filter_description        (filter_id, language_code, name) [composite PK]
+     *   filter_value              (id, filter_id, sort_order, timestamps)
+     *   filter_value_description  (filter_value_id, language_code, name) [composite PK]
+     *
+     * Strategy: explicit-id 2 cấp, mirror seedCategories.
+     */
+    private function seedFilters(): void
+    {
+        $now = Carbon::now();
+        $filterStartId      = ((int) DB::table('filter')->max('id')) + 1;
+        $filterValueStartId = ((int) DB::table('filter_value')->max('id')) + 1;
+
+        // Detect tên cột label — OpenCart legacy thường là `name`, nhưng
+        // dự án có chỗ dùng `title` (vd category_description). Schema::hasColumn
+        // chỉ check trên DB hiện tại, không hardcode.
+        $filterLabelCol = $this->detectLabelColumn('filter_description');
+        $valueLabelCol  = $this->detectLabelColumn('filter_value_description');
+
+        $filters             = [];
+        $filterDescriptions  = [];
+        $filterValues        = [];
+        $filterValueDescriptions = [];
+
+        $valueIndex = 0;
+        $filterIndex = 0;
+        foreach (self::FILTERS as $filterName => $valueNames) {
+            $filterId = $filterStartId + $filterIndex;
+
+            $filters[] = [
+                'id'         => $filterId,
+                'sort_order' => $filterIndex,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ];
+            $filterDescriptions[] = [
+                'filter_id'     => $filterId,
+                'language_code' => 'vi',
+                $filterLabelCol => $filterName,
+            ];
+
+            foreach ($valueNames as $valueSort => $valueName) {
+                $valueId = $filterValueStartId + $valueIndex;
+
+                $filterValues[] = [
+                    'id'         => $valueId,
+                    'filter_id'  => $filterId,
+                    'sort_order' => $valueSort,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+                $filterValueDescriptions[] = [
+                    'filter_value_id' => $valueId,
+                    'language_code'   => 'vi',
+                    $valueLabelCol    => $valueName,
+                ];
+
+                $valueIndex++;
+            }
+            $filterIndex++;
+        }
+
+        DB::table('filter')->insert($filters);
+        if (Schema::hasTable('filter_description')) {
+            DB::table('filter_description')->insert($filterDescriptions);
+        }
+        DB::table('filter_value')->insert($filterValues);
+        if (Schema::hasTable('filter_value_description')) {
+            DB::table('filter_value_description')->insert($filterValueDescriptions);
+        }
+
+        // Reset AUTO_INCREMENT để insert real sau không collide.
+        $nextFilterId      = $filterStartId + $filterIndex;
+        $nextFilterValueId = $filterValueStartId + $valueIndex;
+        DB::statement("ALTER TABLE filter AUTO_INCREMENT = {$nextFilterId}");
+        DB::statement("ALTER TABLE filter_value AUTO_INCREMENT = {$nextFilterValueId}");
+
+        $this->line(
+            '  seeded '.count($filters).' filter + '.count($filterValues).' filter_value '
+            .'('.count($filterDescriptions).' + '.count($filterValueDescriptions).' description)'
+        );
+    }
+
+    /**
+     * Tìm cột chứa label (tên hiển thị) ở bảng description.
+     * OpenCart legacy dùng `name`, một số schema dùng `title`.
+     * Ưu tiên: name → title → fallback 'name' (sẽ fail clearly nếu DB khác hẳn).
+     */
+    private function detectLabelColumn(string $table): string
+    {
+        if (! Schema::hasTable($table)) {
+            return 'name';
+        }
+        foreach (['name', 'title'] as $col) {
+            if (Schema::hasColumn($table, $col)) {
+                return $col;
+            }
+        }
+        return 'name';
     }
 
     /**
@@ -376,14 +514,20 @@ class SeedProductsCommand extends Command
             shuffle($shuffled);
             $galleryImages = array_slice($shuffled, 0, $galleryCount);
 
+            // Schema hiện tại: KHÔNG còn `quantity`, `subtract`, `rating`,
+            // `total_rating`, `price` trên `product`.
+            //   - quantity/subtract → moved to `product_stock` (xem unify_simple_product_stock).
+            //     Seed simple-variants:seed sẽ tạo product_stock cho mỗi simple sau bước này.
+            //   - rating/total_rating → replaced bởi `rating_avg`/`rating_sum`/`review_count`
+            //     (xem add_review_aggregate_to_product); backfill bằng ReviewObserver hoặc
+            //     SQL UPDATE … JOIN review GROUP BY khi cần.
+            //   - price → moved sang `product_variant.price` (xem drop_price_from_product).
             $products[] = [
                 'id'                => $id,
                 'model'             => 'PRD-' . str_pad((string) $id, 6, '0', STR_PAD_LEFT),
                 'sku'               => 'SKU-' . $id . '-' . Str::upper(Str::random(4)),
-                'quantity'          => rand(0, 100) > 15 ? rand(1, 500) : 0, // ~15% hết hàng
                 'badge'             => $this->randomBadge(),
                 'image'             => $mainImage,
-                'video'             => null,
                 'shipping'          => 1,
                 'link_sale'         => null,
                 'points'            => 0,
@@ -392,10 +536,7 @@ class SeedProductsCommand extends Command
                 'length'            => rand(5, 100),
                 'width'             => rand(5, 100),
                 'height'            => rand(5, 100),
-                'subtract'          => 1,
                 'minimum'           => 1,
-                'rating'            => rand(0, 50) / 10,
-                'total_rating'      => rand(0, 200),
                 'viewed'            => rand(0, 5000),
                 'link_sale_custom'  => null,
                 'is_add_cart'       => 1,

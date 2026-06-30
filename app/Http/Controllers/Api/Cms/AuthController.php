@@ -20,7 +20,7 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
         if ($validator->fails()) {
-            return errValidator($validator->errors()->first());
+            return response()->json(['message' => $validator->errors()->first()], 422);
         }
 
         $user = User::query()
@@ -28,17 +28,21 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check((string) $request->input('password'), (string) $user->password)) {
-            return errValidator(trans('messages.auth.login_failed'));
+            return response()->json(['message' => trans('messages.auth.login_failed')], 422);
         }
 
         $user->tokens()->where('name', self::TOKEN_NAME)->delete();
 
         $token = $user->createToken(self::TOKEN_NAME, ['cms'])->plainTextToken;
 
-        return successData('login_success', [
-            'token'       => $token,
-            'account'     => $this->accountPayload($user),
-            'permissions' => $this->resolvePermissions($user),
+        // Contract REST thống nhất: { data, message }.
+        return response()->json([
+            'data' => [
+                'token'       => $token,
+                'account'     => $this->accountPayload($user),
+                'permissions' => $this->resolvePermissions($user),
+            ],
+            'message' => 'login_success',
         ]);
     }
 
@@ -46,9 +50,11 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        return successData('', [
-            'account'     => $this->accountPayload($user),
-            'permissions' => $this->resolvePermissions($user),
+        return response()->json([
+            'data' => [
+                'account'     => $this->accountPayload($user),
+                'permissions' => $this->resolvePermissions($user),
+            ],
         ]);
     }
 
@@ -56,7 +62,7 @@ class AuthController extends Controller
     {
         $request->user()?->currentAccessToken()?->delete();
 
-        return successNoData('logout_success');
+        return response()->json(['message' => 'logout_success']);
     }
 
     private function accountPayload(User $user): array

@@ -4,20 +4,18 @@ namespace App\Http\Controllers\Api\Cms;
 
 use App\Data\Cms\ProductData;
 use App\Data\Cms\ProductListData;
+use App\Http\Requests\Cms\ProductRequest;
 use App\Models\Entities\Product;
-use App\Repositories\Interfaces\ProductRepositoryInterface;
+use App\Repositories\Interfaces\ProductCmsRepositoryInterface;
+use App\Services\Product\ProductWriteService;
 use Illuminate\Http\Request;
 
 /**
- * Product API (REST) cho CMS.
- * -----------------------------------------------------------
- * Thin controller: read → repository, output → DTO. KHÔNG chứa DB code.
- *   index/show/destroy/restore/bulk: ĐỢT 1 (read + xoá mềm) — xong.
- *   store/update/bulk-update/approve: ĐỢT 2 (write cluster variant) —
- *     sẽ qua App\Services\Product\ProductWriteService (+ ProductVariantWriter).
- *
- * Output: App\Data\Cms\ProductData / ProductListData (Spatie Data, snake_case).
- * Phân quyền: middleware cms.permission.
+ * Product API (REST) cho CMS. Thin controller:
+ *   read  → ProductRepository (no cache)
+ *   write → ProductWriteService (transaction; variant cluster ở ProductVariantWriter)
+ *   output→ ProductData / ProductListData (Spatie Data, snake_case)
+ *   validate → ProductRequest
  * -----------------------------------------------------------
  */
 class ProductController extends BaseCmsController
@@ -25,7 +23,8 @@ class ProductController extends BaseCmsController
     protected string $permission = 'product';
 
     public function __construct(
-        private readonly ProductRepositoryInterface $repo
+        private readonly ProductCmsRepositoryInterface $repo,
+        private readonly ProductWriteService $writeService,
     ) {
     }
 
@@ -40,6 +39,23 @@ class ProductController extends BaseCmsController
         abort_if($product === null, 404);
 
         return response()->json(['data' => ProductData::from($product)]);
+    }
+
+    public function store(ProductRequest $request)
+    {
+        $product = $this->writeService->save(null, $request->validated());
+
+        return response()->json(
+            ['data' => ProductData::from($this->repo->getForCms($product->id))],
+            201
+        );
+    }
+
+    public function update(ProductRequest $request, Product $product)
+    {
+        $product = $this->writeService->save($product, $request->validated());
+
+        return response()->json(['data' => ProductData::from($this->repo->getForCms($product->id))]);
     }
 
     public function destroy(Product $product)
@@ -72,24 +88,22 @@ class ProductController extends BaseCmsController
         return response()->json(['affected' => $affected]);
     }
 
-    // ----- ĐỢT 2: write side (qua ProductWriteService) -----
-    public function store(Request $request)
-    {
-        return errNoValidator('Chưa hỗ trợ tạo product (đợt 2)', 501);
-    }
-
-    public function update(Request $request, $id)
-    {
-        return errNoValidator('Chưa hỗ trợ sửa product (đợt 2)', 501);
-    }
-
+    /** Sửa inline hàng loạt từ trang list (model/badge/price/quantity). */
     public function bulkUpdate(Request $request)
     {
-        return errNoValidator('Chưa hỗ trợ bulk-update (đợt 2)', 501);
+        $data = $request->validate([
+            'items'   => 'required|array|min:1',
+            'items.*.id' => 'required|integer',
+        ]);
+
+        $affected = $this->writeService->bulkUpdate($data['items']);
+
+        return response()->json(['affected' => $affected]);
     }
 
+    /** Duyệt product từ bản nháp (ProductDraft) — feature riêng, làm sau. */
     public function approve($id)
     {
-        return errNoValidator('Chưa hỗ trợ duyệt product (đợt 2)', 501);
+        return response()->json(['message' => 'Chưa hỗ trợ duyệt product (draft)'], 501);
     }
 }

@@ -71,24 +71,61 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                     : $q->whereNotExists($inStockExists);
             }),
 
-            AllowedFilter::callback('search', function (Builder $q, $value) {
-                $q->where(function (Builder $qq) use ($value) {
-                    $qq->where('product_description.name', 'like', "%{$value}%")
-                        ->orWhere('product_description.description', 'like', "%{$value}%");
+            AllowedFilter::callback('keyword', function (Builder $q, $value) {
+                if (! is_string($value)) {
+                    return;
+                }
+                $value = trim($value);
+                if ($value === '') {
+                    return;
+                }
+                $like = '%'.$value.'%';
+                $q->where(function (Builder $qq) use ($like) {
+                    $qq->where('product_description.name', 'like', $like)
+                        ->orWhere('product.sku', 'like', $like)
+                        ->orWhere('product.model', 'like', $like);
                 });
             }),
         ];
     }
 
-    protected function allowedSorts(): array
+    protected function sortMap(): array
     {
         return [
-            AllowedSort::callback('price', fn (Builder $q, bool $descending) => $q->orderByEffectivePrice($descending ? 'desc' : 'asc')),
-            AllowedSort::field('created_at', 'product.created_at'),
-            AllowedSort::field('viewed', 'product.viewed'),
-            AllowedSort::field('rating', 'product.rating'),
-            AllowedSort::field('name', 'product_description.name'),
+            'created_at' => [
+                'db'    => AllowedSort::field('created_at', 'product.created_at'),
+                'meili' => 'created_at',
+                'menu'  => true,
+            ],
+            'price' => [
+                'db'    => AllowedSort::callback(
+                    'price',
+                    fn (Builder $q, bool $descending) => $q->orderByEffectivePrice($descending ? 'desc' : 'asc')
+                ),
+                'meili' => 'min_variant_price',
+                'menu'  => true,
+            ],
+            'name' => [
+                'db'    => AllowedSort::field('name', 'product_description.name'),
+                'meili' => null,
+                'menu'  => true,
+            ],
+            'viewed' => [
+                'db'    => AllowedSort::field('viewed', 'product.viewed'),
+                'meili' => 'viewed',
+                'menu'  => true,
+            ],
+            'rating_avg' => [
+                'db'    => AllowedSort::field('rating_avg', 'product.rating_avg'),
+                'meili' => 'rating_avg',
+                'menu'  => true,
+            ],
         ];
+    }
+
+    protected function allowedSorts(): array
+    {
+        return array_values(array_map(fn (array $row) => $row['db'], $this->sortMap()));
     }
 
     protected function defaultSort(): string
@@ -98,17 +135,32 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     protected function sortMenu(): array
     {
-        return ['-created_at', 'created_at', 'price', '-price', 'name', '-name', '-viewed'];
+        $menu = [];
+        foreach ($this->sortMap() as $token => $row) {
+            if (! ($row['menu'] ?? false)) {
+                continue;
+            }
+            $menu[] = '-'.$token;
+            $menu[] = $token;
+        }
+
+        return $menu;
     }
 
     protected function baseQuery(): Builder
     {
-        return $this->model->newQuery()
-            ->select('product.*')
-            ->leftJoin('product_description', function ($join) {
+        $query = $this->model->newQuery()->select('product.*');
+
+        $sort    = ltrim((string) request()->input('sort', ''), '-');
+        $keyword = trim((string) request()->input('filter.keyword', ''));
+        if ($sort === 'name' || $keyword !== '') {
+            $query->leftJoin('product_description', function ($join) {
                 $join->on('product_description.product_id', '=', 'product.id')
                     ->where('product_description.language_code', app()->getLocale());
             });
+        }
+
+        return $query;
     }
 
     protected function beforeBuildForList(Builder $query): Builder
@@ -134,6 +186,123 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         }
 
         return $relations;
+    }
+
+    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): LengthAwarePaginator
+    {
+        $request ??= request();
+        $keyword = trim((string) $request->input('filter.keyword', ''));
+
+        if ($keyword === '' || config('scout.driver') !== 'meilisearch') {
+            return parent::list($request, $perPage, $modifyBase);
+        }
+
+        $perPage ??= (int) $request->get('per_page', $this->defaultPerPage);
+        $perPage = max(1, min($perPage, $this->maxPerPage));
+
+        try {
+            return $this->searchViaMeilisearch($request, $keyword, $perPage, $modifyBase)
+                ->appends($request->query());
+        } catch (\Throwable $e) {
+            logError('[ProductRepository::list] Meilisearch failed, fallback DB', [
+                'keyword'   => $keyword,
+                'exception' => $e::class,
+                'message'   => $e->getMessage(),
+            ]);
+
+            return parent::list($request, $perPage, $modifyBase);
+        }
+    }
+
+    protected function searchViaMeilisearch(
+        Request $request,
+        string $keyword,
+        int $perPage,
+        ?\Closure $modifyBase = null
+    ): LengthAwarePaginator {
+        $builder = Product::search($keyword);
+
+        $manufacturer = self::positiveIntList($request->input('filter.manufacturer_id', []));
+        if (! empty($manufacturer)) {
+            $builder->whereIn('manufacturer_id', $manufacturer);
+        }
+
+        $min = self::normalizePrice($request->input('filter.price_min'));
+        $max = self::normalizePrice($request->input('filter.price_max'));
+        if ($min !== null) {
+            $builder->where('max_variant_price', '>=', $min);
+        }
+        if ($max !== null) {
+            $builder->where('min_variant_price', '<=', $max);
+        }
+
+        $sort = (string) $request->input('sort', '');
+        if ($sort !== '') {
+            $direction = str_starts_with($sort, '-') ? 'desc' : 'asc';
+            $token     = ltrim($sort, '-');
+            $meiliAttr = $this->sortMap()[$token]['meili'] ?? null;
+            if ($meiliAttr !== null) {
+                $builder->orderBy($meiliAttr, $direction);
+            }
+        }
+
+        $cardRelations    = $this->cardRelations();
+        $selectedFilters  = self::positiveIntList($request->input('filter.filter_value_id', []));
+        $selectedCategory = self::positiveIntList($request->input('filter.category_id', []));
+        $inStockRaw = collect((array) $request->input('filter.in_stock', []))
+            ->map(fn ($v) => (string) $v)
+            ->filter(fn ($v) => $v === '0' || $v === '1')
+            ->unique()
+            ->values();
+
+        $builder->query(function (Builder $qb) use (
+            $cardRelations,
+            $selectedFilters,
+            $selectedCategory,
+            $inStockRaw,
+            $modifyBase,
+        ) {
+            $qb->select('product.*')
+                ->dateAvailable()
+                ->with($cardRelations);
+
+            if (! empty($selectedCategory)) {
+                $qb->whereHas('productCategories', fn ($qq) => $qq->whereIn('category_id', $selectedCategory));
+            }
+
+            if (! empty($selectedFilters)) {
+                $qb->whereHas('productFilters', fn ($qq) => $qq->whereIn('filter_value_id', $selectedFilters))
+                    ->with([
+                        'productFilters' => fn ($q) => $q->whereIn('filter_value_id', $selectedFilters),
+                        'productFilters.filterValue.description',
+                    ]);
+            }
+
+            if ($inStockRaw->count() === 1) {
+                $backorder = (int) getCoreConfig('stock.policy.backorder');
+                $untracked = (int) getCoreConfig('stock.policy.untracked');
+                $inStockExists = function ($qq) use ($backorder, $untracked) {
+                    $qq->select(DB::raw(1))
+                        ->from('product_variant as pv')
+                        ->join('product_stock as ps', 'ps.product_variant_id', '=', 'pv.id')
+                        ->whereColumn('pv.product_id', 'product.id')
+                        ->whereNull('pv.deleted_at')
+                        ->where(function ($w) use ($backorder, $untracked) {
+                            $w->whereIn('ps.inventory_policy', [$backorder, $untracked])
+                                ->orWhereRaw('(ps.on_hand - ps.reserved) > 0');
+                        });
+                };
+                $inStockRaw->first() === '1'
+                    ? $qb->whereExists($inStockExists)
+                    : $qb->whereNotExists($inStockExists);
+            }
+
+            if ($modifyBase !== null) {
+                $modifyBase($qb);
+            }
+        });
+
+        return $builder->paginate($perPage);
     }
 
     public function getByIds(array $productIds)
@@ -358,92 +527,15 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $digits === '' ? null : (int) $digits;
     }
 
-    // ===================== CMS (admin) =====================
-    // Read CMS: KHÔNG cache (admin cần fresh), withTrashed, đa ngôn ngữ.
-    // Write nặng (variant cluster) nằm ở App\Services\Product\ProductWriteService.
-
-    /** Quan hệ eager-load cho form chi tiết CMS (1 nguồn sự thật). */
-    protected function cmsDetailRelations(): array
+    private static function positiveIntList(mixed $value): array
     {
-        return [
-            'descriptions',
-            'productCategories.category.description',
-            'productFilters',
-            'productRelated.product.description',
-            'productIngredients.ingredient.description',
-            'productAttributes',
-            'productImages',
-            'productRewards',
-            'productDiscounts',
-            'productOptions.option',
-            'productVariants.productVariantAttributes',
-            'productVariants.productStocks',
-            'defaultVariant',
-        ];
-    }
-
-    /** List CMS: join name theo ngôn ngữ, search/sort/soft-delete, list NHẸ. */
-    public function listForCms(Request $request): LengthAwarePaginator
-    {
-        $defaultLang = getConfigDb('config_language') ?: 'vi';
-        $lang    = $request->input('language_code') ?: $defaultLang;
-        $order   = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
-        $deleted = (int) $request->input('deleted_at', -1);
-        $keyword = trim((string) $request->input('keyword', ''));
-        $perPage = max(1, (int) $request->input('per_page', 50));
-
-        $sortMap = [
-            'id'                       => 'product.id',
-            'model'                    => 'product.model',
-            'badge'                    => 'product.badge',
-            'quantity'                 => 'product.quantity',
-            'name'                     => 'product_description.name',
-            'product_description.name' => 'product_description.name',
-        ];
-        $sortColumn = $sortMap[$request->input('sort', 'id')] ?? 'product.id';
-
-        $query = Product::query()
-            ->leftJoin('product_description', function ($join) use ($lang) {
-                $join->on('product_description.product_id', '=', 'product.id')
-                    ->where('product_description.language_code', '=', $lang);
-            })
-            ->select('product.*', 'product_description.name')
-            ->with(['defaultVariant', 'productDraft']); // list nhẹ — KHÔNG load 12 relation
-
-        if ($deleted === 0) {
-            $query->onlyTrashed();
-        } elseif ($deleted === -1) {
-            $query->withTrashed();
+        if (! is_array($value)) {
+            return [];
         }
 
-        if ($keyword !== '') {
-            $query->where('product_description.name', 'like', '%' . $keyword . '%');
-        }
-
-        return $query->orderBy($sortColumn, $order)->paginate($perPage);
-    }
-
-    /** Chi tiết CMS: load đủ relation cho form (gồm cả bản đã xoá mềm). */
-    public function getForCms(int $id): ?Product
-    {
-        return Product::withTrashed()->with($this->cmsDetailRelations())->find($id);
-    }
-
-    public function deleteByIds(array $ids): int
-    {
-        return Product::whereIn('id', $ids)->delete();
-    }
-
-    public function restoreByIds(array $ids): int
-    {
-        return Product::withTrashed()->whereIn('id', $ids)->restore();
-    }
-
-    public function restoreById(int $id): ?Product
-    {
-        $product = Product::withTrashed()->find($id);
-        $product?->restore();
-
-        return $product;
+        return array_values(array_filter(
+            array_map('intval', $value),
+            fn (int $v) => $v > 0
+        ));
     }
 }

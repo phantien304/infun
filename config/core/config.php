@@ -123,7 +123,7 @@ return [
         'zones' => 'zones_',
         'setting' => 'setting',
         'language' => 'language',
-        'manufacturers' => 'manufacturers',
+        'manufacturers' => 'manufacturers_',
         'store_reviews' => 'store_reviews_',
         'store_reviews_featured' => 'store_reviews_featured_',
         'store_reviews_product' => 'store_reviews_product_',

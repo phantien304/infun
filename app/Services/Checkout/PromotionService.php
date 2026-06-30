@@ -22,7 +22,7 @@ class PromotionService
         $ctx = (new CheckoutPromotions())->setItems($items);
 
         $couponCodes = (array) session()->get(getCoreConfig('session.applied_coupons'), []);
-        if (!empty($couponCodes)) {
+        if (! empty($couponCodes)) {
             $result = $this->coupons->applyCodes($couponCodes, $items, $subtotal, contextHasShipping: $hasShipping);
             $ctx->setAppliedCoupons($result['applied'], $result['freeship']);
         }

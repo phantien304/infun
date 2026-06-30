@@ -1,0 +1,50 @@
+# Override compose để bật load-balance + load-test.
+# Cách dùng (BẮT BUỘC truyền cả 2 file):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.lb.yml up -d --build --scale infun-php=3
+#
+# Hoặc set env COMPOSE_FILE để khỏi gõ dài:
+#   PowerShell: $env:COMPOSE_FILE = "docker-compose.yml;docker-compose.lb.yml"
+#   bash:       export COMPOSE_FILE=docker-compose.yml:docker-compose.lb.yml
+#
+# Sau đó:
+#   docker compose up -d --scale infun-php=3      # 3 backend PHP
+#   docker compose ps                              # xem replicas
+#   docker compose logs -f infun-web | grep upstream=   # xem LB route đi đâu
+#
+# Chạy k6:
+#   docker compose run --rm k6 run /scripts/load-test.js
+#   docker compose run --rm -e VUS=50 -e DURATION=60s k6 run /scripts/load-test.js
+
+services:
+  # PHP-FPM: bỏ container_name (vì scale > 1 sẽ conflict) + dán nhãn để
+  # docker compose tự đặt tên dạng infun-php-1, infun-php-2, infun-php-3.
+  infun-php:
+    container_name: null   # huỷ container_name từ file gốc
+    # (Tuỳ chọn) chốt số replica thay vì --scale; comment lại nếu thích
+    # truyền --scale linh hoạt từ CLI.
+    # deploy:
+    #   replicas: 3
+
+  # Nginx: swap config sang phiên bản LB
+  infun-web:
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/default.lb.conf:/etc/nginx/conf.d/default.conf:ro
+
+  # k6 — load tester. Không tự start, chạy bằng `docker compose run`.
+  # Mount thư mục script để dễ sửa và thêm test mới.
+  k6:
+    image: grafana/k6:latest
+    container_name: infun-k6
+    profiles: ["tools"]    # không up cùng stack, chỉ chạy on-demand
+    volumes:
+      - ./docker/k6:/scripts
+    environment:
+      # Mặc định bắn vào nginx LB qua network nội bộ (nhanh hơn qua host).
+      BASE_URL: http://infun-web
+      VUS: "20"
+      DURATION: "30s"
+    networks:
+      - infun-net
+    entrypoint: ["k6"]

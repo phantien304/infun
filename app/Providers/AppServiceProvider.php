@@ -38,10 +38,6 @@ class AppServiceProvider extends ServiceProvider
             Route::post($name . '/del', [$controller, 'del']);
             Route::get($name . '/{id}', [$controller, 'detail']);
         });
-
-        // REST chuẩn + spatie: gom apiResource + restore + bulk, tự gắn
-        // middleware 'cms.permission' để phân quyền theo action (BaseCmsController).
-        // 1 dòng / entity:  Route::cmsApiResource('category', CategoryController::class);
         Route::macro('cmsApiResource', function (string $name, string $controller) {
             Route::middleware('cms.permission')->group(function () use ($name, $controller) {
                 Route::patch($name . '/{id}/restore', [$controller, 'restore']);
@@ -108,8 +104,6 @@ class AppServiceProvider extends ServiceProvider
 
     protected function logSql()
     {
-        // Toggle chủ động: bật/tắt qua config 'system.sql_log' (env SQL_LOG),
-        // độc lập môi trường — SQL_LOG=true để bật, =false để tắt ở bất kỳ đâu.
         if (! getSystemConfig('sql_log')) {
             return;
         }

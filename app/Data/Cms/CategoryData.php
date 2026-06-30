@@ -18,14 +18,12 @@ class CategoryData extends Data
         public ?string $image_icon,
         public ?string $title,
         public ?string $deleted_at,
-        #[DataCollectionOf(CategoryDescriptionData::class)]
         public Collection $category_descriptions,
     ) {
     }
 
     public static function fromModel(Category $category): self
     {
-        // title: ưu tiên cột join (index); show thì lấy từ description đầu tiên.
         $title = $category->title
             ?? ($category->relationLoaded('descriptions')
                 ? $category->descriptions->first()?->title

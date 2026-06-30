@@ -13,6 +13,35 @@
     // Manufacturer landing pages already constrain by manufacturer at the
     // controller level — hide the facet to avoid double-filtering UX.
     $hideManufacturer = $hideManufacturer ?? false;
+
+    /*
+     * Build cây danh mục từ flat $categories (CategoryDTO có parent_id).
+     * Mỗi node có thêm `children` (Collection). Root = parent_id == 0.
+     * Cùng lúc tính chuỗi tổ tiên của node đang active (currentCategoryId
+     * hoặc URL khớp $item->url) để blade auto-expand đúng nhánh.
+     */
+    $byParent = collect();
+    $byId     = collect();
+    foreach ($categories ?? [] as $cat) {
+        $byId->put($cat->id, $cat);
+        $byParent->put($cat->parent_id, ($byParent->get($cat->parent_id) ?? collect())->push($cat));
+    }
+    $rootCategories = $byParent->get(0) ?? collect();
+
+    // Tổ tiên của active node (set các id phải open).
+    $openIds = [];
+    $activeId = null;
+    foreach ($categories ?? [] as $cat) {
+        if ((int) $currentCategoryId === (int) $cat->id || $cat->url === request()->url()) {
+            $activeId = (int) $cat->id;
+            $cursor   = $cat;
+            while ($cursor && (int) $cursor->parent_id !== 0) {
+                $openIds[(int) $cursor->parent_id] = true;
+                $cursor = $byId->get((int) $cursor->parent_id);
+            }
+            break;
+        }
+    }
 @endphp
 
 {{--
@@ -26,16 +55,23 @@
     component layer (app.css) → render đúng dù không có Bootstrap.
 --}}
 <div class="primary-sidebar sticky-sidebar">
-    @if (count($categories))
-        <div class="sidebar-widget widget-category-2 mb-30">
+    @if ($rootCategories->isNotEmpty())
+        {{-- Cố ý KHÔNG dùng class theme `widget-category-2` ở wrapper này:
+             theme có rule `.widget-category-2 ul li { display: flex;
+             justify-content: space-between; border: 1px solid; padding: 9px
+             18px }` biến mỗi <li> thành box floating ngang → submenu lồng
+             rơi ra ngoài sidebar. Dùng Tailwind thuần cho accordion dọc. --}}
+        <div class="sidebar-widget mb-30">
             <h5 class="section-title style-1 mb-30 wow fadeIn animated">Danh mục</h5>
-            <ul>
-                @foreach ($categories as $item)
-                    <li class="@if ($currentCategoryId == $item->id || $item->url == request()->url()) active @endif">
-                        <a href="{{ $item->url }}" title="{!! $item->title !!}">
-                            {!! $item->title !!}
-                        </a>
-                    </li>
+            <ul class="category-tree list-none m-0 p-0">
+                @foreach ($rootCategories as $root)
+                    @include('web::category.structure._side_bar_node', [
+                        'node'       => $root,
+                        'byParent'   => $byParent,
+                        'openIds'    => $openIds,
+                        'activeId'   => $activeId,
+                        'depth'      => 0,
+                    ])
                 @endforeach
             </ul>
         </div>
@@ -48,6 +84,15 @@
 
         <div class="sidebar-widget price_range range mb-30">
             <h5 class="section-title style-1 mb-30 wow fadeIn animated">Bộ lọc tìm kiếm</h5>
+
+            {{-- Meilisearch full-text keyword. Khi để trống, repo dùng pipeline
+                 Eloquent gốc; khi nhập, repo route qua Meilisearch index `products`. --}}
+            <div class="form-group mb-3">
+                <label for="filter-keyword" class="font-black">Tìm kiếm</label>
+                <input type="search" id="filter-keyword" name="filter[keyword]" class="form-control mt-2"
+                    placeholder="Tên sản phẩm, SKU, model..."
+                    value="{{ request()->input('filter.keyword') }}" autocomplete="off">
+            </div>
 
             <div class="price-filter">
                 <div class="price-filter-inner">

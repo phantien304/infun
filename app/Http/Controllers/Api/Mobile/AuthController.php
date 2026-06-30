@@ -31,7 +31,7 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
         if ($validator->fails()) {
-            return errValidator($validator->errors()->first());
+            return response()->json(['message' => $validator->errors()->first()], 422);
         }
 
         $member = Member::query()
@@ -39,23 +39,27 @@ class AuthController extends Controller
             ->first();
 
         if (! $member || ! Hash::check((string) $request->input('password'), (string) $member->password)) {
-            return errValidator(trans('messages.auth.login_failed'));
+            return response()->json(['message' => trans('messages.auth.login_failed')], 422);
         }
 
         // Cấp token mới mỗi lần đăng nhập, KHÔNG xoá token cũ → cho phép khách
         // hàng đăng nhập nhiều thiết bị. Ability ['mobile'] giới hạn phạm vi.
         $token = $member->createToken(self::TOKEN_NAME, ['mobile'])->plainTextToken;
 
-        return successData('login_success', [
-            'token'   => $token,
-            'account' => $this->accountPayload($member),
+        // Contract REST thống nhất: { data, message }.
+        return response()->json([
+            'data' => [
+                'token'   => $token,
+                'account' => $this->accountPayload($member),
+            ],
+            'message' => 'login_success',
         ]);
     }
 
     public function me(Request $request): JsonResponse
     {
-        return successData('', [
-            'account' => $this->accountPayload($request->user()),
+        return response()->json([
+            'data' => ['account' => $this->accountPayload($request->user())],
         ]);
     }
 
@@ -64,7 +68,7 @@ class AuthController extends Controller
         // Chỉ thu hồi token của thiết bị hiện tại (đăng xuất 1 máy).
         $request->user()?->currentAccessToken()?->delete();
 
-        return successNoData('logout_success');
+        return response()->json(['message' => 'logout_success']);
     }
 
     private function accountPayload(Member $member): array

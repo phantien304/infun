@@ -6,16 +6,54 @@ use App\Models\Base\Base;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Scout\Searchable;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Product extends Base implements Auditable
 {
     use SoftDeletes;
+    use Searchable;
     use \OwenIt\Auditing\Auditable;
+
+    public function toSearchableArray(): array
+    {
+        $desc = $this->relationLoaded('description') ? $this->description : $this->description()->first();
+
+        return [
+            'id'                          => (int) $this->id,
+            'sku'                         => (string) ($this->sku ?? ''),
+            'model'                       => (string) ($this->model ?? ''),
+            'name'                        => (string) ($desc->name ?? ''),
+            'description'                 => strip_tags((string) ($desc->description ?? '')),
+            'manufacturer_id'             => (int) ($this->manufacturer_id ?? 0),
+            'sort_order'                  => (int) ($this->sort_order ?? 0),
+            'has_variants'                => (int) ($this->has_variants ?? 0),
+            'min_variant_price'           => $this->min_variant_price !== null ? (float) $this->min_variant_price : null,
+            'max_variant_price'           => $this->max_variant_price !== null ? (float) $this->max_variant_price : null,
+            'max_variant_discount_percent' => $this->max_variant_discount_percent !== null ? (int) $this->max_variant_discount_percent : 0,
+            'viewed'                      => (int) ($this->viewed ?? 0),
+            'rating_avg'                  => $this->rating_avg !== null ? (float) $this->rating_avg : 0.0,
+            'created_at'                  => $this->created_at?->timestamp,
+        ];
+    }
+
+    public function searchableAs(): string
+    {
+        return 'products';
+    }
+
+    protected function makeAllSearchableUsing(Builder $query): Builder
+    {
+        return $query->with('description');
+    }
 
     protected $table = 'product';
     protected $primaryKeyAutoIncrement = 'id';
-    protected $auditExclude = ['viewed', 'rating', 'total_rating', 'updated_at'];
+    protected $auditExclude = [
+        'viewed', 'updated_at',
+        'rating_avg', 'rating_sum', 'review_count', 'rating_distribution', 'rating_updated_at',
+        'min_variant_price', 'max_variant_price', 'max_variant_discount_percent',
+    ];
     public $timestamps = true;
     protected static array $destroyRelations = [
         'productAttributes',

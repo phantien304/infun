@@ -114,30 +114,32 @@
                     dataType: 'json',
                     encode: true
                 }).done(function (data) {
-                    if (!data.success) {
-                        if (data.message.name) {
-                            $('#name-group').addClass('has-error');
-                            $('#name-group .td-input').append('<div class="help-block">' + data.message.name[0] + '</div>');
+                    // 200 -> { success:true, message }
+                    $('form#contact-form').find("input, textarea, select").val('');
+                    $('form#contact-form').append('<div class="alert alert-success mt-30">' + ((data && data.message) || '{{ trans('messages.contact.send_success') }}') + '</div>');
+                    submit.attr("disabled", false);
+                    $('.wait').remove();
+                }).fail(function (xhr) {
+                    // 422 -> { success:false, message, errors:{field:[...]} }; 500 -> { message }
+                    var data = (xhr && xhr.responseJSON) || {};
+                    var errors = data.errors || {};
+                    var map = {
+                        name: '#name-group',
+                        email: '#email-group',
+                        phone: '#phone-group',
+                        service: '#request-service-group',
+                        content: '#content-group'
+                    };
+                    var hadFieldError = false;
+                    Object.keys(map).forEach(function (field) {
+                        if (errors[field]) {
+                            hadFieldError = true;
+                            $(map[field]).addClass('has-error');
+                            $(map[field] + ' .td-input').append('<div class="help-block">' + errors[field][0] + '</div>');
                         }
-                        if (data.message.email) {
-                            $('#email-group').addClass('has-error');
-                            $('#email-group .td-input').append('<div class="help-block">' + data.message.email[0] + '</div>');
-                        }
-                        if (data.message.phone) {
-                            $('#phone-group').addClass('has-error');
-                            $('#phone-group .td-input').append('<div class="help-block">' + data.message.phone[0] + '</div>');
-                        }
-                        if (data.message.service) {
-                            $('#request-service-group').addClass('has-error');
-                            $('#request-service-group .td-input').append('<div class="help-block">' + data.message.service[0] + '</div>');
-                        }
-                        if (data.message.content) {
-                            $('#content-group').addClass('has-error');
-                            $('#content-group .td-input').append('<div class="help-block">' + data.message.content[0] + '</div>');
-                        }
-                    } else {
-                        $('form#contact-form').find("input, textarea, select").val('');
-                        $('form#contact-form').append('<div class="alert alert-success mt-30">' + data.message + '</div>');
+                    });
+                    if (!hadFieldError) {
+                        $('form#contact-form').append('<div class="alert alert-danger mt-30">' + (data.message || '{{ trans('messages.contact.error') }}') + '</div>');
                     }
                     submit.attr("disabled", false);
                     $('.wait').remove();

@@ -126,6 +126,17 @@ return [
     'UpdateSuccess' => 'Cập nhật thành công',
     'ReviewSuccess' => 'Đánh giá sản phẩm thành công',
     'ReportSubmitted' => 'Báo cáo đã được gửi. Cảm ơn bạn!',
+    'contact' => [
+        'name_required'    => 'Vui lòng nhập họ tên',
+        'name_max'         => 'Họ tên quá dài',
+        'email_required'   => 'Vui lòng nhập email',
+        'email_invalid'    => 'Email không hợp lệ',
+        'phone_required'   => 'Vui lòng nhập số điện thoại',
+        'service_required' => 'Vui lòng chọn dịch vụ',
+        'send_success'     => 'Gửi liên hệ thành công.',
+        'send_failed'      => 'Gửi liên hệ thất bại, vui lòng thử lại.',
+        'error'            => 'Có lỗi xảy ra, vui lòng thử lại.',
+    ],
     'review' => [
         'login_required'         => 'Vui lòng đăng nhập để gửi đánh giá.',
         'purchase_required'      => 'Bạn cần mua sản phẩm này trước khi đánh giá.',

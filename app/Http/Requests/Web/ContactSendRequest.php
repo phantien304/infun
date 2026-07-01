@@ -2,19 +2,13 @@
 
 namespace App\Http\Requests\Web;
 
-use Illuminate\Contracts\Validation\Validator;
+use App\Http\Requests\Concerns\RestfulValidation;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Http\Exceptions\HttpResponseException;
 
-/**
- * Validate form liên hệ (POST /lien-he/send). Thay validator legacy
- * `ContactValidator::validateCreate`.
- *
- * Field khớp form blade: name / email / phone / service / content. `content`
- * optional (textarea không `required` ở blade).
- */
 class ContactSendRequest extends FormRequest
 {
+    use RestfulValidation;
+
     public function authorize(): bool
     {
         return true;
@@ -34,25 +28,12 @@ class ContactSendRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required'    => 'Vui lòng nhập họ tên',
-            'name.max'         => 'Họ tên quá dài',
-            'email.required'   => 'Vui lòng nhập email',
-            'email.email'      => 'Email không hợp lệ',
-            'phone.required'   => 'Vui lòng nhập số điện thoại',
-            'service.required' => 'Vui lòng chọn dịch vụ',
+            'name.required'    => trans('messages.contact.name_required'),
+            'name.max'         => trans('messages.contact.name_max'),
+            'email.required'   => trans('messages.contact.email_required'),
+            'email.email'      => trans('messages.contact.email_invalid'),
+            'phone.required'   => trans('messages.contact.phone_required'),
+            'service.required' => trans('messages.contact.service_required'),
         ];
-    }
-
-    /**
-     * Form liên hệ submit qua AJAX; JS client đọc shape
-     * `{success:false, message:{field:[...]}}` với HTTP 200 (jQuery `.done`
-     * chỉ fire trên 2xx). Override để giữ contract legacy thay vì shape mặc
-     * định 422 của Laravel (`{message, errors}`).
-     */
-    protected function failedValidation(Validator $validator): void
-    {
-        throw new HttpResponseException(
-            errValidator($validator->errors()->messages(), 200)
-        );
     }
 }

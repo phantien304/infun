@@ -5,10 +5,6 @@ namespace App\Models\Entities;
 use App\Models\Base\Base;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * Media đính kèm review (ảnh + video) — discriminator `type`.
- * Storage path relative; URL trả qua MyStorage::resizeImage giống product_image.
- */
 class ReviewMedia extends Base
 {
     use SoftDeletes;
@@ -17,6 +13,7 @@ class ReviewMedia extends Base
     public const TYPE_VIDEO = 'video';
 
     protected $table = 'review_media';
+    protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
 

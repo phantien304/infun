@@ -6,13 +6,16 @@
     padding: 10px 0;
 }
 
-.review-list .author, .review-list .created, .review-list .emotion {
+.review-list .author,
+.review-list .created,
+.review-list .emotion {
     float: left;
     margin-bottom: 10px;
     width: 100%;
 }
 
-.review-list .created, .review-list .emotion {
+.review-list .created,
+.review-list .emotion {
     font-size: 14px;
 }
 
@@ -37,7 +40,7 @@
 }
 
 .rating:not(:checked) > label:before {
-    content: '★ ';
+    content: "★ ";
 }
 
 .review-list .text {
@@ -119,14 +122,16 @@ ul li.splide__slide:hover {
     display: none;
 }
 
-.radio-child-choose div label, .select-child-choose div label {
+.radio-child-choose div label,
+.select-child-choose div label {
     padding: 5px 10px;
     background: #f9ebdf;
     border-radius: 5px;
     cursor: pointer;
 }
 
-.radio-child-choose div label.disabled, .select-child-choose div label.disabled {
+.radio-child-choose div label.disabled,
+.select-child-choose div label.disabled {
     background: #f3f3f3;
     color: #d8d8d8;
 }
@@ -177,14 +182,6 @@ ul li.splide__slide:hover {
     border: 1px solid #f4a883;
 }
 
-/* ============================================================
- * Out-of-stock variant value (Shopee-style)
- *
- * `.out-of-stock` class do JS `refreshAvailability` toggle lên wrapper <div>
- * khi `isValueAvailable` trả false (combo selection + value không có in-stock
- * variant nào). Input bên trong cũng được `prop('disabled', true)` → block click.
- * CSS chỉ phụ trách visual indication: mờ + diagonal stripe + grayscale.
- * ============================================================ */
 .radio-choose-v2 .out-of-stock,
 .checkbox-choose-v2 .out-of-stock,
 .radio-child-choose .out-of-stock,
@@ -192,19 +189,14 @@ ul li.splide__slide:hover {
 .input-option .form-check.out-of-stock {
     opacity: 0.45;
     position: relative;
-    cursor: not-allowed !important;
 }
 
 .radio-choose-v2 .out-of-stock label,
 .checkbox-choose-v2 .out-of-stock label,
 .input-option label.out-of-stock-label {
-    cursor: not-allowed !important;
     color: #999;
-    pointer-events: none;
 }
 
-/* Text-only swatch (no-image): nền xám + viền dashed + strikethrough.
-   Phân biệt rõ với active (viền orange solid). */
 .radio-choose-v2.no-image .out-of-stock label,
 .checkbox-choose-v2.no-image .out-of-stock label {
     background: #fafafa !important;
@@ -213,18 +205,14 @@ ul li.splide__slide:hover {
     text-decoration: line-through;
 }
 
-/* Image swatch: desaturate ảnh + viền xám. */
 .radio-choose-v2 .out-of-stock .img-thumbnail {
     border-color: #e2e8f0 !important;
     filter: grayscale(70%);
 }
 
-/* Diagonal stripe overlay — Shopee/Tiki style visual cue.
-   `pointer-events: none` để overlay không chặn click (input disabled mới chặn,
-   không phải overlay). */
 .radio-choose-v2 .out-of-stock::after,
 .checkbox-choose-v2 .out-of-stock::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     background: linear-gradient(
@@ -238,7 +226,6 @@ ul li.splide__slide:hover {
     border-radius: inherit;
 }
 
-/* Select <option disabled> — browser tự style nhưng tăng contrast cho rõ. */
 .select-choose-v2 option:disabled,
 .select-choose option:disabled {
     color: #cbd5e0;
@@ -246,20 +233,8 @@ ul li.splide__slide:hover {
     text-decoration: line-through;
 }
 
-/* ============================================================
- * Thumb strip — hover preview state (Shopee UX)
- *
- * JS toggle `.is-hovering` lên strip + `.is-hover-active` lên thumb được hover.
- * Khi `.is-hovering` active:
- *   - Suppress visual của `.slick-current` thật (border + triangle về trong)
- *   - Áp visual `.slick-current` lên `.is-hover-active`
- * Mouseleave strip → JS gỡ class → `.slick-current` thật hiện lại.
- *
- * Style mirror chính xác `.slider-nav-thumbnails .slick-slide.slick-current`
- * trong main.css line 3629-3641. Sync nếu main.css thay đổi.
- * ============================================================ */
 .slider-nav-thumbnails .slick-slide.is-hover-active img {
-    border: 2px solid #F4a883;
+    border: 2px solid #f4a883;
 }
 
 .slider-nav-thumbnails .slick-slide.is-hover-active::before {
@@ -275,12 +250,14 @@ ul li.splide__slide:hover {
     width: 0;
 }
 
-/* Khi đang hover bất kỳ thumb nào, ẩn visual của slick-current thật. */
-.slider-nav-thumbnails.is-hovering .slick-slide.slick-current:not(.is-hover-active) img {
+.slider-nav-thumbnails.is-hovering
+    .slick-slide.slick-current:not(.is-hover-active)
+    img {
     border-color: transparent;
 }
 
-.slider-nav-thumbnails.is-hovering .slick-slide.slick-current:not(.is-hover-active)::before {
+.slider-nav-thumbnails.is-hovering
+    .slick-slide.slick-current:not(.is-hover-active)::before {
     display: none;
 }
 
@@ -305,7 +282,7 @@ ul li.splide__slide:hover {
     -ms-border-radius: 50%;
     -o-border-radius: 50%;
     border-radius: 50%;
-    color: #FFFFFF;
+    color: #ffffff;
     font-size: 12px;
     font-weight: 600;
     width: 50px;
@@ -335,7 +312,7 @@ ul li.splide__slide:hover {
 
 .product-image .product-label-special {
     font-size: 22px;
-    background: #D20303;
+    background: #d20303;
 }
 
 .product-image .image img {
@@ -391,9 +368,9 @@ ul li.splide__slide:hover {
 }
 
 .ui-widget-header {
-    border: 1px solid #F4a883;
-    background: #F4a883 50% 50% repeat-x;
-    color: #FFFFFF;
+    border: 1px solid #f4a883;
+    background: #f4a883 50% 50% repeat-x;
+    color: #ffffff;
     font-weight: 500;
 }
 
@@ -408,7 +385,7 @@ ul li.splide__slide:hover {
 
 .ui-dialog .ui-dialog-buttonpane button {
     min-width: 150px;
-    margin: 0.5em 0.4em 0.5em .5em;
+    margin: 0.5em 0.4em 0.5em 0.5em;
     padding: 8px 5px;
     font-size: 14px;
 }
@@ -419,8 +396,8 @@ ul li.splide__slide:hover {
 }
 
 .ui-dialog-buttonset button {
-    background: #F4a883;
-    border: 1px solid #F4a883;
+    background: #f4a883;
+    border: 1px solid #f4a883;
     color: #ffffff;
     border-radius: 5px;
 }
@@ -440,12 +417,13 @@ ul li.splide__slide:hover {
     border-radius: 5px;
 }
 
-.cart-info table tr td img, .cart-info table tr td input {
+.cart-info table tr td img,
+.cart-info table tr td input {
     display: inline-block;
     vertical-align: middle;
 }
 
-input[type=image] {
+input[type="image"] {
     border: 0;
 }
 
@@ -453,11 +431,15 @@ input[type=image] {
     vertical-align: middle;
 }
 
-.cart-info td.image, .cart-info td.quantity, .cart-info td.price, .cart-info td.total, .cart-info thead td.name {
+.cart-info td.image,
+.cart-info td.quantity,
+.cart-info td.price,
+.cart-info td.total,
+.cart-info thead td.name {
     vertical-align: middle;
 }
 
-.cart-info td.quantity input[type=number] {
+.cart-info td.quantity input[type="number"] {
     max-width: 80px;
     display: inline-block;
 }
@@ -496,7 +478,7 @@ input[type=image] {
 }
 
 .box .box-content {
-    background: #FFFFFF;
+    background: #ffffff;
     border: 1px solid #ebeef2;
 }
 
@@ -518,7 +500,8 @@ input[type=image] {
     margin: 0;
 }
 
-.product-items.last, .product-items:last-child {
+.product-items.last,
+.product-items:last-child {
     border-bottom: 0;
 }
 
@@ -544,7 +527,7 @@ input[type=image] {
 .sidebar .product-block {
     display: flex;
     /*padding: 10px;*/
-    background-color: #FFFFFF;
+    background-color: #ffffff;
     border-bottom: 1px solid #ebeef2;
 }
 
@@ -569,7 +552,7 @@ input[type=image] {
     -ms-border-radius: 50%;
     -o-border-radius: 50%;
     border-radius: 50%;
-    color: #FFFFFF;
+    color: #ffffff;
     font-size: 12px;
     font-weight: 600;
     width: 50px;
@@ -595,7 +578,7 @@ input[type=image] {
 
 .product-label.product-label-special {
     font-size: 22px;
-    background: #D20303;
+    background: #d20303;
 }
 
 .sidebar .product-block .image .product-label-special {
@@ -603,8 +586,8 @@ input[type=image] {
 }
 
 .product-block .img {
-    -webkit-transition: left .7s cubic-bezier(.75, 0, .175, 1);
-    transition: left .7s cubic-bezier(.75, 0, .175, 1);
+    -webkit-transition: left 0.7s cubic-bezier(0.75, 0, 0.175, 1);
+    transition: left 0.7s cubic-bezier(0.75, 0, 0.175, 1);
 }
 
 .sidebar .product-meta {
@@ -633,7 +616,7 @@ input[type=image] {
 }
 
 .product-block .name a {
-    color: #1E1F1F;
+    color: #1e1f1f;
     font-size: 15px;
     font-weight: 600;
     text-decoration: none;
@@ -717,7 +700,7 @@ input[type=image] {
 }
 
 .search-order .with-650 {
-    width: 650px !important;;
+    width: 650px !important;
 }
 
 .search-order .table th {
@@ -846,10 +829,10 @@ input[type=image] {
     margin-left: 5px;
     background: #ffffff;
     cursor: pointer;
-    color: #F4a883;
+    color: #f4a883;
     text-align: center;
     line-height: 41px;
-    border: 1px solid #F4a883;
+    border: 1px solid #f4a883;
     width: 41px;
     height: 41px;
     -webkit-border-radius: 3px;
@@ -864,13 +847,15 @@ input[type=image] {
     transition: background-color 400ms linear;
 }
 
-.wishlist.active .product-icon, .wishlist .product-icon:hover {
-    background-color: #F4a883;
-    color: #FFFFFF;
+.wishlist.active .product-icon,
+.wishlist .product-icon:hover {
+    background-color: #f4a883;
+    color: #ffffff;
     border-color: transparent;
 }
 
-.post-by img.avatar, .entry-content-2 .entry-meta img.avatar {
+.post-by img.avatar,
+.entry-content-2 .entry-meta img.avatar {
     display: inline-block;
     margin: -3px 5px 0 5px;
     width: 18px;
@@ -887,7 +872,7 @@ input[type=image] {
     align-items: center;
     width: 40px;
     height: 40px;
-    color: #FFFFFF;
+    color: #ffffff;
 }
 
 .ingredient-content .wow {
@@ -895,7 +880,8 @@ input[type=image] {
     border-radius: 15px;
 }
 
-.icon-skincare, .icon-effect {
+.icon-skincare,
+.icon-effect {
     max-width: 18px;
     height: auto;
     vertical-align: text-top;
@@ -938,8 +924,8 @@ ul.ingredients li div.safety {
     margin-bottom: 0;
     display: block;
     font-size: 2em;
-    margin-block-start: .67em;
-    margin-block-end: .67em;
+    margin-block-start: 0.67em;
+    margin-block-end: 0.67em;
     margin-inline-start: 0;
     margin-inline-end: 0;
     font-weight: 700;
@@ -948,8 +934,8 @@ ul.ingredients li div.safety {
 .product-description h2 {
     display: block;
     font-size: 1.5em;
-    margin-block-start: .83em;
-    margin-block-end: .83em;
+    margin-block-start: 0.83em;
+    margin-block-end: 0.83em;
     margin-inline-start: 0;
     margin-inline-end: 0;
     font-weight: 700;
@@ -992,23 +978,25 @@ ul.ingredients li div.safety {
     margin: 0 10px;
 }
 
-a.txt_color_1, .txt_color_1 {
+a.txt_color_1,
+.txt_color_1 {
     color: #3bb77e;
 }
 
-.cart-info table tr td img, .cart-info table tr td input {
+.cart-info table tr td img,
+.cart-info table tr td input {
     display: inline-block;
     vertical-align: middle;
 }
 
-.cart-info td.quantity input[type=image] {
+.cart-info td.quantity input[type="image"] {
     padding-left: 0;
     width: 20px;
     height: 20px;
     vertical-align: text-bottom;
 }
 
-.cart-info td.quantity input[type=number] {
+.cart-info td.quantity input[type="number"] {
     max-width: 80px;
     display: inline-block;
 }
@@ -1030,7 +1018,7 @@ a.txt_color_1, .txt_color_1 {
 .rating:not(:checked) > label {
     float: right;
     width: 1em;
-    padding: 0 .1em;
+    padding: 0 0.1em;
     overflow: hidden;
     white-space: nowrap;
     cursor: pointer;
@@ -1040,7 +1028,7 @@ a.txt_color_1, .txt_color_1 {
 }
 
 .rating:not(:checked) > label:before {
-    content: '★ ';
+    content: "★ ";
 }
 
 .rating > input:checked ~ label {

@@ -194,14 +194,15 @@
             }
             const article = btn.closest('.review-item');
             if (! article) return;
-            if (data.helpful_count !== undefined) {
-                article.querySelector('.ri-btn--helpful .ri-count').textContent = '(' + data.helpful_count + ')';
+            const d = data.data || {};
+            if (d.helpful_count !== undefined) {
+                article.querySelector('.ri-btn--helpful .ri-count').textContent = '(' + d.helpful_count + ')';
             }
-            if (data.unhelpful_count !== undefined) {
-                article.querySelector('.ri-btn--unhelpful .ri-count').textContent = '(' + data.unhelpful_count + ')';
+            if (d.unhelpful_count !== undefined) {
+                article.querySelector('.ri-btn--unhelpful .ri-count').textContent = '(' + d.unhelpful_count + ')';
             }
             article.querySelectorAll('.ri-btn--helpful, .ri-btn--unhelpful').forEach(b => {
-                b.setAttribute('aria-pressed', String(b.dataset.vote === String(data.my_vote)));
+                b.setAttribute('aria-pressed', String(b.dataset.vote === String(d.my_vote)));
             });
         })
         .catch(err => console.warn('vote failed', err));

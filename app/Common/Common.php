@@ -46,6 +46,58 @@ function successData($key = '', $data = null, $totalRow = 0, $code = 200)
     ], $code);
 }
 
+function respondSuccess($data = null, string $message = '', int $status = 200, array $meta = []): \Illuminate\Http\JsonResponse
+{
+    $payload = [
+        'success' => true,
+        'message' => $message,
+        'data'    => $data,
+    ];
+    if (! empty($meta)) {
+        $payload['meta'] = $meta;
+    }
+
+    return response()->json($payload, $status);
+}
+
+function respondCreated($data = null, string $message = ''): \Illuminate\Http\JsonResponse
+{
+    return respondSuccess($data, $message, 201);
+}
+
+function respondAccepted($data = null, string $message = ''): \Illuminate\Http\JsonResponse
+{
+    return respondSuccess($data, $message, 202);
+}
+
+function respondMessage(string $message = '', int $status = 200): \Illuminate\Http\JsonResponse
+{
+    return respondSuccess(null, $message, $status);
+}
+
+function respondError(string $message = '', int $status = 400, array $errors = []): \Illuminate\Http\JsonResponse
+{
+    $payload = [
+        'success' => false,
+        'message' => $message,
+    ];
+    if (! empty($errors)) {
+        $payload['errors'] = $errors;
+    }
+
+    return response()->json($payload, $status);
+}
+
+function respondNotFound(string $message = ''): \Illuminate\Http\JsonResponse
+{
+    return respondError($message, 404);
+}
+
+function respondUnprocessable(string $message = '', array $errors = []): \Illuminate\Http\JsonResponse
+{
+    return respondError($message, 422, $errors);
+}
+
 function getForwardedIp()
 {
     if (filled(request()->server('HTTP_X_FORWARDED_FOR'))) {

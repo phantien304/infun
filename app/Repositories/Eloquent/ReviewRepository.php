@@ -88,7 +88,7 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
         ];
         $userId = (int) getCurrentUserId();
         if ($userId > 0) {
-            $relations['helpfuls'] = fn ($q) => $q->where('user_id', $userId);
+            $relations['reviewHelpfuls'] = fn ($q) => $q->where('user_id', $userId);
         }
         return $relations;
     }
@@ -152,11 +152,6 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
         );
     }
 
-    /**
-     * Verified purchase: user X đã hoàn thành order chứa product Y chưa.
-     * Trả order_id (proof) để gắn vào review.order_id, hoặc null.
-     * Status complete đọc từ config_complete_status (mặc định 5 — OpenCart).
-     */
     public function findVerifiedOrderId(int $userId, int $productId): ?int
     {
         if ($userId <= 0) {
@@ -167,7 +162,7 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
 
         $row = DB::table('orders as o')
             ->join('orders_product as op', 'op.order_id', '=', 'o.id')
-            ->where('o.customer_id', $userId)
+            ->where('o.user_id', $userId)
             ->where('op.product_id', $productId)
             ->where('o.order_status_id', $completeStatus)
             ->orderByDesc('o.id')
@@ -177,10 +172,6 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
         return $row ? (int) $row->id : null;
     }
 
-    /**
-     * Check user đã review product này từ order verified chưa — UNIQUE
-     * (order_id, product_id) ở DB cũng enforce.
-     */
     public function hasReviewedFromOrder(int $userId, int $productId): bool
     {
         return Review::where('user_id', $userId)
@@ -194,11 +185,6 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
         $this->forgetCacheTagged([getCoreConfig('cache.review.tag_product').$productId]);
     }
 
-    /**
-     * Flush toàn bộ cache review (tag root). Dùng từ observer khi admin
-     * sửa criteria / tag list (vd thêm criteria mới → mọi product's averages
-     * cần re-compute) hoặc khi bulk import review.
-     */
     public function flushCache(): void
     {
         $this->forgetCacheTagged([getCoreConfig('cache.review.tag_root')]);

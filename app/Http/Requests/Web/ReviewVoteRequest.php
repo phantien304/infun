@@ -2,14 +2,13 @@
 
 namespace App\Http\Requests\Web;
 
+use App\Http\Requests\Concerns\RestfulValidation;
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Validate AJAX vote helpful/unhelpful. Auth middleware đã enforce login ở
- * route layer; authorize() chỉ cần re-check.
- */
 class ReviewVoteRequest extends FormRequest
 {
+    use RestfulValidation;
+
     public function authorize(): bool
     {
         return $this->user() !== null;

@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests\Web;
 
+use App\Http\Requests\Concerns\RestfulValidation;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ReviewReportRequest extends FormRequest
 {
+    use RestfulValidation;
+
     public function authorize(): bool
     {
         return $this->user() !== null;

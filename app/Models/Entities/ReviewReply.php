@@ -14,6 +14,7 @@ class ReviewReply extends Base
     public const AUTHOR_ADMIN    = 2;
 
     protected $table = 'review_reply';
+    protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
 

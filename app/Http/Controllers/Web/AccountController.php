@@ -18,6 +18,7 @@ use App\Services\Account\AccountService;
 use App\Services\Account\AddressService;
 use App\Services\Account\WishlistService;
 use App\Services\Checkout\RefundService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
@@ -156,11 +157,6 @@ class AccountController extends Controller
         ]);
     }
 
-    /**
-     * Endpoint AJAX/POST `/account/add-address` (no auth required). Visitor
-     * lưu địa chỉ vãng lai vào cookie; login user set 1 address là default
-     * trong cookie để form checkout pre-fill.
-     */
     public function addAddress(AccountAddAddressRequest $request)
     {
         $this->addressService->applyQuickAddress(
@@ -193,26 +189,20 @@ class AccountController extends Controller
         ]);
     }
 
-    /**
-     * AJAX toggle wishlist từ trang sản phẩm. Trả JSON shape giữ
-     * backward-compat với JS client:
-     *  - `delete`: true nếu state mới là đã xoá, false nếu đã thêm.
-     *  - `total`: tổng số wishlist của user sau toggle.
-     */
-    public function userWishlist(Request $request)
+    public function userWishlist(Request $request): JsonResponse
     {
         $userId = (int) getCurrentUserId();
         $productId = (int) $request->get('product_id', 0);
         if ($productId <= 0) {
-            return errValidator(trans('messages.ErrorNotFoundProduct'));
+            return respondUnprocessable(trans('messages.ErrorNotFoundProduct'));
         }
 
         $added = $this->wishlistService->toggle($userId, $productId);
         $total = $this->wishlistService->countForUser($userId);
 
-        return successData(
-            $added ? 'AddWishlistSuccess' : 'DeleteWishlistSuccess',
-            ['delete' => ! $added, 'total' => $total],
+        return respondSuccess(
+            ['deleted' => ! $added, 'total' => $total],
+            trans('messages.' . ($added ? 'AddWishlistSuccess' : 'DeleteWishlistSuccess')),
         );
     }
 
@@ -235,11 +225,6 @@ class AccountController extends Controller
 
     public function detailOrder(Request $request, $id)
     {
-        // ZaloPay redirect sau khi user thanh toán lại từ trang detail.
-        // Verify + cập nhật status được CheckoutPaymentService::processRedirect
-        // xử lý — vì checkout.repayment redirect về account.detailOrder, cùng
-        // luồng. Để tránh DI thêm CheckoutPaymentService vào controller này
-        // (đã đủ dày), inject ad-hoc qua container.
         $appTransId = (string) $request->get('apptransid', '');
         if (filled($appTransId)) {
             app(\App\Services\Checkout\CheckoutPaymentService::class)

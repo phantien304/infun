@@ -7,6 +7,7 @@ use App\Models\Base\Base;
 class ReviewReport extends Base
 {
     protected $table = 'review_report';
+    protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
 

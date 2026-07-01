@@ -728,136 +728,129 @@ $(document).ready(function () {
         }
 
         /**
-         * Disable mọi option_value không feasible với selection hiện tại.
-         * Áp `disabled` attribute (browser block click + style mờ mặc định) +
-         * class `.out-of-stock` trên wrapper để CSS custom thêm nếu cần.
-         *
-         * Khi `allowAutoUncheck = true`: nếu 1 input/option đang checked bị
-         * disable do constraint mới (vd user vừa đổi Color sang Blue làm
-         * Size=M không còn variant in-stock) → tự uncheck + dọn `has-choose`
-         * /`active` của group. Form submit sẽ không kẹt thiếu key (input
-         * disabled không serialize qua jQuery .serialize()).
-         *
-         * Sau khi auto-uncheck, selection lỏng hơn → re-run refresh 1 lần
-         * (allowAutoUncheck=false, defensive chống loop dù logic không thể
-         * loop vì uncheck chỉ thả constraint) để cập nhật lại disabled state
-         * của các option_value vừa được "giải phóng". Cuối cùng re-apply giá
-         * — nếu selection mới khớp 1 variant đầy đủ thì hiển thị giá đó,
-         * không thì fallback về defaultVariant để user không thấy giá của
-         * combo vừa "chết".
+         * Feasibility check: tồn tại ít nhất 1 in-stock variant khớp TẤT CẢ
+         * cặp (option_id, option_value_id) trong `selected`. Selection từng
+         * phần (prefix của 1 variant còn hàng) vẫn feasible; selection rỗng
+         * luôn feasible.
          */
-        function refreshAvailability(allowAutoUncheck) {
+        function isSelectionFeasible(selected) {
+            var keys = Object.keys(selected);
+            if (!keys.length) return true;
+            return variantMatrix.some(function (v) {
+                var attrs = v.attributes || {};
+                var matches = keys.every(function (k) {
+                    return String(attrs[k]) === String(selected[k]);
+                });
+                if (!matches) return false;
+                return !v.subtract || (v.available && v.available > 0);
+            });
+        }
+
+        /**
+         * Clear toàn bộ UI + hidden value của 1 option (radio / image /
+         * checkbox / select). Dùng khi auto-resolve: user vừa chọn value mới ở
+         * option O khiến (các) option khác đang chọn thành combo KHÔNG tồn tại
+         * → bỏ chọn chúng, GIỮ lại option O vừa click.
+         */
+        function deselectOption(optionId) {
+            var $group = $('#option-' + optionId);
+            $group.find('input[type=radio], input[type=checkbox]')
+                .prop('checked', false);
+            $group.find('.active').removeClass('active');
+            $group.removeClass('has-choose');
+            if ($group.is('select')) {
+                $group.val('');
+            }
+            $('#option-value-' + optionId).val('');
+        }
+
+        /**
+         * Bidirectional availability (Shopee/Lazada-style). Value V của option
+         * O còn hàng ⇔ tồn tại in-stock variant khớp (selection của các option
+         * KHÁC) ∪ {O: V}. KHÔNG còn short-circuit "option đã chọn thì mọi value
+         * enable" — cả trục Size lẫn trục Màu cùng grey nhất quán, không lệch.
+         *
+         * Swatch KHÔNG bị hard-disable nữa: chỉ gắn class `.out-of-stock`
+         * (visual gạch chéo + xám). Click vào swatch out-of-stock VẪN được —
+         * handler sẽ auto-resolve (bỏ chọn trục xung đột) nên user không bao
+         * giờ kẹt ở combo không tồn tại. Value đang được chọn của mỗi option
+         * không bao giờ tự đánh dấu out-of-stock.
+         *
+         * `<select>` là ngoại lệ: vẫn disable `<option>` hết hàng vì dropdown
+         * không có cơ chế "click để re-base" như swatch.
+         */
+        function refreshAvailability() {
             if (!Array.isArray(variantMatrix) || !variantMatrix.length) return;
             var selected = readSelectedAttributes();
             var hasSelection = Object.keys(selected).length > 0;
-            var uncheckedAny = false;
 
-            // Shopee classic UX: value V của option O bị disable CHỈ khi:
-            //   1) Đã có selection ở option khác (hasSelection=true), VÀ
-            //   2) O chưa được chọn (optionAlreadySelected=false), VÀ
-            //   3) Combo `selected ∪ {O: V}` không có in-stock variant nào.
-            //
-            // Init (no selection) → ALL enable. Lý do bỏ "dead-end from init":
-            // edge case khi cache cũ chưa flush sau seed/admin update làm
-            // matrix có flag subtract=true + available=0 cho MỌI variant → toàn
-            // bộ swatch grey ngay từ init, user tưởng product hỏng. Cách an
-            // toàn hơn: cho user pick value đầu tự do, sau đó mới grey out
-            // value option khác không match. Nếu cả product hết hàng thật,
-            // header product đã hiển thị "Liên hệ mua hàng" / badge khác.
-
-            // Radio + checkbox: data-option-id + data-option-value-id nằm trên input
+            // Radio + image + checkbox: data-option-id / data-option-value-id ở input.
             $('.input-option input[type=radio][data-option-value-id], ' +
               '.input-option input[type=checkbox][data-option-value-id]').each(function () {
                 var $input = $(this);
                 var optionId = parseInt($input.attr('data-option-id'), 10);
                 var valueId = parseInt($input.attr('data-option-value-id'), 10);
                 if (!optionId || !valueId) return;
-                // Custom field nếu render radio/select: KHÔNG check availability
-                // (luôn cho user chọn được). Variant chỉ áp dụng cho variant role.
+                // Custom field (role != variant) không tham gia stock → luôn enable.
                 if (!VARIANT_OPTION_IDS.has(optionId)) return;
 
-                var optionAlreadySelected = selected[optionId] !== undefined;
-                var ok = !hasSelection
-                       || optionAlreadySelected
-                       || isValueAvailable(selected, optionId, valueId);
+                var isSelectedValue = String(selected[optionId]) === String(valueId);
+                var ok = isValueAvailable(selected, optionId, valueId);
+                var bad = hasSelection && !ok && !isSelectedValue;
 
-                $input.prop('disabled', !ok);
-                // Toggle class trên wrapper + label sibling. parent() cho
-                // radio-choose-v2 (wrapper <div>) hoặc checkbox-choose-v2
-                // (wrapper <div class="form-check ...">). Bổ sung label để CSS
-                // out-of-stock applied dù markup variant nào.
+                // Không hard-disable → cho phép click để switch + auto-resolve.
+                $input.prop('disabled', false);
                 var $wrap = $input.parent();
-                $wrap.toggleClass('out-of-stock', !ok);
-                $wrap.find('label').toggleClass('out-of-stock-label', !ok);
-
-                if (!ok && allowAutoUncheck && $input.is(':checked')) {
-                    $input.prop('checked', false);
-                    uncheckedAny = true;
-                }
+                $wrap.toggleClass('out-of-stock', bad);
+                $wrap.find('label').toggleClass('out-of-stock-label', bad);
             });
 
-            // Select: data-option-id ở <select>, data-option-value-id ở từng <option>
+            // Select: data-option-value-id ở từng <option>. Disable option hết hàng.
             $('.input-option select[data-option-id]').each(function () {
                 var $select = $(this);
                 var optionId = parseInt($select.attr('data-option-id'), 10);
-                if (!optionId) return;
-                if (!VARIANT_OPTION_IDS.has(optionId)) return;
-                var currentVal = $select.val();
-                var optionAlreadySelected = selected[optionId] !== undefined;
+                if (!optionId || !VARIANT_OPTION_IDS.has(optionId)) return;
 
                 $select.find('option[data-option-value-id]').each(function () {
                     var $opt = $(this);
                     var valueId = parseInt($opt.attr('data-option-value-id'), 10);
                     if (!valueId) return;
-
-                    var ok = !hasSelection
-                           || optionAlreadySelected
-                           || isValueAvailable(selected, optionId, valueId);
-                    $opt.prop('disabled', !ok);
-
-                    if (!ok && allowAutoUncheck && String(currentVal) === String(valueId)) {
-                        $select.val('');
-                        $('#option-value-' + optionId).val('');
-                        uncheckedAny = true;
-                    }
+                    var isSelectedValue = String(selected[optionId]) === String(valueId);
+                    var ok = isValueAvailable(selected, optionId, valueId);
+                    $opt.prop('disabled', hasSelection && !ok && !isSelectedValue);
                 });
             });
-
-            if (uncheckedAny) {
-                // Dọn `has-choose` / `active` cho group radio/checkbox đã rỗng.
-                // Bắt cả select có val rỗng sau auto-clear (id select trùng pattern
-                // `#option-{id}` với group radio/checkbox).
-                $('.radio-choose-v2, .checkbox-choose-v2').each(function () {
-                    var $group = $(this);
-                    var anyChecked = $group.find('input:checked').length > 0;
-                    $group.toggleClass('has-choose', anyChecked);
-                    if (!anyChecked) {
-                        $group.children('.active').removeClass('active');
-                    }
-                });
-                $('.select-choose-v2').each(function () {
-                    var $select = $(this);
-                    $('#option-' + $select.data('option')).toggleClass('has-choose', !!$select.val());
-                });
-
-                // Re-run refresh (no auto-uncheck → no recursion) để cập nhật
-                // disabled state cho các value vừa được giải phóng.
-                refreshAvailability(false);
-
-                // Re-apply giá: combo mới đủ thì hiển thị giá đó, không thì
-                // rơi về defaultVariant để tránh hiển thị giá "ma".
-                var newVariant = findVariant(readSelectedAttributes());
-                if (newVariant) {
-                    applyVariant(newVariant);
-                } else if (defaultVariant) {
-                    applyVariant(defaultVariant);
-                }
-            }
         }
 
-        function recompute() {
-            applyVariant(findVariant(readSelectedAttributes()));
-            refreshAvailability(true);
+        /**
+         * Sau mỗi thay đổi selection:
+         *  1) Auto-resolve conflict — nếu combo hiện tại không tồn tại (user
+         *     vừa click value làm trục kia xung đột), bỏ chọn các option KHÁC
+         *     (giữ option `keepOptionId` vừa click) tới khi feasible.
+         *  2) Áp giá theo variant khớp đầy đủ; selection từng phần → fallback
+         *     defaultVariant (KHÔNG swap ảnh, giữ ảnh swatch user vừa chọn).
+         *  3) Refresh trạng thái grey của cả 2 trục.
+         *
+         * @param {number} [keepOptionId] option vừa được user tương tác.
+         */
+        function recompute(keepOptionId) {
+            keepOptionId = parseInt(keepOptionId, 10);
+
+            var selected = readSelectedAttributes();
+            if (!isSelectionFeasible(selected)) {
+                Object.keys(selected).forEach(function (optId) {
+                    if (parseInt(optId, 10) === keepOptionId) return;
+                    deselectOption(parseInt(optId, 10));
+                });
+            }
+
+            var variant = findVariant(readSelectedAttributes());
+            if (variant) {
+                applyVariant(variant);
+            } else if (defaultVariant) {
+                applyVariant(defaultVariant, false);
+            }
+            refreshAvailability();
         }
 
         // ---- Init: áp variant default khi page load (CHỈ giá + nút, KHÔNG ảnh) -----
@@ -865,36 +858,23 @@ $(document).ready(function () {
             // swapImg=false để main slider giữ product.image (= $images[0]),
             // khớp với thumb đầu. Variant.image chỉ swap khi user actively click.
             if (defaultVariant) applyVariant(defaultVariant, false);
-            // Init không có selection → không có gì để uncheck. Vẫn truyền
-            // `true` cho thống nhất với recompute(); nếu DOM có pre-checked
-            // value từ server-side trùng combo out-of-stock thì cũng được dọn.
-            refreshAvailability(true);
+            // Init không selection → chưa grey gì. refreshAvailability chạy
+            // để đồng bộ trạng thái nếu DOM có value pre-checked từ server.
+            refreshAvailability();
         });
 
         // ---- Variant role: radio / image swatch -------
-        // Click pattern: lần đầu click 1 swatch → select (active class +
-        // checked + swap ảnh). Click LẠI swatch đã active → de-select (uncheck
-        // + clear active + reset slider về slide 0). Cho phép user "huỷ" việc
-        // chọn color khi muốn xem lại toàn bộ product/picker khác.
+        // Click pattern: click 1 swatch → select (active + checked + swap ảnh).
+        // Click LẠI swatch đã active → de-select (uncheck + clear active +
+        // reset slider về slide 0).
         //
-        // Chặn click trên LABEL của input disabled (label click không bubble
-        // qua input nên handler input :disabled không miss). Browser tự block
-        // toggle radio disabled, nhưng label vẫn fire click event → bằng
-        // cách stopPropagation + preventDefault sớm ở wrapper out-of-stock,
-        // không cho focus/active visual rò ra.
-        $(document).on('click', '.out-of-stock, .out-of-stock-label', function (e) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            return false;
-        });
-        $(document).on('click', '.radio-choose-v2 input', function (e) {
+        // Swatch out-of-stock KHÔNG bị chặn click nữa: click 1 combo không tồn
+        // tại sẽ được recompute() auto-resolve (bỏ chọn trục xung đột, giữ
+        // value vừa click) → re-base selection, không kẹt. Đây là hành vi
+        // Shopee/Lazada thật: bấm bất kỳ swatch nào cũng chuyển được.
+        $(document).on('click', '.radio-choose-v2 input', function () {
             var $input = $(this);
-            if ($input.prop('disabled')) {
-                e.preventDefault();
-                return;
-            }
-
-            var optionId = $input.data('option');
+            var optionId = parseInt($input.data('option'), 10);
             var $wrapper = $input.parent();
             var $group = $input.closest('.radio-choose-v2');
 
@@ -906,9 +886,7 @@ $(document).ready(function () {
                 $('#option-value-' + optionId).val('');
 
                 resetMainSlider();
-                // Reset price/stock về defaultVariant (KHÔNG swap ảnh).
-                if (defaultVariant) applyVariant(defaultVariant, false);
-                refreshAvailability(true);
+                recompute(optionId);
                 return;
             }
 
@@ -920,31 +898,30 @@ $(document).ready(function () {
             // Capture label cho hidden input (backend đọc khi add-to-cart).
             $('#option-value-' + optionId).val($input.next('label').text().trim());
 
-            // Image swatch: navigate slick tới ảnh variant ngay khi click,
-            // không chờ đủ tổ hợp. swapMainImage ưu tiên goToImageBySrc.
+            // Image swatch: navigate slick tới ảnh variant ngay khi click.
             var swatch = $input.attr('data-image');
             if (swatch) swapMainImage(swatch);
 
-            recompute();
+            recompute(optionId);
         });
 
         $(document).on('click', '.checkbox-choose-v2 input', function () {
             var $input = $(this);
-            var optionId = $input.data('option');
+            var optionId = parseInt($input.data('option'), 10);
             var $group = $('#option-' + optionId);
             var hasChecked = $group.find('input:checked').length > 0;
             $group.toggleClass('has-choose', hasChecked);
 
-            recompute();
+            recompute(optionId);
         });
 
         $(document).on('change', '.select-choose-v2', function () {
             var $select = $(this);
-            var optionId = $select.data('option');
+            var optionId = parseInt($select.data('option'), 10);
             var $opt = $select.find(':selected');
             $('#option-' + optionId).toggleClass('has-choose', !!$select.val());
             $('#option-value-' + optionId).val($opt.attr('data-label') || '');
-            recompute();
+            recompute(optionId);
         });
 
         $(document).on('input change', '.input-choose, .textarea-choose', function () {
@@ -983,9 +960,9 @@ $(document).ready(function () {
             $('html, body').animate({ scrollTop: Math.max(0, $first.offset().top - 120) }, 200);
         }
     }
-    // Laravel default 422 errors → reshape về `message[optId].parent` để
-    // dùng chung renderer. Safety net khi FormRequest::failedValidation
-    // chưa được override (vd endpoint mới).
+    // Laravel chuẩn 422 → `{ message, errors: { "option.<id>.parent": [...],
+    // quantity: [...] } }`. reshape về `{ optId: {parent}, quantity }` cho
+    // renderOptionErrors dùng chung.
     function reshapeLaravelErrors(errors) {
         var out = {};
         if (!errors || typeof errors !== 'object') return out;
@@ -997,6 +974,30 @@ $(document).ready(function () {
             if (k === 'quantity') { out.quantity = msg; continue; }
         }
         return out;
+    }
+    // Lỗi "toàn cục" (string) — 404/422 business rule/500 — hiển thị ngay dưới
+    // khối số lượng, cạnh nút mua hàng.
+    function renderGlobalError(message) {
+        if (!message || typeof message !== 'string') return;
+        var $err = $('<span class="error text-danger option-error d-block mt-1"></span>').text(message);
+        $('#product-quantity').html($err);
+        if ($err.offset()) {
+            $('html, body').animate({ scrollTop: Math.max(0, $err.offset().top - 120) }, 200);
+        }
+    }
+    // Xử lý mọi response lỗi (RESTful) cho add-to-cart / consult-sign:
+    //  422 + errors  → validation input, render dưới từng option
+    //  404/422/500   → message string, render global
+    function handleCartAjaxError(xhr) {
+        var json = (xhr && xhr.responseJSON) || {};
+        if (xhr && xhr.status === 422 && json.errors) {
+            var reshaped = reshapeLaravelErrors(json.errors);
+            if (Object.keys(reshaped).length) {
+                renderOptionErrors(reshaped);
+                return;
+            }
+        }
+        renderGlobalError(json.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
     }
     // Khi user pick variant/option, clear error cũ của option đó — UX
     // tốt hơn là chờ user bấm lại button-cart mới biết.
@@ -1022,27 +1023,20 @@ $(document).ready(function () {
                 $('#button-cart').attr("disabled", "disabled");
                 clearOptionErrors();
             },
+            // 201 Created → { success, message, data: { notice, cart: { count, url } } }
             success: function (json) {
                 $('.success, .warning, .attention, .information').remove();
-                if (json && json['success'] === false) {
-                    renderOptionErrors(json['message']);
-                }
-                if (json && json['success'] === true) {
-                    $('#dialog-confirm').dialog("open");
-                    $('#dialog-confirm').html(json['data']['success_2']);
-                    $('#link-cart').html('<a href="' + json['data']['link_cart'] + '"/>');
-                    $('#cart-total').html(json['data']['total_cart_header']);
+                var d = (json && json.data) || {};
+                $('#dialog-confirm').dialog("open");
+                $('#dialog-confirm').html(d.notice || (json && json.message) || '');
+                if (d.cart) {
+                    $('#link-cart').html('<a href="' + d.cart.url + '"/>');
+                    $('#cart-total').html(d.cart.count);
                 }
             },
-            // Safety net cho Laravel 422 default shape (khi FormRequest không
-            // override failedValidation). Cũng bắt 500/network để báo lại.
+            // 404 / 422 / 500 → error callback (RESTful status codes).
             error: function (xhr) {
-                var json = xhr.responseJSON || {};
-                if (xhr.status === 422 && json.errors) {
-                    renderOptionErrors(reshapeLaravelErrors(json.errors));
-                } else if (json.message && typeof json.message === 'object') {
-                    renderOptionErrors(json.message);
-                }
+                handleCartAjaxError(xhr);
             },
             complete: function () {
                 $('#button-cart').removeAttr("disabled");
@@ -1063,23 +1057,16 @@ $(document).ready(function () {
                 $('#consult-sign').attr("disabled", "disabled");
                 clearOptionErrors();
             },
+            // 202 Accepted → { success, message, data: { notice } }
             success: function (json) {
                 $('.success, .warning, .attention, .information').remove();
-                if (json && json['success'] === false) {
-                    renderOptionErrors(json['message']);
-                }
-                if (json && json['success'] === true) {
-                    $('#dialog-consult-sign').dialog("open");
-                    $('#dialog-consult-sign').html(json['data']['success_2']);
-                }
+                var d = (json && json.data) || {};
+                $('#dialog-consult-sign').dialog("open");
+                $('#dialog-consult-sign').html(d.notice || (json && json.message) || '');
             },
+            // 404 / 422 → error callback.
             error: function (xhr) {
-                var json = xhr.responseJSON || {};
-                if (xhr.status === 422 && json.errors) {
-                    renderOptionErrors(reshapeLaravelErrors(json.errors));
-                } else if (json.message && typeof json.message === 'object') {
-                    renderOptionErrors(json.message);
-                }
+                handleCartAjaxError(xhr);
             },
             complete: function () {
                 $('#consult-sign').removeAttr("disabled");
@@ -1120,17 +1107,15 @@ $(document).ready(function () {
                         $(node).removeAttr('disabled').html('<span class="fas fa-upload"></span> Upload File');
                     },
                     success: function (json) {
-                        $('#input-option' + optionId + ' .col-xl-9 .text-danger').remove();
-                        $('#input-option' + optionId + ' .col-xl-9 .text-grey-4').remove();
-                        if (json['success'] === false) {
-                            $(node).after('<div class="text-danger">' + json['message'] + '</div>');
-                        }
-                        if (json['success'] === true) {
-                            $('#input-option' + optionId).find('input[id="option-value-' + optionId + '"]').val(json['data']['path']);
-                            $(node).after('<div class="text-grey-4">' + json['data']['name'] + '</div>');
-                        }
+                        $(node).siblings('.text-danger, .text-grey-4').remove();
+                        var d = (json && json.data) || {};
+                        $('#input-option' + optionId).find('input[id="option-value-' + optionId + '"]').val(d.path || '');
+                        $(node).after('<div class="text-grey-4">' + (d.name || '') + '</div>');
                     },
-                    error: function (xhr, ajaxOptions, thrownError) {
+                    error: function (xhr) {
+                        $(node).siblings('.text-danger, .text-grey-4').remove();
+                        var json = (xhr && xhr.responseJSON) || {};
+                        $(node).after('<div class="text-danger">' + (json.message || 'Tải tệp lên thất bại.') + '</div>');
                     }
                 });
             }
@@ -1156,16 +1141,24 @@ $(document).ready(function () {
             },
             dataType: 'json',
         }).done(function (data) {
-            $("button[type='submit']").removeAttr('disabled');
-            if (!data.success) {
-                for (i in data.message) {
-                    $('#ratingForm').append('<div class="alert alert-danger">' + data.message[i] + '</div>');
+            // 201 Created → { message, review: { id } }
+            $("#ratingForm button[type='submit']").removeAttr('disabled');
+            ratingForm.find("input").val('');
+            ratingForm.find("textarea").val('');
+            ratingForm.append('<div class="alert alert-success">' + ((data && data.message) || '') + '</div>');
+            $('#review').load(urlListReview);
+        }).fail(function (xhr) {
+            // 422 validation → { message, errors }; 422 business / 500 → { message }
+            $("#ratingForm button[type='submit']").removeAttr('disabled');
+            var json = (xhr && xhr.responseJSON) || {};
+            if (xhr && xhr.status === 422 && json.errors) {
+                for (var k in json.errors) {
+                    if (!Object.prototype.hasOwnProperty.call(json.errors, k)) continue;
+                    var msg = Array.isArray(json.errors[k]) ? json.errors[k][0] : json.errors[k];
+                    ratingForm.append('<div class="alert alert-danger">' + msg + '</div>');
                 }
             } else {
-                ratingForm.find("input").val('');
-                ratingForm.find("textarea").val('');
-                ratingForm.append('<div class="alert alert-success">' + data.message + '</div>');
-                $('#review').load(urlListReview)
+                ratingForm.append('<div class="alert alert-danger">' + (json.message || 'Có lỗi xảy ra. Vui lòng thử lại.') + '</div>');
             }
         });
     });
@@ -1504,18 +1497,26 @@ function userWishlist($productId) {
         url: urlUserWishlist + '?product_id=' + $productId,
         type: 'get',
         dataType: 'json',
+        // 200 -> { success, message, data: { deleted, total } }
         success: function (json) {
-            if (json['success']) {
-                $('#dialog-confirm-wishlist').dialog('open');
-                $('#dialog-confirm-wishlist').html('<b class="pt-1 pb-1">' + json['message'] + '</b>');
-                if (!json['data']['delete']) {
-                    $('#wishlist').addClass('active');
-                }
-                $('#count-wishlist').html(json['data']['total']);
+            var d = (json && json.data) || {};
+            $('#dialog-confirm-wishlist').dialog('open');
+            $('#dialog-confirm-wishlist').html('<b class="pt-1 pb-1">' + ((json && json.message) || '') + '</b>');
+            if (!d.deleted) {
+                $('#wishlist').addClass('active');
             }
-        }, error: function (xhr, ajaxOptions, thrownError) {
-            $('#dialog-confirm-wishlist-nlg').dialog('open');
-            $('#dialog-confirm-wishlist-nlg').html('<b class="pt-1 pb-1">Bạn cần đăng nhập tài khoản để thêm sản phẩm yêu thích</b>');
+            $('#count-wishlist').html(d.total);
+        },
+        error: function (xhr) {
+            // 401 -> chưa đăng nhập; còn lại -> hiển thị message lỗi (vd 422).
+            if (xhr && (xhr.status === 401 || xhr.status === 403)) {
+                $('#dialog-confirm-wishlist-nlg').dialog('open');
+                $('#dialog-confirm-wishlist-nlg').html('<b class="pt-1 pb-1">Bạn cần đăng nhập tài khoản để thêm sản phẩm yêu thích</b>');
+            } else {
+                var json = (xhr && xhr.responseJSON) || {};
+                $('#dialog-confirm-wishlist').dialog('open');
+                $('#dialog-confirm-wishlist').html('<b class="pt-1 pb-1">' + (json.message || 'Có lỗi xảy ra.') + '</b>');
+            }
         }
     });
 }

@@ -11,6 +11,7 @@ class ReviewHelpful extends Base
     public const VOTE_WITHDRAWN = 0;
 
     protected $table = 'review_helpful';
+    protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
 

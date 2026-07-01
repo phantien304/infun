@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Client\InfunStudio;
 
+use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Session;
 
-class CsrfTokenController extends BaseInfunStudioController
+class CsrfTokenController extends Controller
 {
     public function index()
     {

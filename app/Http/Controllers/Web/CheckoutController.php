@@ -19,6 +19,7 @@ use App\Services\Checkout\CheckoutPromotions;
 use App\Services\Checkout\CheckoutTotalService;
 use App\Services\Checkout\CreateOrderService;
 use App\Services\Checkout\PromotionService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CheckoutController extends Controller
@@ -130,13 +131,20 @@ class CheckoutController extends Controller
         ]);
     }
 
-    public function addToCart(CheckoutAddToCartRequest $request)
+    /**
+     * POST /checkout/add-to-cart — RESTful.
+     *  201 Created  → item đã thêm vào giỏ (resource: cart summary + notice HTML)
+     *  404 Not Found → product không tồn tại / không mua được
+     *  422 Unprocessable → vi phạm tồn kho / số lượng (business rule)
+     *  422 (FormRequest) → validation input (option required, quantity, …)
+     */
+    public function addToCart(CheckoutAddToCartRequest $request): JsonResponse
     {
         $params = $request->validated();
 
         $product = $this->productRepo->findAddableToCart((int) $params['product_id']);
         if (! $product) {
-            return errValidator(trans('messages.ErrorNotFoundProduct'), 200);
+            return respondNotFound(trans('messages.ErrorNotFoundProduct'));
         }
 
         $result = $this->cart->tryAdd([
@@ -145,10 +153,7 @@ class CheckoutController extends Controller
         ], $product);
 
         if (! ($result['ok'] ?? false)) {
-            return errValidator(
-                $this->buildAddToCartError($product, $result),
-                200,
-            );
+            return respondUnprocessable($this->buildAddToCartError($product, $result));
         }
         $this->syncCartHeader();
 
@@ -156,15 +161,17 @@ class CheckoutController extends Controller
         $name = (string) ($desc->name ?? '');
         $slug = resolveSlug($desc->slug ?? null, $name);
 
-        return successData('AddSuccess', [
-            'success_2'         => sprintf(
+        return respondCreated([
+            'notice' => sprintf(
                 trans('messages.TextAddCartSuccess'),
                 buildUrl($slug, getModuleConfig('url.product'), (int) $product->id),
                 $name
             ),
-            getCoreConfig('session.cart_header') => session()->get(getCoreConfig('session.cart_header')),
-            'link_cart'         => route('checkout.cart'),
-        ]);
+            'cart' => [
+                'count' => (int) session()->get(getCoreConfig('session.cart_header'), 0),
+                'url'   => route('checkout.cart'),
+            ],
+        ], trans('messages.SuccessAddCart'));
     }
 
     protected function buildAddToCartError($product, array $result): string
@@ -184,7 +191,7 @@ class CheckoutController extends Controller
         return sprintf(trans('messages.TextAddToCartError2'), $name, $quantity, $available);
     }
 
-    public function consultSign(CheckoutAddToCartRequest $request)
+    public function consultSign(CheckoutAddToCartRequest $request): JsonResponse
     {
         $params = $request->validated();
 
@@ -194,7 +201,7 @@ class CheckoutController extends Controller
             ->with('description')
             ->first();
         if (! $product) {
-            return errValidator(trans('messages.ErrorNotFoundProduct'), 200);
+            return respondNotFound(trans('messages.ErrorNotFoundProduct'));
         }
 
         $desc = $product->description;
@@ -203,13 +210,13 @@ class CheckoutController extends Controller
 
         dispatch(new ConsultSignEmailToAdmin($product, $params, $params['option'] ?? []));
 
-        return successData('SendSuccess', [
-            'success_2' => sprintf(
+        return respondAccepted([
+            'notice' => sprintf(
                 trans('messages.TextConsultSignSuccess'),
                 buildUrl($slug, getModuleConfig('url.product'), (int) $product->id),
                 $name
             ),
-        ]);
+        ], trans('messages.SuccessConsultSign'));
     }
 
     public function saveOrder(CheckoutSaveOrderRequest $request)

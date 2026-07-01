@@ -1,60 +1,48 @@
 <?php
 
-namespace App\Http\Controllers\Client\InfunStudio;
+namespace App\Http\Controllers\Web;
 
+use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 
-class FileController extends BaseInfunStudioController
+class FileController extends Controller
 {
-    public function upload()
+    public function upload(): JsonResponse
     {
-        $validator = $this->_validatorFile();
-        if ($validator) {
-            return errValidator($validator, 200);
+        if ($error = $this->validationError()) {
+            return respondUnprocessable($error, ['file' => [$error]]);
         }
-        $file = $this->_getStorage()->putWithOutModule('infun/' . date('Y-m-d'), $this->_getFile(), true);
-        if ($file) {
-            return successData('UploadSuccess', ['path' => $file, 'name' => $this->_getFile()->getClientOriginalName()]);
+
+        $file = $this->uploadedFile();
+        $path = $file->storeAs('infun/' . date('Y-m-d'), $file->getClientOriginalName(), $this->disk());
+
+        if ($path) {
+            return respondCreated(
+                ['path' => $path, 'name' => $file->getClientOriginalName()],
+                trans('messages.UploadSuccess'),
+            );
         }
-        return errValidator('UploadFailed', 200);
+
+        return respondError(trans('messages.UploadFailed'), 500);
     }
 
-    protected function _validatorFile()
+    protected function validationError(): ?string
     {
         $validator = Validator::make(request()->all(), [
-            'file' => [
-                'required',
-                'image',
-                'file_extension:jpeg,jpg,png',
-                'mimes:jpeg,jpg,png',
-                'mimetypes:image/jpeg,image/png',
-                'max:2048'
-            ]
-        ], $this->_getMessage());
-        if ($validator->fails()) {
-            return $validator->errors()->first();
-        }
-        return null;
+            'file' => ['required', 'image', 'mimes:jpeg,jpg,png', 'mimetypes:image/jpeg,image/png', 'max:2048'],
+        ]);
+
+        return $validator->fails() ? $validator->errors()->first() : null;
     }
 
-    protected function _getFile()
+    protected function uploadedFile()
     {
         return request()->file('file');
     }
 
-    protected function _getStorage()
+    protected function disk(): string
     {
-        return storageImage()->getStorage('public');
-    }
-
-    protected function _getMessage()
-    {
-        return [
-            'image' => 'Vui lòng upload ảnh.',
-            'file_extension' => 'Tệp không đúng định dạng. Vui lòng chọn loại tệp: jpeg, jpg, png.',
-            'mimes' => 'Tệp không đúng định dạng. Vui lòng chọn loại tệp: jpeg, jpg, png.',
-            'mimetypes' => 'Tệp không đúng định dạng. Vui lòng chọn loại tệp: jpeg, jpg, png.',
-            'max' => 'Tệp không lớn hơn 2MB. Vui lòng chọn lại.',
-        ];
+        return 'public';
     }
 }

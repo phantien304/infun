@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Web;
 
+use App\Http\Requests\Concerns\RestfulValidation;
 use App\Models\Entities\ReviewCriteria;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ReviewSaveRequest extends FormRequest
 {
+    use RestfulValidation;
+
     public function authorize(): bool
     {
         return true;

@@ -27,7 +27,7 @@ class ReviewController extends Controller
         $validated = $request->validated();
 
         if (! $this->productRepo->findReviewableProduct((int) $validated['product_id'])) {
-            return errNoValidator(trans('messages.ErrorAction'));
+            return respondUnprocessable(trans('messages.ErrorAction'));
         }
 
         try {
@@ -36,15 +36,15 @@ class ReviewController extends Controller
                 'media' => $request->file('media', []),
             ]);
 
-            return successData(
+            return respondCreated(
+                ['review' => ['id' => $review->id]],
                 trans('messages.ReviewSuccess'),
-                ['review_id' => $review->id],
             );
         } catch (\DomainException $e) {
-            return errNoValidator($e->getMessage());
+            return respondUnprocessable($e->getMessage());
         } catch (\Throwable $e) {
             logError('ReviewController::saveReview ' . $e->getMessage());
-            return errNoValidator(trans('messages.ErrorAction'));
+            return respondError(trans('messages.ErrorAction'), 500);
         }
     }
 
@@ -59,10 +59,10 @@ class ReviewController extends Controller
                 $userId,
                 (int) $validated['vote_type'],
             );
-            return response()->json(['success' => true] + $result);
+            return respondSuccess($result);
         } catch (\Throwable $e) {
             logError('ReviewController::vote ' . $e->getMessage());
-            return errNoValidator(trans('messages.ErrorAction'));
+            return respondError(trans('messages.ErrorAction'), 500);
         }
     }
 
@@ -78,10 +78,10 @@ class ReviewController extends Controller
                 $validated['reason_code'],
                 $validated['description'] ?? null,
             );
-            return successNoData(trans('messages.ReportSubmitted'));
+            return respondMessage(trans('messages.ReportSubmitted'));
         } catch (\Throwable $e) {
             logError('ReviewController::report ' . $e->getMessage());
-            return errNoValidator(trans('messages.ErrorAction'));
+            return respondError(trans('messages.ErrorAction'), 500);
         }
     }
 

@@ -17,33 +17,14 @@ use App\Models\Entities\ProductStock;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Orchestrate GHI product (CMS) trong 1 transaction. Service chỉ tuần tự gọi
- * các sync nhỏ (đọc như mục lục) — phần variant cluster tách sang
- * ProductVariantWriter để không thành god class.
- *
- * LƯU Ý:
- *  - product.price đã DROP (schema mới) → KHÔNG ghi; giá nằm ở product_variant.
- *  - Ghi qua Eloquent để observer cache/aggregate fire; cuối cùng flush product cache.
- *  - Best-effort theo contract frontend — chưa test trên DB; verify cột khi chạy.
- */
 class ProductWriteService
 {
-    /**
-     * Cột phẳng cho phép ghi thẳng vào bảng `product`.
-     *
-     * KHÔNG bao gồm các cột đã drop khỏi schema:
-     *   - price            (drop bởi 2026_06_18_000001 → product_variant.price)
-     *   - quantity         (drop legacy → product_stock.on_hand)
-     *   - subtract         (drop legacy → product_stock.inventory_policy)
-     *   - rating, total_rating (drop legacy → product.rating_avg/rating_sum)
-     */
     private const FLAT_FIELDS = [
         'model', 'sku', 'upc', 'ean', 'jan', 'isbn', 'mpn', 'location', 'image',
         'badge', 'date_available', 'link_sale', 'manufacturer_id', 'tax_class_id',
         'stock_status_id', 'shipping', 'is_add_cart', 'is_custom',
         'is_review', 'length', 'width', 'height', 'length_class_id', 'weight',
-        'weight_class_id', 'points', 'sort_order', 'minimum',
+        'weight_class_id', 'points', 'sort_order',
     ];
 
     public function __construct(
@@ -63,11 +44,9 @@ class ProductWriteService
                 }
             }
 
-            // has_variants: có option role=variant.
             $product->has_variants = collect($data['product_options'] ?? [])
                 ->contains(fn ($o) => (int) ($o['role'] ?? 0) === Option::ROLE_VARIANT) ? 1 : 0;
 
-            // link_sale_custom lưu dạng JSON string.
             if (array_key_exists('link_sale_custom', $data)) {
                 $lsc = $data['link_sale_custom'];
                 $product->link_sale_custom = is_array($lsc) ? json_encode($lsc) : $lsc;
@@ -85,24 +64,18 @@ class ProductWriteService
             $this->syncDiscounts($product, $data['product_discounts'] ?? []);
             $this->syncRewards($product, $data['product_rewards'] ?? []);
 
-            // Variant cluster (option + variant + pivot + stock).
             $this->variantWriter->sync(
                 $product,
                 $data['product_options'] ?? [],
                 $data['product_variants'] ?? []
             );
 
-            // Một số sync xoá qua query (bỏ qua event) → flush cache product tường minh.
             $this->repo->flushProductCache($product->id);
 
             return $product;
         });
     }
 
-    /**
-     * Cập nhật nhanh hàng loạt từ trang list (sửa inline): model/badge ở product,
-     * price/quantity ở default variant + stock. Trả số dòng đã đụng.
-     */
     public function bulkUpdate(array $items): int
     {
         $count = 0;
@@ -149,7 +122,6 @@ class ProductWriteService
         return $count;
     }
 
-    /** Upsert mô tả đa ngữ; name rỗng → xoá bản dịch. */
     protected function syncDescriptions(Product $product, array $items): void
     {
         foreach ($items as $item) {
@@ -178,7 +150,6 @@ class ProductWriteService
         }
     }
 
-    /** product_category: [{id|category_id, title}] → category_id. */
     protected function syncCategories(Product $product, array $items): void
     {
         ProductCategory::where('product_id', $product->id)->delete();
@@ -194,7 +165,6 @@ class ProductWriteService
         }
     }
 
-    /** product_filter: [filter_value_id]. */
     protected function syncFilters(Product $product, array $ids): void
     {
         ProductFilter::where('product_id', $product->id)->delete();
@@ -209,7 +179,6 @@ class ProductWriteService
         }
     }
 
-    /** product_related: [{id, name}] → related_id. */
     protected function syncRelated(Product $product, array $items): void
     {
         ProductRelated::where('product_id', $product->id)->delete();
@@ -225,7 +194,6 @@ class ProductWriteService
         }
     }
 
-    /** product_ingredient: [{id, name}] → ingredient_id. */
     protected function syncIngredients(Product $product, array $items): void
     {
         ProductIngredient::where('product_id', $product->id)->delete();
@@ -241,7 +209,6 @@ class ProductWriteService
         }
     }
 
-    /** product_attribute: [{attribute_id, product_attribute:[{language_code,text}]}] (text rỗng → bỏ). */
     protected function syncAttributes(Product $product, array $items): void
     {
         ProductAttribute::where('product_id', $product->id)->delete();
@@ -266,7 +233,6 @@ class ProductWriteService
         }
     }
 
-    /** product_image (gallery cấp product: product_variant_id NULL). */
     protected function syncImages(Product $product, array $items): void
     {
         ProductImage::where('product_id', $product->id)
@@ -284,7 +250,6 @@ class ProductWriteService
         }
     }
 
-    /** product_discount: thay toàn bộ theo payload. */
     protected function syncDiscounts(Product $product, array $items): void
     {
         ProductDiscount::where('product_id', $product->id)->delete();
@@ -301,7 +266,6 @@ class ProductWriteService
         }
     }
 
-    /** product_reward: thay toàn bộ (chỉ ghi dòng có points). */
     protected function syncRewards(Product $product, array $items): void
     {
         ProductReward::where('product_id', $product->id)->delete();

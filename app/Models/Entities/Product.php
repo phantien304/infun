@@ -126,6 +126,11 @@ class Product extends Base implements Auditable
         return (float) ($this->defaultVariant?->price ?? 0);
     }
 
+    public function getMinimumAttribute(): int
+    {
+        return (int) ($this->defaultVariant?->minimum ?? 1);
+    }
+
     public function productFilters()
     {
         return $this->hasMany(ProductFilter::class, 'product_id', 'id');

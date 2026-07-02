@@ -536,7 +536,6 @@ class SeedProductsCommand extends Command
                 'length'            => rand(5, 100),
                 'width'             => rand(5, 100),
                 'height'            => rand(5, 100),
-                'minimum'           => 1,
                 'viewed'            => rand(0, 5000),
                 'link_sale_custom'  => null,
                 'is_add_cart'       => 1,

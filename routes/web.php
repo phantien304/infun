@@ -58,7 +58,6 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::get('ward', 'ResourceController@ward')->name('resource.ward');
     });
     Route::prefix('account')->group(function () {
-        // Auth form: GET render + POST xử lý (POST action do* type-hint FormRequest ở controller).
         Route::get('login', 'AuthController@login')->name('auth.login');
         Route::post('login', 'AuthController@doLogin')->name('auth.doLogin');
         Route::get('login/{provider}', 'AuthController@loginWithProvider')->name('auth.loginSocial');

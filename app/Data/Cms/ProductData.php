@@ -6,22 +6,6 @@ use App\Models\Entities\Option;
 use App\Models\Entities\Product;
 use Spatie\LaravelData\Data;
 
-/**
- * DTO Product chi tiết cho CMS form (REST). Thay cho ProductResource.
- * -----------------------------------------------------------
- * Quy ước app/Data/Cms: property snake_case = JSON wire = cột DB (không mapper).
- *
- * Controller show() phải eager-load:
- *   descriptions, productCategories.category.description, productFilters,
- *   productRelated.product.description, productIngredients.ingredient.description,
- *   productAttributes, productImages, productRewards, productDiscounts,
- *   productOptions.option, productVariants.productVariantAttributes,
- *   productVariants.productStocks, defaultVariant
- *
- * Flat field để nullable (dữ liệu legacy hay null) → tránh TypeError như
- * ProductDTO::price. Mảng con build sẵn shape mà form đọc.
- * -----------------------------------------------------------
- */
 class ProductData extends Data
 {
     public function __construct(
@@ -90,7 +74,7 @@ class ProductData extends Data
             // accessor không fire → đọc thẳng default variant.
             price: ($v = $p->defaultVariant?->price) !== null ? (string) $v : null,
             quantity: $p->quantity !== null ? (string) $p->quantity : null,
-            minimum: $p->minimum !== null ? (string) $p->minimum : null,
+            minimum: ($m = $p->defaultVariant?->minimum) !== null ? (string) $m : null,
             badge: $p->badge,
             manufacturer_id: $p->manufacturer_id !== null ? (int) $p->manufacturer_id : null,
             tax_class_id: $p->tax_class_id !== null ? (int) $p->tax_class_id : null,
@@ -113,7 +97,6 @@ class ProductData extends Data
             link_sale_custom: $p->link_sale_custom, // raw (JSON string) — frontend tự parse
             has_variants: $p->has_variants !== null ? (int) $p->has_variants : null,
             deleted_at: $p->deleted_at?->toDateTimeString(),
-
             product_descriptions: $p->descriptions->map(fn ($d) => [
                 'language_code'    => $d->language_code,
                 'name'             => $d->name,
@@ -124,24 +107,19 @@ class ProductData extends Data
                 'meta_description' => $d->meta_description,
                 'meta_keyword'     => $d->meta_keyword,
             ])->values()->all(),
-
             product_categories: $p->productCategories->map(fn ($pc) => [
                 'id'    => $pc->category_id,
                 'title' => $pc->category?->description?->title,
             ])->values()->all(),
-
             product_filters: $p->productFilters->pluck('filter_value_id')->values()->all(),
-
             product_related: $p->productRelated->map(fn ($pr) => [
                 'id'   => $pr->related_id,
                 'name' => $pr->product?->description?->name,
             ])->values()->all(),
-
             product_ingredients: $p->productIngredients->map(fn ($pi) => [
                 'id'   => $pi->ingredient_id,
                 'name' => $pi->ingredient?->description?->name,
             ])->values()->all(),
-
             product_attributes: $p->productAttributes
                 ->groupBy('attribute_id')
                 ->map(fn ($rows, $attrId) => [
@@ -151,19 +129,16 @@ class ProductData extends Data
                         'text'          => $r->text,
                     ])->values()->all(),
                 ])->values()->all(),
-
             product_images: $p->productImages->map(fn ($img) => [
                 'id'         => $img->id,
                 'image'      => $img->image,
                 'sort_order' => $img->sort_order,
             ])->values()->all(),
-
             product_rewards: $p->productRewards->map(fn ($r) => [
                 'id'            => $r->id,
                 'user_group_id' => $r->user_group_id,
                 'points'        => $r->points,
             ])->values()->all(),
-
             product_discounts: $p->productDiscounts->map(fn ($d) => [
                 'id'            => $d->id,
                 'user_group_id' => $d->user_group_id,
@@ -173,7 +148,6 @@ class ProductData extends Data
                 'date_start'    => $d->date_start,
                 'date_end'      => $d->date_end,
             ])->values()->all(),
-
             product_options: $p->productOptions->map(function ($po) use ($p) {
                 $role = $po->option?->role ?? Option::ROLE_CUSTOM_FIELD;
                 $valueIds = [];
@@ -192,7 +166,6 @@ class ProductData extends Data
                     'option_value_ids' => $valueIds,
                 ];
             })->values()->all(),
-
             product_variants: $p->productVariants->map(fn ($v) => [
                 'id'               => $v->id,
                 'price'            => $v->price,

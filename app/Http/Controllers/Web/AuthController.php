@@ -44,7 +44,6 @@ class AuthController extends Controller
 
         $data = $request->validated();
 
-        // Chống brute-force: 5 lần sai / 60s theo email + IP.
         $throttleKey = 'login:' . strtolower((string) $data['email']) . '|' . $request->ip();
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             return redirect(route('auth.login'))

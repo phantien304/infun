@@ -158,6 +158,7 @@ class ProductResource extends JsonResource
                 'id'               => $v->id,
                 'price'            => $v->price,
                 'sku'              => $v->sku,
+                'minimum'          => (int) $v->minimum,
                 'sort_order'       => $v->sort_order,
                 'is_default'       => $v->is_default,
                 'on_hand'          => $v->productStocks?->sum('on_hand') ?? 0,

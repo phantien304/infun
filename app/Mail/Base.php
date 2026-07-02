@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Mail;
 
 class Base extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
     protected $_sendType = 'send';
 
@@ -29,15 +30,13 @@ class Base extends Mailable
         $this->_sendType = $sendType;
     }
 
-    protected function _send($from, $sender, $to, $subject, $content, $cc = [], $contentHtml = '', $bcc = [])
+    protected function sendMail($from, $sender, $to, $subject, $content, $cc = [], $contentHtml = '', $bcc = [])
     {
         if ($this->getSendType() !== 'send') {
             // @todo send_later — đẩy vào queue thay vì gửi ngay.
             return $this;
         }
 
-        // Swift Mailer đã bị gỡ từ Laravel 9 (dự án đang Laravel 12 + Symfony
-        // Mailer). Gửi HTML qua Mail::html(); thêm phần text thuần nếu có.
         $html = $contentHtml instanceof \Illuminate\Contracts\Support\Renderable
             ? $contentHtml->render()
             : (string) $contentHtml;
@@ -45,7 +44,7 @@ class Base extends Mailable
         Mail::html($html, function ($message) use ($from, $sender, $to, $subject, $content, $cc, $bcc) {
             $message->to($to)
                 ->subject($subject)
-                ->from($from, $sender); // address and name
+                ->from($from, $sender);
 
             if (! empty($cc)) {
                 $message->cc($cc);
@@ -54,7 +53,6 @@ class Base extends Mailable
                 $message->bcc($bcc);
             }
             if (filled($content)) {
-                // Illuminate\Mail\Message::__call → Symfony\Component\Mime\Email::text()
                 $message->text($content);
             }
         });

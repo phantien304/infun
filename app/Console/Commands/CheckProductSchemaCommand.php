@@ -41,7 +41,7 @@ class CheckProductSchemaCommand extends Command
         // Physical
         'weight', 'weight_class_id', 'length', 'width', 'height', 'length_class_id',
         // Sales
-        'tax_class_id', 'shipping', 'minimum', 'points', 'link_sale', 'link_sale_custom',
+        'tax_class_id', 'shipping', 'points', 'link_sale', 'link_sale_custom',
         // Legacy identifiers (vẫn giữ trong FLAT_FIELDS)
         'upc', 'ean', 'jan', 'isbn', 'mpn', 'location',
         // Behaviour flags
@@ -62,6 +62,7 @@ class CheckProductSchemaCommand extends Command
      */
     private const HARD_DROPPED = [
         'price'        => 'Drop bởi 2026_06_18_000001 → đọc qua $product->defaultVariant?->price',
+        'minimum'      => 'Drop bởi 2026_07_03 → đọc qua $product->defaultVariant?->minimum',
         'quantity'     => 'Drop legacy → on_hand thuộc product_stock (xem unify_simple_product_stock)',
         'subtract'     => 'Drop legacy → policy thuộc product_stock.inventory_policy',
         'rating'       => 'Drop legacy → thay bởi product.rating_avg',

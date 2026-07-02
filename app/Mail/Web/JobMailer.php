@@ -14,7 +14,7 @@ class JobMailer extends Base
         $content = '';
         $cc = [];
         $contentHtml = view('web::mailer.verify_email', compact('email', 'data'));
-        return $this->_send($from, $sender, $email, $subject, $content, $cc, $contentHtml);
+        return $this->sendMail($from, $sender, $email, $subject, $content, $cc, $contentHtml);
     }
 
     public function authenticatedEmail($email)
@@ -25,7 +25,7 @@ class JobMailer extends Base
         $content = '';
         $cc = [];
         $contentHtml = view('web::mailer.authenticated_email', compact('email'));
-        return $this->_send($from, $sender, $email, $subject, $content, $cc, $contentHtml);
+        return $this->sendMail($from, $sender, $email, $subject, $content, $cc, $contentHtml);
     }
 
     public function forgotPassword($email, $data)
@@ -36,7 +36,7 @@ class JobMailer extends Base
         $content = '';
         $cc = [];
         $contentHtml = view('web::mailer.forgot_password', compact('email', 'data'));
-        return $this->_send($from, $sender, $email, $subject, $content, $cc, $contentHtml);
+        return $this->sendMail($from, $sender, $email, $subject, $content, $cc, $contentHtml);
     }
 
     public function orderCreate($data)
@@ -49,7 +49,7 @@ class JobMailer extends Base
         $content = '';
         $cc = [];
         $contentHtml = view('web::mailer.order_create', compact('data'));
-        return $this->_send($from, $sender, $infoCustomer['email'], $subject, $content, $cc, $contentHtml);
+        return $this->sendMail($from, $sender, $infoCustomer['email'], $subject, $content, $cc, $contentHtml);
     }
 
     public function orderCreateToAdmin($data)
@@ -60,7 +60,7 @@ class JobMailer extends Base
         $content = '';
         $cc = [];
         $contentHtml = view('web::mailer.order_create_to_admin', compact('data'));
-        return $this->_send($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
+        return $this->sendMail($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
     }
 
     public function contactCreateToAdmin($data)
@@ -71,7 +71,7 @@ class JobMailer extends Base
         $content = '';
         $cc = [];
         $contentHtml = view('web::mailer.contact_create_to_admin', compact('data'));
-        return $this->_send($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
+        return $this->sendMail($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
     }
 
     public function consultSignToCustomer()
@@ -87,6 +87,6 @@ class JobMailer extends Base
         $content = '';
         $cc = [];
         $contentHtml = view('web::mailer.consult_sign_to_admin', compact('data'));
-        return $this->_send($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
+        return $this->sendMail($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
     }
 }

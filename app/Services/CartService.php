@@ -193,7 +193,7 @@ class CartService
                 'image'              => $image,
                 'shipping'           => $product->shipping,
                 'quantity'           => $quantity,
-                'minimum'            => $product->minimum,
+                'minimum'            => (int) ($variant?->minimum ?? 1),
                 'subtract'           => $product->subtract,
                 'in_stock'           => $stockOk,
                 'price'              => $price,
@@ -248,14 +248,9 @@ class CartService
 
     public function validateMinimum(): ?array
     {
-        $items = $this->getItems();
-        $countByProduct = [];
-        foreach ($items as $item) {
-            $countByProduct[$item['id']] = ($countByProduct[$item['id']] ?? 0) + (int) $item['quantity'];
-        }
-        foreach ($items as $item) {
+        foreach ($this->getItems() as $item) {
             $minimum = (int) ($item['minimum'] ?? 0);
-            if ($minimum > 0 && ($countByProduct[$item['id']] ?? 0) < $minimum) {
+            if ($minimum > 0 && (int) $item['quantity'] < $minimum) {
                 return ['name' => $item['name'], 'minimum' => $minimum];
             }
         }

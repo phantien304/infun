@@ -9,26 +9,26 @@ class CheckoutTotalService
     public function __construct(
         protected ShippingFeeService $shippingFee,
         protected UserRewardRepositoryInterface $rewardRepo,
-        protected PromotionService $promotions,
+        protected PromotionService $promotionService,
     ) {
     }
 
-    public function build(CheckoutPromotions $ctx, bool $withShipping = true): array
+    public function build(CheckoutPromotions $promotions, bool $withShipping = true): array
     {
         $totalData = [];
-        $running = (int) array_sum(array_column($ctx->items, 'total'));
+        $totalPrice = (int) array_sum(array_column($promotions->items, 'total'));
 
-        $this->lineSubTotal($totalData, $running);
-        $this->linesAppliedCoupons($ctx, $totalData, $running);
+        $this->lineSubTotal($totalData, $totalPrice);
+        $this->linesAppliedCoupons($promotions, $totalData, $totalPrice);
         $this->lineGifts($totalData);
-        $this->lineReward($ctx, $totalData, $running);
+        $this->lineReward($promotions, $totalData, $totalPrice);
         if ($withShipping) {
-            $this->lineShipping($ctx, $totalData, $running);
+            $this->lineShipping($promotions, $totalData, $totalPrice);
         }
-        $this->lineVouchers($totalData, $running);
-        $this->lineTotal($totalData, $running);
+        $this->lineVouchers($totalData, $totalPrice);
+        $this->lineTotal($totalData, $totalPrice);
 
-        return [$totalData, max(0, $running)];
+        return [$totalData, max(0, $totalPrice)];
     }
 
     protected function lineSubTotal(array &$totalData, int &$total): void
@@ -41,11 +41,11 @@ class CheckoutTotalService
         ];
     }
 
-    protected function linesAppliedCoupons(CheckoutPromotions $ctx, array &$totalData, int &$total): void
+    protected function linesAppliedCoupons(CheckoutPromotions $promotions, array &$totalData, int &$total): void
     {
         $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
 
-        foreach ($ctx->appliedCoupons as $entry) {
+        foreach ($promotions->appliedCoupons as $entry) {
             $coupon = $entry['coupon'];
             $type = (int) ($entry['type'] ?? $coupon->type);
             if ($type === $typeFreeship) {
@@ -84,8 +84,8 @@ class CheckoutTotalService
             'value' => 0,
         ];
     }
-
-    protected function lineReward(CheckoutPromotions $ctx, array &$totalData, int &$total): void
+    // todo
+    protected function lineReward(CheckoutPromotions $promotions, array &$totalData, int &$total): void
     {
         if (getConfigDb('config_reward_point_enabled') == setting('reward_point.disable')) {
             return;
@@ -101,7 +101,7 @@ class CheckoutTotalService
         }
 
         $pointsTotal = 0;
-        foreach ($ctx->items as $item) {
+        foreach ($promotions->items as $item) {
             $pointsTotal += (int) ($item['points'] ?? 0);
         }
         if ($pointsTotal <= 0) {
@@ -109,7 +109,7 @@ class CheckoutTotalService
         }
 
         $discountTotal = 0;
-        foreach ($ctx->items as $item) {
+        foreach ($promotions->items as $item) {
             if (! empty($item['points'])) {
                 $discountTotal += (int) ($item['total'] * ($reward / $pointsTotal));
             }
@@ -124,12 +124,12 @@ class CheckoutTotalService
         $total -= $discountTotal;
     }
 
-    protected function lineShipping(CheckoutPromotions $ctx, array &$totalData, int &$total): void
+    protected function lineShipping(CheckoutPromotions $promotions, array &$totalData, int &$total): void
     {
         $carrierCode = (string) request()->get('carrier_code');
 
         if (! filled($carrierCode)) {
-            $this->lineFreeshipPlaceholder($ctx, $totalData);
+            $this->lineFreeshipPlaceholder($promotions, $totalData);
             return;
         }
 
@@ -138,7 +138,7 @@ class CheckoutTotalService
 
         [$ok, $fee] = $this->shippingFee->calculate($carrierCode, $total, $cartShipping, $address);
         if (! $ok || $fee === null) {
-            $this->lineFreeshipPlaceholder($ctx, $totalData);
+            $this->lineFreeshipPlaceholder($promotions, $totalData);
             return;
         }
 
@@ -150,8 +150,8 @@ class CheckoutTotalService
         ];
         $total += $fee;
 
-        if ($ctx->hasFreeshipCoupon && $fee > 0) {
-            $entry = $this->findFreeshipEntry($ctx);
+        if ($promotions->hasFreeshipCoupon && $fee > 0) {
+            $entry = $this->findFreeshipEntry($promotions);
             $shipDiscount = $this->freeshipShipDiscount($entry, $fee);
             if ($shipDiscount > 0) {
                 $code = $entry['coupon']->code ?? null;
@@ -168,9 +168,9 @@ class CheckoutTotalService
         }
     }
 
-    protected function lineFreeshipPlaceholder(CheckoutPromotions $ctx, array &$totalData): void
+    protected function lineFreeshipPlaceholder(CheckoutPromotions $promotions, array &$totalData): void
     {
-        $entry = $this->findFreeshipEntry($ctx);
+        $entry = $this->findFreeshipEntry($promotions);
         if ($entry === null) {
             return;
         }
@@ -220,7 +220,7 @@ class CheckoutTotalService
         if ($total <= 0) {
             return;
         }
-        $result = $this->promotions->resolveVouchers($total);
+        $result = $this->promotionService->resolveVouchers($total);
         if (empty($result['applied'])) {
             return;
         }

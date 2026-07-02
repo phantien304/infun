@@ -32,10 +32,10 @@ class CheckoutGiftController extends Controller
         $result = $this->giftService->applyPicks($picks, $items, $subtotal);
 
         if (! $result['ok']) {
-            return errValidator($result['errors'][0] ?? 'Không nhận được quà', 200);
+            return respondUnprocessable($result['errors'][0] ?? trans('messages.checkout.gift_not_received'));
         }
 
-        return successData('Success', [
+        return respondSuccess([
             'errors'         => $result['errors'],
             'applied_count'  => count($picks),
             'reload'         => true,
@@ -46,6 +46,6 @@ class CheckoutGiftController extends Controller
     {
         $this->giftService->clearPicks();
 
-        return successData('Success', ['reload' => true]);
+        return respondSuccess(['reload' => true]);
     }
 }

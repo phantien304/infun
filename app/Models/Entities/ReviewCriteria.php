@@ -12,6 +12,7 @@ class ReviewCriteria extends Base
     use HasAdvancedScopes;
 
     protected $table = 'review_criteria';
+    protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
 

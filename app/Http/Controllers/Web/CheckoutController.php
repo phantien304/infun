@@ -25,14 +25,14 @@ use Illuminate\Http\Request;
 class CheckoutController extends Controller
 {
     public function __construct(
-        protected CartService $cart,
+        protected CartService $cartService,
         protected CheckoutTotalService $totalService,
         protected CreateOrderService $createOrderService,
         protected CheckoutPaymentService $paymentService,
         protected CarrierRepositoryInterface $carrierRepo,
         protected PaymentRepositoryInterface $paymentRepo,
         protected OrderRepositoryInterface $orderRepo,
-        protected PromotionService $promotions,
+        protected PromotionService $promotionService,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -45,13 +45,13 @@ class CheckoutController extends Controller
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.checkout'), 'href' => route('checkout.index'), 'separator' => true]);
         $this->processMetaSeo('buildForSeoBySetting', 'seo_title_checkout', 'seo_description_checkout');
 
-        $ctx = $this->buildPromotions(hasShipping: true);
-        [$error, $items] = $this->validateCart($ctx);
+        $appliedPromotions = $this->buildAppliedPromotions(hasShipping: true);
+        [$error, $items] = $this->validateCart($appliedPromotions);
         $this->syncCartHeader($items);
-        [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
+        [$totalData, $total] = $this->totalService->build($appliedPromotions, withShipping: true);
 
         $userEmail = auth()->check() ? (string) auth()->user()->email : '';
-        $promo = $this->promotions->viewData($ctx, (int) $this->cart->getSubtotal(), $userEmail, hasShipping: true);
+        $promo = $this->promotionService->viewData($appliedPromotions, (int) $this->cartService->getSubtotal(), $userEmail, hasShipping: true);
 
         return $this->render('web::checkout.index', [
             'carriers'           => $this->carrierRepo->listAllCached(),
@@ -60,7 +60,7 @@ class CheckoutController extends Controller
             'products'           => array_values($items),
             'totalData'          => $totalData,
             'total'              => $total,
-            'countProduct'       => $this->cart->countItems(),
+            'countProduct'       => $this->cartService->countItems(),
             'coupons'            => $promo['coupons'],
             'appliedCouponCodes' => (array) session()->get(getCoreConfig('session.applied_coupons'), []),
             'couponContext'      => 'checkout',
@@ -77,7 +77,7 @@ class CheckoutController extends Controller
 
         if (filled(request()->get('quantity'))) {
             foreach ((array) request()->get('quantity') as $key => $value) {
-                $this->cart->update((string) $key, (int) $value);
+                $this->cartService->update((string) $key, (int) $value);
             }
             $this->syncCartHeader();
 
@@ -85,7 +85,7 @@ class CheckoutController extends Controller
         }
 
         if (request()->has('remove')) {
-            $this->cart->remove((string) request()->get('remove'));
+            $this->cartService->remove((string) request()->get('remove'));
             $this->syncCartHeader();
 
             return redirect(route('checkout.cart'))->with('success', trans('messages.SuccessUpdateCart'));
@@ -95,22 +95,22 @@ class CheckoutController extends Controller
         $items = [];
         $totalData = [];
         $total = 0;
-        $ctx = null;
-        if ($this->cart->hasItems()) {
-            $ctx = $this->buildPromotions(hasShipping: false);
-            [$error, $items] = $this->validateCart($ctx);
-            [$totalData, $total] = $this->totalService->build($ctx, withShipping: false);
+        $promotions = null;
+        if ($this->cartService->hasItems()) {
+            $promotions = $this->buildAppliedPromotions(hasShipping: false);
+            [$error, $items] = $this->validateCart($promotions);
+            [$totalData, $total] = $this->totalService->build($promotions, withShipping: false);
         }
         $this->syncCartHeader($items);
 
-        $effectiveCodes = $ctx
-            ? array_map(fn ($a) => (string) $a['coupon']->code, $ctx->appliedCoupons)
+        $effectiveCodes = $promotions
+            ? array_map(fn ($a) => (string) $a['coupon']->code, $promotions->appliedCoupons)
             : [];
 
         $userEmail = auth()->check() ? (string) auth()->user()->email : '';
-        $promo = $this->promotions->viewData(
-            $ctx ?? new CheckoutPromotions(),
-            (int) $this->cart->getSubtotal(),
+        $promo = $this->promotionService->viewData(
+            $promotions ?? new CheckoutPromotions(),
+            (int) $this->cartService->getSubtotal(),
             $userEmail,
             hasShipping: false,
         );
@@ -120,7 +120,7 @@ class CheckoutController extends Controller
             'products'           => array_values($items),
             'totalData'          => $totalData,
             'total'              => $total,
-            'countProduct'       => $this->cart->countItems(),
+            'countProduct'       => $this->cartService->countItems(),
             'coupons'            => $promo['coupons'],
             'appliedCouponCodes' => $effectiveCodes,
             'couponContext'      => 'cart',
@@ -147,7 +147,7 @@ class CheckoutController extends Controller
             return respondNotFound(trans('messages.ErrorNotFoundProduct'));
         }
 
-        $result = $this->cart->tryAdd([
+        $result = $this->cartService->tryAdd([
             'quantity' => $params['quantity'] ?? 1,
             'option'   => $params['option'] ?? [],
         ], $product);
@@ -176,6 +176,10 @@ class CheckoutController extends Controller
 
     protected function buildAddToCartError($product, array $result): string
     {
+        if (! empty($result['variant_error'])) {
+            return trans('messages.ErrorVariantNotFound');
+        }
+
         $name = $product->description->name ?? '';
         $available = (int) ($result['available'] ?? 0);
         $totalInCart = (int) ($result['total_in_cart'] ?? 0);
@@ -221,7 +225,7 @@ class CheckoutController extends Controller
 
     public function saveOrder(CheckoutSaveOrderRequest $request)
     {
-        $ctx = $this->buildPromotions();
+        $ctx = $this->buildAppliedPromotions();
         [$error, $items] = $this->validateCart($ctx);
         if ($error !== '' || empty($items)) {
             return redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
@@ -244,7 +248,7 @@ class CheckoutController extends Controller
             );
             $url = $this->paymentService->startPayment($orderId, $payload);
 
-            $this->cart->clear();
+            $this->cartService->clear();
             session()->put(getCoreConfig('session.last_order'), $orderId);
 
             if (filled($url)) {
@@ -334,11 +338,11 @@ class CheckoutController extends Controller
 
     public function recalcTotals()
     {
-        $ctx = $this->buildPromotions();
+        $ctx = $this->buildAppliedPromotions();
         $this->validateCart($ctx);
         [$totalData] = $this->totalService->build($ctx, withShipping: true);
 
-        return successData('SearchSuccess', $totalData, 0);
+        return respondSuccess($totalData);
     }
 
     public function success()
@@ -363,28 +367,28 @@ class CheckoutController extends Controller
         ]);
     }
 
-    protected function buildPromotions(bool $hasShipping = true): CheckoutPromotions
+    protected function buildAppliedPromotions(bool $hasShipping = true): CheckoutPromotions
     {
-        return $this->promotions->buildContext(
-            $this->cart->getItems(),
-            (int) $this->cart->getSubtotal(),
+        return $this->promotionService->resolveAppliedPromotions(
+            $this->cartService->getItems(),
+            (int) $this->cartService->getSubtotal(),
             $hasShipping,
         );
     }
 
-    protected function validateCart(CheckoutPromotions $ctx): array
+    protected function validateCart(CheckoutPromotions $promotions): array
     {
-        if (! $this->cart->hasItems()) {
+        if (! $this->cartService->hasItems()) {
             return [trans('messages.ErrorProduct'), []];
         }
 
-        $items = $ctx->items;
+        $items = $promotions->items;
 
-        if (getConfigDb('config_stock_checkout') && ! $this->cart->hasStock()) {
+        if (getConfigDb('config_stock_checkout') && ! $this->cartService->hasStock()) {
             return [trans('messages.ErrorStock'), $items];
         }
 
-        $minimumViolation = $this->cart->validateMinimum();
+        $minimumViolation = $this->cartService->validateMinimum();
         if ($minimumViolation) {
             return [sprintf(trans('messages.ErrorMinimum'), $minimumViolation['name'], $minimumViolation['minimum']), $items];
         }
@@ -394,7 +398,7 @@ class CheckoutController extends Controller
 
     protected function syncCartHeader(?array $items = null): void
     {
-        $count = $items === null ? $this->cart->countItems() : array_sum(array_column($items, 'quantity'));
+        $count = $items === null ? $this->cartService->countItems() : array_sum(array_column($items, 'quantity'));
         if ((int) session()->get(getCoreConfig('session.cart_header'), -1) !== $count) {
             session()->put(getCoreConfig('session.cart_header'), $count);
         }

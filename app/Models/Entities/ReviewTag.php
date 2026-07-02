@@ -11,6 +11,7 @@ class ReviewTag extends Base
     use SoftDeletes, HasAdvancedScopes;
 
     protected $table = 'review_tag';
+    protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
 

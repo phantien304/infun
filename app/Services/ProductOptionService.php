@@ -36,16 +36,23 @@ class ProductOptionService
         }
 
         $gallery = [];
-        foreach ($product->productImages as $img) {
-            $variantId = $img->product_variant_id;
+        foreach ($product->productImages as $value) {
+            $variantId = $value->product_variant_id;
             if ($variantId === null) {
                 continue;
             }
+            $path = (string) $value->image;
             $gallery[(int) $variantId][] = [
-                'image'      => (string) $img->image,
-                'alt'        => (string) ($img->alt ?? ''),
-                'sort_order' => (int) ($img->sort_order ?? 0),
+                'full'       => thumbnail($path, 1000, 1000),
+                'thumb'      => thumbnail($path, 147, 147),
+                'alt'        => (string) ($value->alt ?? ''),
+                'sort_order' => (int) ($value->sort_order ?? 0),
             ];
+        }
+
+        foreach ($gallery as $variantId => $imgs) {
+            usort($imgs, fn ($a, $b) => $a['sort_order'] <=> $b['sort_order']);
+            $gallery[$variantId] = $imgs;
         }
 
         return $gallery;

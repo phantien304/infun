@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Giá hiệu lực mỗi variant = COALESCE(active product_variant_special.price,
  * product_variant.price). Default user_group_id = 1 (khớp default convention
- * dự án). Date range theo `dateStartToEnd` scope (date_start <= now < date_end,
+ * dự án). Date range theo `dateStartToEnd` scope (date_start <= now <= date_end,
  * NULL = mở 1 đầu).
  *
  * Hook trên CẢ ProductVariant lẫn ProductVariantSpecial vì cả 2 đều ảnh
@@ -75,7 +75,7 @@ class ProductVariantAggregateObserver
                      WHERE pvs.product_variant_id = pv.id
                        AND pvs.user_group_id = ?
                        AND (pvs.date_start IS NULL OR pvs.date_start <= ?)
-                       AND (pvs.date_end   IS NULL OR pvs.date_end   >  ?)
+                       AND (pvs.date_end   IS NULL OR pvs.date_end   >= ?)
                        AND pvs.deleted_at IS NULL
                      ORDER BY pvs.priority DESC LIMIT 1),
                     pv.price

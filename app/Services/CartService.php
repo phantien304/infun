@@ -31,10 +31,13 @@ class CartService
             return ['ok' => true, 'variant_id' => $variantId, 'quantity' => $quantity];
         }
 
-        $product->load('defaultVariant.productStock');
         $variant = $variantId
             ? ProductVariant::with(['productStock'])->find($variantId)
             : null;
+
+        if (! $variant) {
+            return ['ok' => false, 'variant_error' => true];
+        }
 
         if (! $this->checkStock($product, $variant, $totalQuantity)) {
             return [
@@ -72,13 +75,8 @@ class CartService
         return max(0, $onHand - $reserved);
     }
 
-    protected function persistLine(
-        int $productId,
-        ?int $variantId,
-        int $quantity,
-        array $variantAttributes,
-        array $customOptions,
-    ): void {
+    protected function persistLine(int $productId, ?int $variantId, int $quantity, array $variantAttributes, array $customOptions): void
+    {
         $keySession = $this->makeKeySession($productId, $variantId, $customOptions);
 
         $existing = session()->get(getCoreConfig('session.cart').'.'.$keySession);
@@ -143,7 +141,7 @@ class CartService
         }
 
         $productIds = collect($cart)->pluck('product_id')->unique()->all();
-        $variantIds = collect($cart)->pluck('product_variant_id')->filter()->unique()->all();
+        $productVariantIds = collect($cart)->pluck('product_variant_id')->filter()->unique()->all();
 
         $products = Product::with([
             'description',
@@ -152,14 +150,14 @@ class CartService
             'defaultVariant.productVariantSpecial',
         ])->whereIn('id', $productIds)->dateAvailable()->get()->keyBy('id');
 
-        $variants = $variantIds
+        $variants = $productVariantIds
             ? ProductVariant::with([
                 'productStock',
                 'description',
                 'productVariantAttributes.optionValue.description',
                 'productVariantAttributes.option.description',
                 'productVariantSpecial',
-            ])->whereIn('id', $variantIds)->get()->keyBy('id')
+            ])->whereIn('id', $productVariantIds)->get()->keyBy('id')
             : collect();
 
         $items = [];
@@ -410,7 +408,6 @@ class CartService
                     'product_option_value_id' => $value?->id,
                     'option_id'               => $attr->option_id,
                     'option_value_id'         => $attr->option_value_id,
-                    'product_option_id'       => $attr->option_id,
                     'name'                    => $option?->description?->name ?? '',
                     'type'                    => $option?->type ?? '',
                     'variation'               => 2,
@@ -426,7 +423,6 @@ class CartService
             $result[] = [
                 'product_option_value_id' => '',
                 'option_id'               => $custom['option_id'] ?? 0,
-                'product_option_id'       => $custom['option_id'] ?? 0,
                 'image'                   => '',
                 'name'                    => $custom['name'] ?? '',
                 'type'                    => $custom['type'] ?? '',

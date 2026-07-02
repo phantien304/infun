@@ -205,12 +205,14 @@ class GiftService
         return $items;
     }
 
-    public function recordOrderGifts(int $orderId): void
+    public function recordOrderGifts(int $orderId, array $cartItems, int $cartSubtotal): void
     {
         $applied = $this->getAppliedGifts();
         if (empty($applied)) {
             return;
         }
+
+        $cartProductIds = array_unique(array_map(fn ($i) => (int) ($i['id'] ?? 0), $cartItems));
 
         foreach ($applied as $entry) {
             $giftId = (int) ($entry['gift_id'] ?? 0);
@@ -221,6 +223,13 @@ class GiftService
 
             $gift = $this->giftRepo->findActiveById($giftId);
             if (! $gift) {
+                continue;
+            }
+
+            // Re-validate điều kiện kích hoạt + lựa chọn tại thời điểm đặt hàng: chống
+            // trường hợp user đủ điều kiện nhận quà rồi giảm giỏ xuống dưới ngưỡng.
+            if ($this->validateTrigger($gift, $cartSubtotal, $cartProductIds) !== null
+                || $this->validatePicks($gift, $itemIds) !== null) {
                 continue;
             }
 

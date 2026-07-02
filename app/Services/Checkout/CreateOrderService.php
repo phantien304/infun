@@ -131,7 +131,7 @@ class CreateOrderService
                 OrdersProductOption::create([
                     'order_id'                => $orderId,
                     'order_product_id'        => $orderProduct->id,
-                    'product_option_id'       => $opt['product_option_id'] ?? null,
+                    'product_option_id'       => $opt['option_id'] ?? null,
                     'product_option_value_id' => $opt['product_option_value_id'] ?? null,
                     'image'                   => $opt['image'] ?? '',
                     'name'                    => $opt['name'] ?? '',

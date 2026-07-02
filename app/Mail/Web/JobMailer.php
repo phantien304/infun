@@ -13,7 +13,7 @@ class JobMailer extends Base
         $subject = trans('mailer.verify_email.subject');
         $content = '';
         $cc = [];
-        $contentHtml = view('client.infunstudio.mailer.verify_email', compact('email', 'data'));
+        $contentHtml = view('web::mailer.verify_email', compact('email', 'data'));
         return $this->_send($from, $sender, $email, $subject, $content, $cc, $contentHtml);
     }
 
@@ -24,7 +24,7 @@ class JobMailer extends Base
         $subject = trans('mailer.authenticated_email.subject');
         $content = '';
         $cc = [];
-        $contentHtml = view('client.infunstudio.mailer.authenticated_email', compact('email'));
+        $contentHtml = view('web::mailer.authenticated_email', compact('email'));
         return $this->_send($from, $sender, $email, $subject, $content, $cc, $contentHtml);
     }
 
@@ -35,7 +35,7 @@ class JobMailer extends Base
         $subject = trans('mailer.forgot_password.subject');
         $content = '';
         $cc = [];
-        $contentHtml = view('client.infunstudio.mailer.forgot_password', compact('email', 'data'));
+        $contentHtml = view('web::mailer.forgot_password', compact('email', 'data'));
         return $this->_send($from, $sender, $email, $subject, $content, $cc, $contentHtml);
     }
 
@@ -48,7 +48,7 @@ class JobMailer extends Base
         $subject = sprintf(trans('mailer.order_create.subject'), getConfigDb('config_name'), $invoice);
         $content = '';
         $cc = [];
-        $contentHtml = view('client.infunstudio.mailer.order_create', compact('data'));
+        $contentHtml = view('web::mailer.order_create', compact('data'));
         return $this->_send($from, $sender, $infoCustomer['email'], $subject, $content, $cc, $contentHtml);
     }
 
@@ -59,7 +59,7 @@ class JobMailer extends Base
         $subject = sprintf(trans('mailer.order_create.subject_to_admin'), getConfigDb('config_name'));
         $content = '';
         $cc = [];
-        $contentHtml = view('client.infunstudio.mailer.order_create_to_admin', compact('data'));
+        $contentHtml = view('web::mailer.order_create_to_admin', compact('data'));
         return $this->_send($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
     }
 
@@ -70,7 +70,7 @@ class JobMailer extends Base
         $subject = sprintf(trans('mailer.contact_create.subject_to_admin'), getConfigDb('config_name'));
         $content = '';
         $cc = [];
-        $contentHtml = view('client.infunstudio.mailer.contact_create_to_admin', compact('data'));
+        $contentHtml = view('web::mailer.contact_create_to_admin', compact('data'));
         return $this->_send($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
     }
 
@@ -86,7 +86,7 @@ class JobMailer extends Base
         $subject = sprintf(trans('mailer.consult_sign.subject_to_admin'), getConfigDb('config_name'));
         $content = '';
         $cc = [];
-        $contentHtml = view('client.infunstudio.mailer.consult_sign_to_admin', compact('data'));
+        $contentHtml = view('web::mailer.consult_sign_to_admin', compact('data'));
         return $this->_send($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
     }
 }

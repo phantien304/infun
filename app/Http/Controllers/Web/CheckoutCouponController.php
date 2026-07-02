@@ -34,10 +34,10 @@ class CheckoutCouponController extends Controller
             contextHasShipping: $hasShipping,
         );
 
-        return successData('SearchSuccess', [
+        return respondSuccess([
             'coupons'       => $coupons->all(),
             'applied_codes' => $this->getAppliedCodes(),
-        ], $coupons->count());
+        ]);
     }
 
     public function apply(Request $request): JsonResponse
@@ -46,7 +46,7 @@ class CheckoutCouponController extends Controller
         $codes = array_values(array_filter(array_map('strval', $codes), fn ($c) => trim($c) !== ''));
 
         if (empty($codes)) {
-            return errValidator('Vui lòng chọn voucher', 200);
+            return respondUnprocessable(trans('messages.checkout.coupon_choose_required'));
         }
         $items     = $this->cart->getItems();
         $subtotal  = $this->cart->getSubtotal();
@@ -54,14 +54,14 @@ class CheckoutCouponController extends Controller
 
         $result = $this->couponService->applyCodes($codes, $items, (int) $subtotal, contextHasShipping: $hasShipping);
         if (empty($result['applied'])) {
-            $msg = $result['errors'][0] ?? 'Không có voucher nào áp dụng được';
-            return errValidator($msg, 200);
+            $msg = $result['errors'][0] ?? trans('messages.checkout.coupon_none_applied');
+            return respondUnprocessable($msg);
         }
 
         $appliedCodes = array_map(fn ($a) => $a['coupon']->code, $result['applied']);
         session()->put(getCoreConfig('session.applied_coupons'), $appliedCodes);
 
-        return successData('Success', $this->renderState($request, $hasShipping, [
+        return respondSuccess($this->renderState($request, $hasShipping, [
             'total_discount' => $result['total_discount'],
             'errors'         => $result['errors'],
         ], $result));
@@ -71,40 +71,40 @@ class CheckoutCouponController extends Controller
     {
         $userId = (int) getCurrentUserId();
         if ($userId <= 0) {
-            return errValidator('Vui lòng đăng nhập để lưu voucher', 200);
+            return respondError(trans('messages.checkout.coupon_login_save'), 401);
         }
 
         $couponId = (int) $request->input('coupon_id', 0);
         if ($couponId <= 0) {
-            return errValidator('Voucher không hợp lệ', 200);
+            return respondUnprocessable(trans('messages.checkout.coupon_invalid'));
         }
 
         $ok = $this->couponService->save($userId, $couponId);
         if (! $ok) {
-            return errValidator('Voucher không tồn tại', 200);
+            return respondUnprocessable(trans('messages.checkout.coupon_not_exist'));
         }
 
-        return successNoData('Đã lưu voucher');
+        return respondMessage(trans('messages.checkout.coupon_saved'));
     }
 
     public function unsave(Request $request): JsonResponse
     {
         $userId = (int) getCurrentUserId();
         if ($userId <= 0) {
-            return errValidator('Vui lòng đăng nhập', 200);
+            return respondError(trans('messages.checkout.login_required'), 401);
         }
 
         $couponId = (int) $request->input('coupon_id', 0);
         $this->couponService->unsave($userId, $couponId);
 
-        return successNoData('Đã bỏ lưu');
+        return respondMessage(trans('messages.checkout.coupon_unsaved'));
     }
 
     public function remove(Request $request): JsonResponse
     {
         session()->forget(getCoreConfig('session.applied_coupons'));
 
-        return successData('Success', $this->renderState($request, $this->contextHasShipping($request)));
+        return respondSuccess($this->renderState($request, $this->contextHasShipping($request)));
     }
 
     private function getAppliedCodes(): array

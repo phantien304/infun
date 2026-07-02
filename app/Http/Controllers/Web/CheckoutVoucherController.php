@@ -25,10 +25,10 @@ class CheckoutVoucherController extends Controller
         $result = $this->voucherService->applyCode($code, $orderTotal);
 
         if (! $result['ok']) {
-            return errValidator($result['message'], 200);
+            return respondUnprocessable($result['message']);
         }
 
-        return successData('Success', [
+        return respondSuccess([
             'applied_codes' => $this->voucherService->getAppliedCodes(),
             'reload'        => true,
         ]);
@@ -43,7 +43,7 @@ class CheckoutVoucherController extends Controller
             $this->voucherService->removeCode($code);
         }
 
-        return successData('Success', [
+        return respondSuccess([
             'applied_codes' => $this->voucherService->getAppliedCodes(),
             'reload'        => true,
         ]);

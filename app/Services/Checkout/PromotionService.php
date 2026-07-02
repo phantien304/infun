@@ -11,58 +11,60 @@ use Illuminate\Support\Facades\DB;
 class PromotionService
 {
     public function __construct(
-        protected CouponService $coupons,
-        protected VoucherService $vouchers,
-        protected GiftService $gifts,
+        protected CouponService $couponService,
+        protected VoucherService $voucherService,
+        protected GiftService $giftService,
     ) {
     }
 
-    public function buildContext(array $items, int $subtotal, bool $hasShipping): CheckoutPromotions
+    public function resolveAppliedPromotions(array $cartItems, int $subtotal, bool $hasShipping): CheckoutPromotions
     {
-        $ctx = (new CheckoutPromotions())->setItems($items);
+        $promotions = (new CheckoutPromotions())->setItems($cartItems);
 
         $couponCodes = (array) session()->get(getCoreConfig('session.applied_coupons'), []);
         if (! empty($couponCodes)) {
-            $result = $this->coupons->applyCodes($couponCodes, $items, $subtotal, contextHasShipping: $hasShipping);
-            $ctx->setAppliedCoupons($result['applied'], $result['freeship']);
+            $result = $this->couponService->applyCodes($couponCodes, $cartItems, $subtotal, contextHasShipping: $hasShipping);
+            $promotions->setAppliedCoupons($result['applied'], $result['freeship']);
         }
 
-        $ctx->setVoucherCodes($this->vouchers->getAppliedCodes());
-        $ctx->setGifts($this->gifts->getAppliedGifts());
-
-        return $ctx;
+        return $promotions->setAppliedVoucherCodes($this->voucherService->getAppliedCodes())
+                          ->setAppliedGifts($this->giftService->getAppliedGifts());
     }
 
-    public function viewData(CheckoutPromotions $ctx, int $subtotal, string $userEmail, bool $hasShipping): array
+    public function viewData(CheckoutPromotions $promotions, int $subtotal, string $userEmail, bool $hasShipping): array
     {
-        $items = $ctx->items;
+        $items = $promotions->items;
 
         return [
-            'coupons'             => $this->coupons->listForCart($items, $subtotal, contextHasShipping: $hasShipping),
-            'gifts'               => $this->gifts->listForCart($items, $subtotal),
-            'giftItems'           => $this->gifts->resolveGiftDisplayItems(),
-            'myVouchers'          => $userEmail !== '' ? $this->vouchers->listMyVouchers($userEmail, $subtotal) : collect(),
-            'appliedVoucherCodes' => $ctx->appliedVoucherCodes,
+            'coupons'             => $this->couponService->listForCart($items, $subtotal, contextHasShipping: $hasShipping),
+            'gifts'               => $this->giftService->listForCart($items, $subtotal),
+            'giftItems'           => $this->giftService->resolveGiftDisplayItems(),
+            'myVouchers'          => $userEmail !== '' ? $this->voucherService->listMyVouchers($userEmail, $subtotal) : collect(),
+            'appliedVoucherCodes' => $promotions->appliedVoucherCodes,
         ];
     }
 
     public function resolveVouchers(int $runningTotal): array
     {
-        return $this->vouchers->resolveApplied($runningTotal);
+        return $this->voucherService->resolveApplied($runningTotal);
     }
 
-    public function recordForOrder(CheckoutPromotions $ctx, int $orderId, int $orderTotal): void
+    public function recordForOrder(CheckoutPromotions $promotions, int $orderId, int $orderTotal): void
     {
-        $this->recordCoupons($ctx, $orderId);
-        $this->vouchers->recordOrderVouchers($orderId, $orderTotal);
-        $this->gifts->recordOrderGifts($orderId);
+        $this->recordCoupons($promotions, $orderId);
+        $this->voucherService->recordOrderVouchers($orderId, $orderTotal);
+        $this->giftService->recordOrderGifts(
+            $orderId,
+            $promotions->items,
+            (int) array_sum(array_column($promotions->items, 'total')),
+        );
     }
 
     public function revertForOrder(int $orderId): void
     {
-        $this->coupons->revertOrderCoupons($orderId);
-        $this->gifts->revertOrderGifts($orderId);
-        $this->vouchers->revertOrderVouchers($orderId);
+        $this->couponService->revertOrderCoupons($orderId);
+        $this->giftService->revertOrderGifts($orderId);
+        $this->voucherService->revertOrderVouchers($orderId);
     }
 
     protected function recordCoupons(CheckoutPromotions $ctx, int $orderId): void

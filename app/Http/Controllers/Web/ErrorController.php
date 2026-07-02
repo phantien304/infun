@@ -21,6 +21,6 @@ class ErrorController extends Controller
             'descriptionSeo' => trans('seo.404.description'),
             'linkCanonical' => route('error.404'),
         ]);
-        return $this->render('client.infunstudio.page.error404');
+        return $this->render('web::page.error404');
     }
 }

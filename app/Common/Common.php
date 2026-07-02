@@ -4,48 +4,6 @@ use App\Helpers\Facades\ChannelLog;
 use App\Helpers\Facades\CustomStorage;
 use Illuminate\Support\Facades\DB;
 
-function errValidator($error, $code = 422)
-{
-    return response()->json([
-        'success' => false,
-        'validator' => false,
-        'code' => $code,
-        'message' => $error,
-    ], $code);
-}
-
-function errNoValidator($error, $code = 422)
-{
-    return response()->json([
-        'success' => false,
-        'validator' => true,
-        'code' => $code,
-        'message' => $error,
-    ], $code);
-}
-
-function successNoData($key = '', $code = 200)
-{
-    return response()->json([
-        'success' => true,
-        'validator' => true,
-        'code' => $code,
-        'message' => $key,
-    ], $code);
-}
-
-function successData($key = '', $data = null, $totalRow = 0, $code = 200)
-{
-    return response()->json([
-        'success' => true,
-        'validator' => true,
-        'code' => $code,
-        'message' => $key,
-        'data' => $data,
-        'totalRow' => $totalRow
-    ], $code);
-}
-
 function respondSuccess($data = null, string $message = '', int $status = 200, array $meta = []): \Illuminate\Http\JsonResponse
 {
     $payload = [
@@ -346,4 +304,19 @@ function getIpVisitor()
         $ip = $remote;
     }
     return $ip;
+}
+
+
+/**
+ * Che bớt chuỗi PII (tên / SĐT) bằng ký tự thay thế — dùng cho trang tra cứu
+ * đơn hàng public. VD: string2Stars('Nguyễn Văn An', 0, -4) che hết trừ 4 ký tự cuối.
+ */
+function string2Stars($string = '', $first = 0, $last = 0, $rep = 'x')
+{
+    $string = (string) $string;
+    $begin  = substr($string, 0, $first);
+    $middle = str_repeat($rep, strlen(substr($string, $first, $last)));
+    $end    = substr($string, $last);
+
+    return $begin . $middle . ' ' . $end;
 }

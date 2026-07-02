@@ -19,8 +19,6 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
         return Voucher::class;
     }
 
-    // === Shopee-style API ===
-
     public function findByCode(string $code): ?Voucher
     {
         $code = trim($code);
@@ -34,14 +32,6 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->first();
     }
 
-    /**
-     * Batch lookup nhiều code trong 1 query — tránh N+1 khi resolveApplied
-     * stack nhiều voucher (gọi lại mỗi lần build total). Trả Collection
-     * keyBy 'code' để caller `->get($code)`.
-     *
-     * @param  array<int, string>  $codes
-     * @return Collection<string, Voucher>
-     */
     public function findByCodes(array $codes): Collection
     {
         $codes = array_values(array_filter(array_map('trim', $codes), fn ($c) => $c !== ''));

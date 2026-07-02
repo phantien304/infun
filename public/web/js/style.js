@@ -453,9 +453,6 @@ $(document).ready(function () {
         if (typeof variantMatrix === 'undefined') { window.variantMatrix = []; }
         if (typeof defaultVariant === 'undefined') { window.defaultVariant = null; }
 
-        // Debug helper: gõ `window.dumpVariants()` trong console để xem matrix
-        // hiện tại. Dùng khi nghi data sai (subtract=1 + available=0 trên mọi
-        // variant → toàn bộ OOS). Nếu thấy bất thường: cache:clear rồi reload.
         window.dumpVariants = function () {
             console.table((variantMatrix || []).map(function (v) {
                 return {
@@ -471,12 +468,6 @@ $(document).ready(function () {
 
         var PRICE_SELECTOR = 'b#price-product';
 
-        /**
-         * Tập option_id thực sự tham gia SKU (xuất hiện trong attributes của
-         * ít nhất 1 variant). Custom field role có thể render widget radio/select
-         * giống variant nhưng KHÔNG xuất hiện ở đây — JS dùng set này để loại
-         * khỏi cả variant lookup lẫn out-of-stock check, tránh false positive.
-         */
         var VARIANT_OPTION_IDS = (function () {
             var ids = new Set();
             (Array.isArray(variantMatrix) ? variantMatrix : []).forEach(function (v) {
@@ -487,17 +478,6 @@ $(document).ready(function () {
             return ids;
         })();
 
-        /**
-         * Đọc selection hiện tại từ DOM. Trả về map { option_id: option_value_id }
-         * chỉ với group đã chọn — group chưa chọn không xuất hiện.
-         *
-         * Chỉ kể inputs có option_id thuộc VARIANT_OPTION_IDS — custom field role
-         * (nếu render dạng radio/select) bị bỏ qua, không phá lookup.
-         *
-         * Convention DB: variant role chỉ cho phép 1 value/option_id (PK pivot
-         * `product_variant_attribute`). Checkbox cho variant role là data-bug
-         * — JS lấy value cuối cùng được check, overwrite cái trước.
-         */
         function readSelectedAttributes() {
             var attrs = {};
             $('.input-option input[type=radio]:checked, .input-option input[type=checkbox]:checked')
@@ -520,11 +500,6 @@ $(document).ready(function () {
             return attrs;
         }
 
-        /**
-         * Match variant exact: số lượng key + từng cặp (option_id, option_value_id)
-         * phải khớp. Partial selection → trả null, giá giữ nguyên (default hoặc
-         * giá hiện tại).
-         */
         function findVariant(selected) {
             var keys = Object.keys(selected);
             if (!keys.length || !Array.isArray(variantMatrix)) return null;
@@ -543,15 +518,6 @@ $(document).ready(function () {
             return number_format(price) + 'đ';
         }
 
-        /**
-         * Navigate slick chính tới slide có src khớp `targetSrc`. Trả true
-         * nếu tìm thấy + đã goto, false nếu không. KHÔNG mutate src của slide
-         * → khi user click thumb đầu vẫn thấy ảnh gốc, không bị "kẹt" variant
-         * image như approach mutate trước đây.
-         *
-         * Hoạt động vì `$images = $product->gallery + imageOptions` đã chứa
-         * sẵn variant swatch images như slide cuối, slick render hết.
-         */
         function goToImageBySrc(targetSrc) {
             if (!targetSrc) return false;
             var $slider = $('.product-image-slider');
@@ -568,12 +534,11 @@ $(document).ready(function () {
             return false;
         }
 
-        /**
-         * Quay về slide 0 (ảnh chính product). Dùng khi user de-select variant
-         * (click lại swatch đã active) → main slider revert về ảnh sản phẩm
-         * mặc định, không kẹt ở variant image cuối.
-         */
         function resetMainSlider() {
+            if (galleryShowingVariant && renderGallery(window.productGallery)) {
+                galleryShowingVariant = false;
+                return;
+            }
             var $slider = $('.product-image-slider');
             if ($slider.length && $slider.hasClass('slick-initialized')) {
                 $slider.slick('slickGoTo', 0);
@@ -582,78 +547,64 @@ $(document).ready(function () {
 
         function swapMainImage(src) {
             if (!src) return;
-            // Ưu tiên navigate slick — KHÔNG mutate src (tránh bug "thumb đầu
-            // hiển thị variant"). Slide variant đã có sẵn trong $images.
             if (goToImageBySrc(src)) return;
-            // Fallback: nếu src không match slide nào (vd ảnh variant không
-            // được render thành slide), mới mutate src của slide hiện tại.
             $('.product-image-slider .slick-active img').attr('src', src);
             $('.zoomWindowContainer div').css('background-image', 'url(' + src + ')');
         }
 
-        /**
-         * Áp variant đã chọn lên UI: giá, ảnh chính, toggle nút mua/liên hệ.
-         * Khi `variant` null (selection partial / không khớp) → KHÔNG động vào
-         * giá, tránh nháy về 0.
-         *
-         * @param {Object} variant — variant data từ variantMatrix / defaultVariant
-         * @param {boolean} [swapImg=true] — có swap ảnh main slider không.
-         *   Init page load PHẢI truyền false để main slider giữ $images[0]
-         *   (= product.image), khớp với thumb[0]. Nếu init swap, main hiển thị
-         *   variant.image còn thumb[0] hiển thị product.image → user thấy main
-         *   khác thumb đầu, gây nhầm "chọn variant nào hiện ảnh đó".
-         *   User click variant chủ động → swap (default true).
-         */
+        var galleryShowingVariant = false;
+        function renderGallery(images) {
+            var $main = $('.product-image-slider');
+            var $thumbs = $('.slider-nav-thumbnails');
+            if (!$main.hasClass('slick-initialized') || !Array.isArray(images) || !images.length) {
+                return false;
+            }
+            $main.slick('slickRemove', null, null, true);
+            $thumbs.slick('slickRemove', null, null, true);
+            images.forEach(function (im) {
+                $main.slick('slickAdd', '<figure class="border-radius-10"><img src="' + im.full + '" alt="' + (im.alt || '') + '"></figure>');
+                $thumbs.slick('slickAdd', '<div><img src="' + im.thumb + '" alt="' + (im.alt || '') + '"></div>');
+            });
+            $main.slick('slickGoTo', 0, true);
+            $('.slider-nav-thumbnails .slick-slide').removeClass('slick-active').eq(0).addClass('slick-active');
+            return true;
+        }
+
         function applyVariant(variant, swapImg) {
             if (!variant) return;
             if (typeof swapImg === 'undefined') swapImg = true;
 
-            // effective_price = COALESCE(variantSpecial.price, variant.price)
-            // do server precompute trong ProductOptionService::buildVariantMatrix.
-            // Fallback variant.price khi field thiếu (data legacy chưa migrate).
             var currentPrice = (typeof variant.effective_price === 'number')
                 ? variant.effective_price
                 : variant.price;
             $(PRICE_SELECTOR).html(formatPriceLabel(currentPrice));
             updateDiscountBadge(variant);
 
-            // Stock-aware buttons: dùng cùng id #button-cart / #button-contact
-            // mà blade index.blade.php toggle khi quantity = 0.
-            // ALL_OOS = data drift (mọi variant subtract=true + available=0) →
-            // coi như in-stock để không ẩn button mua hàng. Stock thật ép ở
-            // OrderService khi tạo order.
             var inStock = ALL_OOS
                        || !variant.subtract
                        || (variant.available && variant.available > 0);
-            // Chỉ toggle khi element tồn tại, tránh trường hợp blade chỉ render
-            // 1 trong 2 button (vd config_stock_checkout=0 → không có
-            // #button-contact, ẩn #button-cart sẽ không còn button nào).
             if ($('#button-cart').length && $('#button-contact').length) {
                 $('#button-cart').toggle(!!inStock);
                 $('#button-contact').toggle(!inStock);
             }
 
-            if (swapImg && variant.image) swapMainImage(variant.image);
+            if (swapImg) {
+                var vGallery = (window.variantGallery || {})[variant.id];
+                if (vGallery && vGallery.length && renderGallery(vGallery)) {
+                    galleryShowingVariant = true;
+                } else {
+                    if (galleryShowingVariant && renderGallery(window.productGallery)) {
+                        galleryShowingVariant = false;
+                    }
+                    if (variant.image) swapMainImage(variant.image);
+                }
+            }
         }
 
-        /**
-         * Update struck-through price + discount badge (Shopee-style) per-variant.
-         *
-         * Reference price priority (server precompute trong
-         * ProductOptionService::resolveVariantPricing → field `strike_price`):
-         *  1. variant_special active → strike = variant.regular_price (nếu có)
-         *     hoặc variant.price (giá pre-campaign). Hai mức discount xếp chồng.
-         *  2. Không có special → strike = variant.regular_price (MSRP tĩnh).
-         *  3. Không có gì để strike → field null → ẩn struck + badge.
-         *
-         * Current price = variant.effective_price (= COALESCE(special, base)).
-         * Backward compat: nếu field thiếu thì fallback về logic cũ.
-         */
         function updateDiscountBadge(variant) {
             var currentPrice, refPrice;
 
             if (typeof variant === 'number') {
-                // Backward compat: caller cũ truyền number.
                 currentPrice = variant;
                 refPrice = typeof productBasePrice === 'number' ? productBasePrice : 0;
             } else if (variant && typeof variant === 'object') {
@@ -663,9 +614,8 @@ $(document).ready(function () {
                 if (typeof variant.strike_price === 'number') {
                     refPrice = variant.strike_price;
                 } else if (variant.strike_price === null) {
-                    refPrice = 0; // server đã quyết định không strike
+                    refPrice = 0;
                 } else {
-                    // Legacy variant không có strike_price → tính từ regular.
                     refPrice = (variant.regular_price && variant.regular_price > 0)
                         ? variant.regular_price
                         : (typeof productBasePrice === 'number' ? productBasePrice : 0);
@@ -686,22 +636,6 @@ $(document).ready(function () {
             $('#discount-badge').show();
         }
 
-        /**
-         * Check 1 option_value còn khả dụng không, GIẢ SỬ user chọn nó cùng
-         * với các option khác đã chọn (overwrite cùng group nếu trùng option_id).
-         *
-         * Available = tồn tại ít nhất 1 variant compatible với selection
-         * hypothetical VÀ (variant.subtract = false) HOẶC (variant.available > 0).
-         *
-         * Dynamic, không phải static — kết quả thay đổi mỗi khi user toggle 1
-         * option khác. UX kiểu Shopify: chọn Color=Red → các Size không có
-         * variant (Red, Size) còn hàng sẽ tự grey-out.
-         */
-        // Detect data drift: nếu MỌI variant đều subtract=true + available=0
-        // thì gần như chắc chắn seed/import bị lỗi (không thật sự hết hàng
-        // toàn bộ). Khi đó bỏ qua OOS check — coi variant nào cũng available
-        // để user vẫn pick được. Stock thật sẽ được ép tại OrderService khi
-        // tạo order.
         var ALL_OOS = Array.isArray(variantMatrix) && variantMatrix.length > 0 &&
             variantMatrix.every(function (v) {
                 return v.subtract && !(v.available && v.available > 0);
@@ -727,12 +661,6 @@ $(document).ready(function () {
             });
         }
 
-        /**
-         * Feasibility check: tồn tại ít nhất 1 in-stock variant khớp TẤT CẢ
-         * cặp (option_id, option_value_id) trong `selected`. Selection từng
-         * phần (prefix của 1 variant còn hàng) vẫn feasible; selection rỗng
-         * luôn feasible.
-         */
         function isSelectionFeasible(selected) {
             var keys = Object.keys(selected);
             if (!keys.length) return true;
@@ -746,12 +674,6 @@ $(document).ready(function () {
             });
         }
 
-        /**
-         * Clear toàn bộ UI + hidden value của 1 option (radio / image /
-         * checkbox / select). Dùng khi auto-resolve: user vừa chọn value mới ở
-         * option O khiến (các) option khác đang chọn thành combo KHÔNG tồn tại
-         * → bỏ chọn chúng, GIỮ lại option O vừa click.
-         */
         function deselectOption(optionId) {
             var $group = $('#option-' + optionId);
             $group.find('input[type=radio], input[type=checkbox]')
@@ -764,48 +686,29 @@ $(document).ready(function () {
             $('#option-value-' + optionId).val('');
         }
 
-        /**
-         * Bidirectional availability (Shopee/Lazada-style). Value V của option
-         * O còn hàng ⇔ tồn tại in-stock variant khớp (selection của các option
-         * KHÁC) ∪ {O: V}. KHÔNG còn short-circuit "option đã chọn thì mọi value
-         * enable" — cả trục Size lẫn trục Màu cùng grey nhất quán, không lệch.
-         *
-         * Swatch KHÔNG bị hard-disable nữa: chỉ gắn class `.out-of-stock`
-         * (visual gạch chéo + xám). Click vào swatch out-of-stock VẪN được —
-         * handler sẽ auto-resolve (bỏ chọn trục xung đột) nên user không bao
-         * giờ kẹt ở combo không tồn tại. Value đang được chọn của mỗi option
-         * không bao giờ tự đánh dấu out-of-stock.
-         *
-         * `<select>` là ngoại lệ: vẫn disable `<option>` hết hàng vì dropdown
-         * không có cơ chế "click để re-base" như swatch.
-         */
         function refreshAvailability() {
             if (!Array.isArray(variantMatrix) || !variantMatrix.length) return;
             var selected = readSelectedAttributes();
             var hasSelection = Object.keys(selected).length > 0;
 
-            // Radio + image + checkbox: data-option-id / data-option-value-id ở input.
             $('.input-option input[type=radio][data-option-value-id], ' +
               '.input-option input[type=checkbox][data-option-value-id]').each(function () {
                 var $input = $(this);
                 var optionId = parseInt($input.attr('data-option-id'), 10);
                 var valueId = parseInt($input.attr('data-option-value-id'), 10);
                 if (!optionId || !valueId) return;
-                // Custom field (role != variant) không tham gia stock → luôn enable.
                 if (!VARIANT_OPTION_IDS.has(optionId)) return;
 
                 var isSelectedValue = String(selected[optionId]) === String(valueId);
                 var ok = isValueAvailable(selected, optionId, valueId);
                 var bad = hasSelection && !ok && !isSelectedValue;
 
-                // Không hard-disable → cho phép click để switch + auto-resolve.
                 $input.prop('disabled', false);
                 var $wrap = $input.parent();
                 $wrap.toggleClass('out-of-stock', bad);
                 $wrap.find('label').toggleClass('out-of-stock-label', bad);
             });
 
-            // Select: data-option-value-id ở từng <option>. Disable option hết hàng.
             $('.input-option select[data-option-id]').each(function () {
                 var $select = $(this);
                 var optionId = parseInt($select.attr('data-option-id'), 10);
@@ -822,17 +725,6 @@ $(document).ready(function () {
             });
         }
 
-        /**
-         * Sau mỗi thay đổi selection:
-         *  1) Auto-resolve conflict — nếu combo hiện tại không tồn tại (user
-         *     vừa click value làm trục kia xung đột), bỏ chọn các option KHÁC
-         *     (giữ option `keepOptionId` vừa click) tới khi feasible.
-         *  2) Áp giá theo variant khớp đầy đủ; selection từng phần → fallback
-         *     defaultVariant (KHÔNG swap ảnh, giữ ảnh swatch user vừa chọn).
-         *  3) Refresh trạng thái grey của cả 2 trục.
-         *
-         * @param {number} [keepOptionId] option vừa được user tương tác.
-         */
         function recompute(keepOptionId) {
             keepOptionId = parseInt(keepOptionId, 10);
 
@@ -853,32 +745,17 @@ $(document).ready(function () {
             refreshAvailability();
         }
 
-        // ---- Init: áp variant default khi page load (CHỈ giá + nút, KHÔNG ảnh) -----
         $(function () {
-            // swapImg=false để main slider giữ product.image (= $images[0]),
-            // khớp với thumb đầu. Variant.image chỉ swap khi user actively click.
             if (defaultVariant) applyVariant(defaultVariant, false);
-            // Init không selection → chưa grey gì. refreshAvailability chạy
-            // để đồng bộ trạng thái nếu DOM có value pre-checked từ server.
             refreshAvailability();
         });
 
-        // ---- Variant role: radio / image swatch -------
-        // Click pattern: click 1 swatch → select (active + checked + swap ảnh).
-        // Click LẠI swatch đã active → de-select (uncheck + clear active +
-        // reset slider về slide 0).
-        //
-        // Swatch out-of-stock KHÔNG bị chặn click nữa: click 1 combo không tồn
-        // tại sẽ được recompute() auto-resolve (bỏ chọn trục xung đột, giữ
-        // value vừa click) → re-base selection, không kẹt. Đây là hành vi
-        // Shopee/Lazada thật: bấm bất kỳ swatch nào cũng chuyển được.
         $(document).on('click', '.radio-choose-v2 input', function () {
             var $input = $(this);
             var optionId = parseInt($input.data('option'), 10);
             var $wrapper = $input.parent();
             var $group = $input.closest('.radio-choose-v2');
 
-            // Click lại swatch đã active → toggle off
             if ($wrapper.hasClass('active')) {
                 $input.prop('checked', false);
                 $wrapper.removeClass('active');
@@ -890,15 +767,10 @@ $(document).ready(function () {
                 return;
             }
 
-            // Toggle on: clear active group + set wrapper
             $('#option-' + optionId).addClass('has-choose');
             $group.children('.active').removeClass('active');
             $wrapper.addClass('active');
-
-            // Capture label cho hidden input (backend đọc khi add-to-cart).
             $('#option-value-' + optionId).val($input.next('label').text().trim());
-
-            // Image swatch: navigate slick tới ảnh variant ngay khi click.
             var swatch = $input.attr('data-image');
             if (swatch) swapMainImage(swatch);
 
@@ -929,12 +801,12 @@ $(document).ready(function () {
             $('#option-value-' + $el.data('option')).val($el.val());
         });
     })();
-    // Helpers add-to-cart — chia sẻ giữa #button-cart và #consult-sign.
+
     function clearOptionErrors() {
         $('.product-option .option-error').remove();
         $('#product-quantity').html('');
     }
-    // Render error ngay dưới block variant tương ứng, scroll vào tầm nhìn.
+
     function renderOptionErrors(message) {
         if (!message || typeof message !== 'object') return;
         var $first = null;
@@ -960,9 +832,7 @@ $(document).ready(function () {
             $('html, body').animate({ scrollTop: Math.max(0, $first.offset().top - 120) }, 200);
         }
     }
-    // Laravel chuẩn 422 → `{ message, errors: { "option.<id>.parent": [...],
-    // quantity: [...] } }`. reshape về `{ optId: {parent}, quantity }` cho
-    // renderOptionErrors dùng chung.
+
     function reshapeLaravelErrors(errors) {
         var out = {};
         if (!errors || typeof errors !== 'object') return out;
@@ -975,8 +845,7 @@ $(document).ready(function () {
         }
         return out;
     }
-    // Lỗi "toàn cục" (string) — 404/422 business rule/500 — hiển thị ngay dưới
-    // khối số lượng, cạnh nút mua hàng.
+
     function renderGlobalError(message) {
         if (!message || typeof message !== 'string') return;
         var $err = $('<span class="error text-danger option-error d-block mt-1"></span>').text(message);
@@ -985,9 +854,7 @@ $(document).ready(function () {
             $('html, body').animate({ scrollTop: Math.max(0, $err.offset().top - 120) }, 200);
         }
     }
-    // Xử lý mọi response lỗi (RESTful) cho add-to-cart / consult-sign:
-    //  422 + errors  → validation input, render dưới từng option
-    //  404/422/500   → message string, render global
+
     function handleCartAjaxError(xhr) {
         var json = (xhr && xhr.responseJSON) || {};
         if (xhr && xhr.status === 422 && json.errors) {
@@ -999,17 +866,13 @@ $(document).ready(function () {
         }
         renderGlobalError(json.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
     }
-    // Khi user pick variant/option, clear error cũ của option đó — UX
-    // tốt hơn là chờ user bấm lại button-cart mới biết.
+
     $(document).on('click change', '.product-option input, .product-option select, .product-option textarea', function () {
         var optionId = $(this).data('option');
         if (optionId) $('#option-' + optionId).siblings('.option-error').remove();
     });
 
     $(document).on('click', '#button-cart', function () {
-        // URL từ data-url (routeArea generate phía blade) để tránh hardcode
-        // sai khi app chạy dưới sub-path hoặc đổi route. Fallback giữ hardcoded
-        // cho backward-compat khi blade cũ chưa migrate.
         var addToCartUrl = $(this).data('url') || '/checkout/add-to-cart';
         $.ajax({
             url: addToCartUrl,
@@ -1023,7 +886,6 @@ $(document).ready(function () {
                 $('#button-cart').attr("disabled", "disabled");
                 clearOptionErrors();
             },
-            // 201 Created → { success, message, data: { notice, cart: { count, url } } }
             success: function (json) {
                 $('.success, .warning, .attention, .information').remove();
                 var d = (json && json.data) || {};
@@ -1034,7 +896,6 @@ $(document).ready(function () {
                     $('#cart-total').html(d.cart.count);
                 }
             },
-            // 404 / 422 / 500 → error callback (RESTful status codes).
             error: function (xhr) {
                 handleCartAjaxError(xhr);
             },
@@ -1057,14 +918,12 @@ $(document).ready(function () {
                 $('#consult-sign').attr("disabled", "disabled");
                 clearOptionErrors();
             },
-            // 202 Accepted → { success, message, data: { notice } }
             success: function (json) {
                 $('.success, .warning, .attention, .information').remove();
                 var d = (json && json.data) || {};
                 $('#dialog-consult-sign').dialog("open");
                 $('#dialog-consult-sign').html(d.notice || (json && json.message) || '');
             },
-            // 404 / 422 → error callback.
             error: function (xhr) {
                 handleCartAjaxError(xhr);
             },
@@ -1141,14 +1000,12 @@ $(document).ready(function () {
             },
             dataType: 'json',
         }).done(function (data) {
-            // 201 Created → { message, review: { id } }
             $("#ratingForm button[type='submit']").removeAttr('disabled');
             ratingForm.find("input").val('');
             ratingForm.find("textarea").val('');
             ratingForm.append('<div class="alert alert-success">' + ((data && data.message) || '') + '</div>');
             $('#review').load(urlListReview);
         }).fail(function (xhr) {
-            // 422 validation → { message, errors }; 422 business / 500 → { message }
             $("#ratingForm button[type='submit']").removeAttr('disabled');
             var json = (xhr && xhr.responseJSON) || {};
             if (xhr && xhr.status === 422 && json.errors) {
@@ -1261,10 +1118,6 @@ $(document).ready(function () {
 });
 
 var productDetails = function () {
-    // Bỏ asNavFor + focusOnSelect — slick reciprocal sync auto-scroll strip
-    // mỗi lần currentSlide đổi (= "nhảy từng cái khi click"). Handle click
-    // manual phía dưới: slickGoTo main + update .slick-current/.slick-active
-    // class trên strip bằng tay → strip đứng yên, chỉ border đổi.
     $('.product-image-slider').slick({
         slidesToShow: 1,
         slidesToScroll: 1,
@@ -1284,38 +1137,24 @@ var productDetails = function () {
         nextArrow: '<button type="button" class="slick-next"><i class="fi-rs-arrow-small-right"></i></button>'
     });
 
-    // Click thumb → main slider slickGoTo + manually toggle .slick-current /
-    // .slick-active trên strip. KHÔNG slick(strip).slickGoTo → strip không
-    // scroll. Visual border + triangle áp lên thumb được click qua CSS rule
-    // `.slick-slide.slick-current` (main.css).
     $(document).on('click', '.slider-nav-thumbnails .slick-slide:not(.slick-cloned)', function () {
         var $thumb = $(this);
         var idx = parseInt($thumb.attr('data-slick-index'), 10);
         if (isNaN(idx) || idx < 0) return;
 
         var $strip = $('.slider-nav-thumbnails');
-        // Dọn cờ hover stale (nếu user click sau khi hover thumb khác).
         $strip.removeClass('is-hovering');
         $strip.find('.slick-slide.is-hover-active').removeClass('is-hover-active');
 
-        // Update visual current/active class trên strip — không slickGoTo.
         $strip.find('.slick-slide').removeClass('slick-current slick-active');
         $thumb.addClass('slick-current slick-active');
 
-        // Commit main image qua slickGoTo (an toàn vì không còn asNavFor
-        // reciprocal → không tác động lại strip).
         var $mainSlider = $('.product-image-slider');
         if ($mainSlider.hasClass('slick-initialized')) {
             $mainSlider.slick('slickGoTo', idx);
         }
     });
 
-    // Shopee-style hover: trong lúc hover thumb chỉ mutate src main (preview
-    // nhanh, KHÔNG slickGoTo để tránh asNavFor reciprocal sync auto-scroll
-    // strip — gây "loạn" khi user di chuột qua nhiều thumb liên tiếp).
-    // Khi user RỜI khỏi strip (mouseleave 1 lần) mới commit: slickGoTo về
-    // thumb cuối được hover → slick state + .slick-current border + main
-    // image đều đồng bộ ở thumb đó.
     $(document).on('mouseenter', '.slider-nav-thumbnails .slick-slide:not(.slick-cloned)', function () {
         var $thumb = $(this);
         var $strip = $('.slider-nav-thumbnails');
@@ -1335,31 +1174,6 @@ var productDetails = function () {
         $('.zoomWindowContainer div').css('background-image', 'url(' + mainSrc + ')');
     });
 
-    // Mouseleave strip: commit thumb cuối user hover.
-    // - slickGoTo về thumb đó → main slider currentSlide + asNavFor sync
-    //   strip → thumb có .slick-current (border + triangle visual).
-    // - Dùng `data-slick-index` để lấy real index (bỏ qua slick-cloned).
-    // - Bọc slickGoTo trong setTimeout 0 để tách khỏi event hiện tại,
-    //   tránh race với mouseleave handler khác trên thumb.
-    // Mouseleave strip: KHÔNG slickGoTo (gây asNavFor reciprocal scroll →
-    // strip "nhảy từng cái"). KHÔNG dọn class — giữ nguyên .is-hovering +
-    // .is-hover-active trên thumb cuối. CSS rule (custom.css 261/265/279)
-    // tiếp tục render thumb đó như .slick-current: border cam + triangle +
-    // suppress .slick-current thật.
-    //
-    // Ảnh main đã được mutate src ở mouseenter → match thumb cuối → ổn.
-    //
-    // Khi user CLICK thumb sau đó, handler click dưới đây dọn cờ hover,
-    // slick commit .slick-current thật ở thumb được click. Slick internal
-    // currentSlide vẫn navigate đúng từ vị trí cũ → click thumb mới hoạt
-    // động bình thường, ảnh main load slide tương ứng.
-    //
-    // Trade-off: nếu user dùng arrow next/prev (không qua thumb), nav từ
-    // slick currentSlide gốc (thường 0). Acceptable — UX hover-then-leave
-    // không yêu cầu sync slick state, chỉ yêu cầu visual ổn định.
-
-    // Click commit: dọn cờ hover để CSS .is-hovering không suppress
-    // .slick-current của thumb mới click. slick focusOnSelect tự nav.
     $(document).on('click', '.slider-nav-thumbnails .slick-slide', function () {
         var $strip = $('.slider-nav-thumbnails');
         $strip.removeClass('is-hovering');
@@ -1497,7 +1311,6 @@ function userWishlist($productId) {
         url: urlUserWishlist + '?product_id=' + $productId,
         type: 'get',
         dataType: 'json',
-        // 200 -> { success, message, data: { deleted, total } }
         success: function (json) {
             var d = (json && json.data) || {};
             $('#dialog-confirm-wishlist').dialog('open');
@@ -1508,7 +1321,6 @@ function userWishlist($productId) {
             $('#count-wishlist').html(d.total);
         },
         error: function (xhr) {
-            // 401 -> chưa đăng nhập; còn lại -> hiển thị message lỗi (vd 422).
             if (xhr && (xhr.status === 401 || xhr.status === 403)) {
                 $('#dialog-confirm-wishlist-nlg').dialog('open');
                 $('#dialog-confirm-wishlist-nlg').html('<b class="pt-1 pb-1">Bạn cần đăng nhập tài khoản để thêm sản phẩm yêu thích</b>');

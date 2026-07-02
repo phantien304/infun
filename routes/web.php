@@ -58,12 +58,17 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::get('ward', 'ResourceController@ward')->name('resource.ward');
     });
     Route::prefix('account')->group(function () {
-        Route::any('login', 'AuthController@login')->name('auth.login');
+        // Auth form: GET render + POST xử lý (POST action do* type-hint FormRequest ở controller).
+        Route::get('login', 'AuthController@login')->name('auth.login');
+        Route::post('login', 'AuthController@doLogin')->name('auth.doLogin');
         Route::get('login/{provider}', 'AuthController@loginWithProvider')->name('auth.loginSocial');
         Route::get('login/{provider}/callback', 'AuthController@handleProviderCallback')->name('auth.socialCallback');
-        Route::any('register', 'AuthController@register')->name('auth.register');
-        Route::any('forgot-password', 'AuthController@forgotPassword')->name('auth.forgotPassword');
-        Route::any('change-password', 'AuthController@changePassword')->name('auth.changePassword');
+        Route::get('register', 'AuthController@register')->name('auth.register');
+        Route::post('register', 'AuthController@doRegister')->name('auth.doRegister');
+        Route::get('forgot-password', 'AuthController@forgotPassword')->name('auth.forgotPassword');
+        Route::post('forgot-password', 'AuthController@doForgotPassword')->name('auth.doForgotPassword');
+        Route::get('change-password', 'AuthController@changePassword')->name('auth.changePassword');
+        Route::post('change-password', 'AuthController@doChangePassword')->name('auth.doChangePassword');
         Route::get('verify-email', 'AuthController@verifyEmail')->name('auth.verifyEmail');
         Route::post('add-address', 'AccountController@addAddress')->name('account.addAddress');
     });

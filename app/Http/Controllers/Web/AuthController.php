@@ -9,28 +9,9 @@ use App\Http\Requests\Web\AuthRegisterRequest;
 use App\Http\Requests\Web\AuthResetPasswordRequest;
 use App\Services\Auth\AuthService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Socialite\Facades\Socialite;
 
-/**
- * Xác thực frontend (luồng KHÁCH HÀNG): login / register / social login /
- * forgot + reset password / verify email.
- *
- * Refactor 2026-06-13 — đưa khỏi trạng thái legacy hỏng (namespace sai
- * `Client\InfunStudio`, extends `BaseInfunStudioController` không tồn tại,
- * dùng repo/job/validator legacy đã xoá). Chuẩn hoá theo pattern Account
- * (xem CLAUDE.md "Account flow"):
- *  - Namespace `App\Http\Controllers\Web`, extends base `Controller` mới.
- *  - Toàn bộ nghiệp vụ đẩy xuống `App\Services\Auth\AuthService`.
- *  - Validate qua FormRequest `App\Http\Requests\Web\Auth*Request`.
- *  - Route::any (GET render form + POST xử lý) → resolve FormRequest qua
- *    container TRONG nhánh POST (không type-hint ở signature để tránh chạy
- *    validation cả trên GET).
- *  - Helper mới: `route()` thay tự build URL, `processMetaSeo()` thay
- *    `_processMetaSeo()`, render view namespace `web::auth.*`.
- *
- * Lưu ý: các blade `web::auth.*` hiện vẫn ở trạng thái legacy (extends layout
- * cũ + thiếu @csrf) — sẽ migrate ở task riêng. Controller đã sẵn sàng.
- */
 class AuthController extends Controller
 {
     public function __construct(
@@ -43,13 +24,10 @@ class AuthController extends Controller
 
     // ===== Login =======================================================
 
-    public function login(Request $request)
+    public function login()
     {
         if (auth()->check()) {
             return redirect()->to(route('account.index'));
-        }
-        if ($request->isMethod('post')) {
-            return $this->handleLogin();
         }
 
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.login'), 'href' => route('auth.login'), 'separator' => false]);
@@ -58,9 +36,21 @@ class AuthController extends Controller
         return $this->render('web::auth.login');
     }
 
-    protected function handleLogin()
+    public function doLogin(AuthLoginRequest $request)
     {
-        $data = app(AuthLoginRequest::class)->validated();
+        if (auth()->check()) {
+            return redirect()->to(route('account.index'));
+        }
+
+        $data = $request->validated();
+
+        // Chống brute-force: 5 lần sai / 60s theo email + IP.
+        $throttleKey = 'login:' . strtolower((string) $data['email']) . '|' . $request->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            return redirect(route('auth.login'))
+                ->with('failed', trans('messages.auth.throttle', ['seconds' => RateLimiter::availableIn($throttleKey)]))
+                ->withInput();
+        }
 
         $ok = $this->authService->login(
             (string) $data['email'],
@@ -68,10 +58,14 @@ class AuthController extends Controller
         );
 
         if (! $ok) {
+            RateLimiter::hit($throttleKey, 60);
+
             return redirect(route('auth.login'))
                 ->with('failed', trans('messages.auth.login_failed'))
                 ->withInput();
         }
+
+        RateLimiter::clear($throttleKey);
 
         return redirect(route('account.index'));
     }
@@ -89,7 +83,7 @@ class AuthController extends Controller
             logError($e->getMessage());
 
             return redirect(route('auth.login'))
-                ->with('failed', sprintf(trans('messages.LoginWithProviderFailed'), ucfirst($provider)));
+                ->with('failed', trans('messages.auth.social_failed', ['provider' => ucfirst($provider)]));
         }
     }
 
@@ -100,24 +94,21 @@ class AuthController extends Controller
             $this->authService->handleSocialUser($provider, $socialUser);
 
             return redirect(route('account.index'))
-                ->with('success', sprintf(trans('messages.LoginWithProviderSuccess'), ucfirst($provider)));
+                ->with('success', trans('messages.auth.social_success', ['provider' => ucfirst($provider)]));
         } catch (\Throwable $e) {
             logError($e->getMessage());
 
             return redirect(route('auth.login'))
-                ->with('failed', sprintf(trans('messages.LoginWithProviderFailed'), ucfirst($provider)));
+                ->with('failed', trans('messages.auth.social_failed', ['provider' => ucfirst($provider)]));
         }
     }
 
     // ===== Register ====================================================
 
-    public function register(Request $request)
+    public function register()
     {
         if (auth()->check()) {
             return redirect()->to(route('account.index'));
-        }
-        if ($request->isMethod('post')) {
-            return $this->handleRegister();
         }
 
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.register'), 'href' => route('auth.register'), 'separator' => false]);
@@ -126,12 +117,14 @@ class AuthController extends Controller
         return $this->render('web::auth.register');
     }
 
-    protected function handleRegister()
+    public function doRegister(AuthRegisterRequest $request)
     {
-        $data = app(AuthRegisterRequest::class)->validated();
+        if (auth()->check()) {
+            return redirect()->to(route('account.index'));
+        }
 
         try {
-            $this->authService->register($data);
+            $this->authService->register($request->validated());
         } catch (\Throwable $e) {
             logError($e);
 
@@ -141,7 +134,7 @@ class AuthController extends Controller
         }
 
         return redirect(route('auth.login'))
-            ->with('success', trans('messages.HasSendMailVerify'));
+            ->with('success', trans('messages.auth.verify_email_sent'));
     }
 
     // ===== Verify email ===============================================
@@ -166,13 +159,10 @@ class AuthController extends Controller
 
     // ===== Forgot password ============================================
 
-    public function forgotPassword(Request $request)
+    public function forgotPassword()
     {
         if (auth()->check()) {
             return redirect()->to(route('account.index'));
-        }
-        if ($request->isMethod('post')) {
-            return $this->handleForgotPassword();
         }
 
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.login'), 'href' => route('auth.login'), 'separator' => false]);
@@ -182,30 +172,29 @@ class AuthController extends Controller
         return $this->render('web::auth.forgot_password');
     }
 
-    protected function handleForgotPassword()
-    {
-        $data = app(AuthForgotPasswordRequest::class)->validated();
-
-        $sent = $this->authService->sendResetLink((string) $data['email']);
-        if (! $sent) {
-            return redirect(route('auth.forgotPassword'))
-                ->with('failed', trans('messages.MemberNotFound'))
-                ->withInput();
-        }
-
-        return redirect(route('auth.forgotPassword'))
-            ->with('success', trans('messages.HasSendMailForgetPassword'));
-    }
-
-    // ===== Reset password (qua link token) ============================
-
-    public function changePassword(Request $request)
+    public function doForgotPassword(AuthForgotPasswordRequest $request)
     {
         if (auth()->check()) {
             return redirect()->to(route('account.index'));
         }
-        if ($request->isMethod('post')) {
-            return $this->handleChangePassword($request);
+
+        $sent = $this->authService->sendResetLink((string) $request->validated()['email']);
+        if (! $sent) {
+            return redirect(route('auth.forgotPassword'))
+                ->with('failed', trans('messages.auth.email_not_found'))
+                ->withInput();
+        }
+
+        return redirect(route('auth.forgotPassword'))
+            ->with('success', trans('messages.auth.reset_link_sent'));
+    }
+
+    // ===== Reset password (qua link token) ============================
+
+    public function changePassword()
+    {
+        if (auth()->check()) {
+            return redirect()->to(route('account.index'));
         }
 
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.login'), 'href' => route('auth.login'), 'separator' => false]);
@@ -215,13 +204,18 @@ class AuthController extends Controller
         return $this->render('web::auth.change_password');
     }
 
-    protected function handleChangePassword(Request $request)
+    public function doChangePassword(Request $request)
     {
-        [$code, $email] = $this->authService->decodeToken($request->get('token'));
-        if (! $this->authService->isResetTokenValid($code, $email)) {
-            return back()->with('failed', trans('messages.TokenInvalid'))->withInput();
+        if (auth()->check()) {
+            return redirect()->to(route('account.index'));
         }
 
+        [$code, $email] = $this->authService->decodeToken($request->get('token'));
+        if (! $this->authService->isResetTokenValid($code, $email)) {
+            return back()->with('failed', trans('messages.auth.token_invalid'))->withInput();
+        }
+
+        // Validate mật khẩu SAU khi token hợp lệ (link chết thì bỏ qua, không báo lỗi mật khẩu).
         $data = app(AuthResetPasswordRequest::class)->validated();
 
         $user = $this->authService->resetPassword($email, (string) $data['password']);
@@ -229,6 +223,6 @@ class AuthController extends Controller
             return back()->with('failed', trans('messages.ErrorAction'))->withInput();
         }
 
-        return redirect(route('auth.login'))->with('success', trans('messages.ChangePasswordSuccess'));
+        return redirect(route('auth.login'))->with('success', trans('messages.auth.password_changed'));
     }
 }

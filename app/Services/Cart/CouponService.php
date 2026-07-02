@@ -18,6 +18,9 @@ class CouponService
     ) {
     }
 
+    /** Cache CartCouponContext trong 1 request: applyCodes + listForCart dùng chung, tránh resolve category 2 lần. */
+    private array $cartContextCache = [];
+
     public function listForCart(array $cartItems, int $cartSubtotal, bool $contextHasShipping = true): Collection
     {
         $userId = (int) getCurrentUserId() ?: null;
@@ -109,7 +112,12 @@ class CouponService
             $cartItems,
         ));
 
-        return new CartCouponContext(
+        $cacheKey = md5($cartSubtotal . '|' . ($userId ?? 0) . '|' . ($hasShipping ? '1' : '0') . '|' . implode(',', $productIds));
+        if (isset($this->cartContextCache[$cacheKey])) {
+            return $this->cartContextCache[$cacheKey];
+        }
+
+        return $this->cartContextCache[$cacheKey] = new CartCouponContext(
             subtotal:    $cartSubtotal,
             productIds:  $productIds,
             categoryIds: $this->resolveCartCategoryIds($productIds),

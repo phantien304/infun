@@ -87,19 +87,15 @@ abstract class Controller
 
     protected function toUrl(string $url, $params = [])
     {
-        $data = ['url' => $url, 'params' => $params];
-        $this->fireEvent('before_redirect', $data);
-        $url = $data['url'];
-        $params = $data['params'];
+        // Redirect thuần — bỏ event hook before/after_redirect (không có listener,
+        // và máy event cũ làm 500 mọi nhánh 404 gọi toUrl). Xem lịch sử: 2026-07.
         if (str_contains($url, 'http')) {
             return redirect()->to($url);
         }
         if (str_contains($url, '.')) {
-            $url = route($url, $params);
+            return redirect()->to(route($url, $params))->with($params);
         }
-        $r = redirect()->to($url)->with($params);
-        $this->fireEvent('after_redirect', $r);
-        return $r;
+        return redirect()->to($url)->with($params);
     }
 
     public function forward($controller, $action, $params = [])

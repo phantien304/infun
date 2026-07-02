@@ -9,6 +9,7 @@
         var variantMatrix = {!! json_encode($variantMatrix ?? []) !!};
         var defaultVariant = {!! json_encode($defaultVariant) !!};
         var variantGallery = {!! json_encode($variantGallery ?? []) !!};
+        var productGallery = {!! json_encode(collect($productImages)->map(fn ($im) => ['full' => thumbnail($im['image'], 1000, 1000), 'thumb' => thumbnail($im['image'], 147, 147), 'alt' => $im['alt'] ?? ''])->values()) !!};
         var urlUserWishlist = '{{ route('account.userWishlist') }}';
         var priceProduct = {{ $priceFinal }};
         var productBasePrice = {{ $basePriceForDiscount }};

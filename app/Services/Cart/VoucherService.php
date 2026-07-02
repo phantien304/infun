@@ -10,104 +10,64 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Voucher orchestration cho cart Shopee-style.
- *
- * Voucher = gift card cá nhân (KHÁC coupon marketing):
- *  - Trừ thẳng VND vào tổng đơn (không % không min subtotal).
- *  - Cho phép redeem từng phần — voucher 500k áp 1 order 300k còn dư 200k
- *    cho order sau.
- *  - 1 user có thể áp nhiều voucher cùng lúc (stack thẳng, cap ở
- *    `applyTotal <= orderTotal`).
- *
- * Session shape: `checkout.applied_vouchers` = ['CODE1', 'CODE2', ...]
- *
- * Lifecycle:
- *  - Apply cart    → session put codes, KHÔNG ghi DB (chỉ kiểm tra).
- *  - Build total   → re-validate, compute amount theo orderTotal residual.
- *  - Order create  → insert voucher_history rows status=applied, sau payment
- *                    callback đổi confirmed + update voucher.redeemed_balance.
- *  - Order cancel  → flip history status=refunded + decrement balance.
- */
 class VoucherService
 {
     public function __construct(
         protected VoucherRepositoryInterface $voucherRepo,
-    ) {}
+    ) {
+    }
 
-    /**
-     * Áp 1 voucher code mới vào session — validate + append nếu OK.
-     *
-     * @return array{ok: bool, message: string}
-     */
     public function applyCode(string $code, int $orderTotal): array
     {
         $code = trim($code);
         if ($code === '') {
-            return ['ok' => false, 'message' => 'Vui lòng nhập mã voucher'];
+            return ['ok' => false, 'message' => trans('messages.voucher.not_empty')];
         }
 
         $voucher = $this->voucherRepo->findByCode($code);
         if (! $voucher) {
-            return ['ok' => false, 'message' => "Voucher '{$code}' không tồn tại"];
+            return ['ok' => false, 'message' => trans('messages.voucher.not_found', ['code' => $code])];
         }
 
         $reason = $this->validate($voucher, $orderTotal);
         if ($reason !== null) {
-            return ['ok' => false, 'message' => "Voucher '{$code}': {$reason}"];
+            return ['ok' => false, 'message' => trans('messages.voucher.error_reason', ['code' => $code, 'reason' => $reason])];
         }
 
         $applied = $this->getAppliedCodes();
         if (in_array($voucher->code, $applied, true)) {
-            return ['ok' => false, 'message' => "Voucher '{$code}' đã được áp"];
+            return ['ok' => false, 'message' => trans('messages.voucher.error_used', ['code' => $code])];
         }
 
         $applied[] = $voucher->code;
         session()->put(getCoreConfig('session.applied_vouchers'), $applied);
 
-        return ['ok' => true, 'message' => 'Đã áp voucher'];
+        return ['ok' => true, 'message' => trans('messages.voucher.saved')];
     }
 
-    /**
-     * Validate voucher có redeemable hay không. Trả NULL nếu OK, reason string
-     * nếu fail. KHÔNG tính amount ở đây — chỉ check eligibility.
-     */
     public function validate(Voucher $voucher, int $orderTotal): ?string
     {
         $statusActive = (int) getCoreConfig('voucher.status.active');
         if ((int) $voucher->status !== $statusActive) {
-            return 'Voucher không còn hiệu lực';
+            return trans('messages.voucher.inactive');
         }
 
         if ($voucher->date_expire && Carbon::parse($voucher->date_expire)->lt(Carbon::now()->startOfDay())) {
-            return 'Voucher đã hết hạn';
+            return trans('messages.voucher.expired');
         }
 
         $available = $voucher->availableBalance();
         if ($available <= 0) {
-            return 'Voucher đã dùng hết';
+            return trans('messages.voucher.used_up');
         }
 
         if ($orderTotal <= 0) {
-            return 'Đơn hàng không hợp lệ';
+            return trans('messages.voucher.invalid_order');
         }
 
         return null;
     }
 
-    /**
-     * Resolve session → array VoucherDTO + amount đã pro-rate theo orderTotal.
-     *
-     * Stacking + cap: voucher đầu trừ residual orderTotal; voucher kế tiếp trừ
-     * (residual - voucher_1_amount). Khi residual = 0, các voucher còn lại
-     * KHÔNG trừ thêm (vẫn được giữ trong applied, hiển thị amount=0).
-     *
-     * @return array{
-     *     applied: array<int, array{voucher: Voucher, amount: int}>,
-     *     total_discount: int,
-     *     errors: array<int, string>,
-     * }
-     */
     public function resolveApplied(int $orderTotal): array
     {
         $codes = $this->getAppliedCodes();
@@ -115,19 +75,17 @@ class VoucherService
         $errors = [];
         $residual = $orderTotal;
 
-        // Batch 1 query thay vì findByCode mỗi code (resolveApplied chạy lại
-        // mỗi lần build total → N+1 cộng dồn).
         $vouchers = $this->voucherRepo->findByCodes($codes);
 
         foreach ($codes as $code) {
             $voucher = $vouchers->get($code);
             if (! $voucher) {
-                $errors[] = "Voucher '{$code}' không tồn tại";
+                $errors[] = trans('messages.voucher.not_found', ['code' => $code]);
                 continue;
             }
             $reason = $this->validate($voucher, $orderTotal);
             if ($reason !== null) {
-                $errors[] = "Voucher '{$code}': {$reason}";
+                $errors[] = trans('messages.voucher.error_reason', ['code' => $code, 'reason' => $reason]);
                 continue;
             }
 
@@ -144,12 +102,6 @@ class VoucherService
         ];
     }
 
-    /**
-     * List voucher của user (gửi tới email) → CollectionDTO sort: redeemable
-     * trước, expired/used sau.
-     *
-     * @return Collection<int, VoucherDTO>
-     */
     public function listMyVouchers(string $email, int $orderTotal): Collection
     {
         $vouchers = $this->voucherRepo->listForEmail($email);
@@ -178,19 +130,12 @@ class VoucherService
         session()->forget(getCoreConfig('session.applied_vouchers'));
     }
 
-    /**
-     * @return array<int, string>
-     */
     public function getAppliedCodes(): array
     {
         $codes = (array) session()->get(getCoreConfig('session.applied_vouchers'), []);
         return array_values(array_filter(array_map('strval', $codes), fn ($c) => trim($c) !== ''));
     }
 
-    /**
-     * Persist voucher_history rows khi order tạo. Status=applied (chưa
-     * confirmed vì payment có thể fail). Gọi từ CreateOrderService.
-     */
     public function recordOrderVouchers(int $orderId, int $orderTotal): void
     {
         $result = $this->resolveApplied($orderTotal);
@@ -215,10 +160,6 @@ class VoucherService
         }
     }
 
-    /**
-     * Sau payment success: flip applied → confirmed + cộng vào
-     * voucher.redeemed_balance. Atomic UPDATE chống concurrency.
-     */
     public function confirmOrderVouchers(int $orderId): void
     {
         $statusApplied = (int) getCoreConfig('voucher.history_status.applied');
@@ -242,7 +183,6 @@ class VoucherService
                 ->increment('redeemed_balance', (float) $row->amount);
         }
 
-        // Flip status=fully_used cho voucher đã dùng hết balance.
         $statusActive = (int) getCoreConfig('voucher.status.active');
         $statusFullyUsed = (int) getCoreConfig('voucher.status.fully_used');
         DB::table('voucher')

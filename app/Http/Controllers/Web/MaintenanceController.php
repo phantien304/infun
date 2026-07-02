@@ -1,11 +1,13 @@
 <?php
 
-namespace App\Http\Controllers\Client\InfunStudio;
+namespace App\Http\Controllers\Web;
 
-class MaintenanceController extends BaseInfunStudioController
+use App\Http\Controllers\Controller;
+
+class MaintenanceController extends Controller
 {
     public function index()
     {
-        return $this->render('client.infunstudio.page.maintenance');
+        return view('web::page.maintenance');
     }
 }

@@ -227,7 +227,7 @@ class Product extends Base implements Auditable
             WHERE pvs.product_variant_id = pv.id
               AND pvs.user_group_id      = ?
               AND (pvs.date_start IS NULL OR pvs.date_start <= ?)
-              AND (pvs.date_end   IS NULL OR pvs.date_end   >  ?)
+              AND (pvs.date_end IS NULL OR pvs.date_end >= ?)
               AND pvs.deleted_at IS NULL
             ORDER BY pvs.priority DESC
             LIMIT 1
@@ -248,7 +248,7 @@ class Product extends Base implements Auditable
               AND dpv.deleted_at IS NULL
               AND pvs.user_group_id = ?
               AND (pvs.date_start IS NULL OR pvs.date_start <= ?)
-              AND (pvs.date_end   IS NULL OR pvs.date_end   >  ?)
+              AND (pvs.date_end IS NULL OR pvs.date_end >= ?)
               AND pvs.deleted_at IS NULL
             ORDER BY pvs.priority DESC
             LIMIT 1

@@ -3,7 +3,7 @@
     $addressVisitor = [];
     if (filled($address)) {
         $addressVisitor = array_filter($address, function ($k) {
-            return $k['is_default'] == 1;
+            return data_get($k, 'is_default') == 1;
         });
         $addressVisitor = array_values($addressVisitor)[0];
     }
@@ -56,12 +56,12 @@
                                     <div class="col-sm-8">
                                         <select class="form-control" onchange="changeAddressCustomer(this)">
                                             @foreach ($address as $item)
-                                                @if ($userAddressId == $item['id'])
-                                                    <option value="{{ $item['id'] }}" selected>
+                                                @if ($userAddressId == data_get($item, 'id'))
+                                                    <option value="{{ data_get($item, 'id') }}" selected>
                                                         {{ data_get($item, 'full_address') }}
                                                     </option>
                                                 @else
-                                                    <option value="{{ $item['id'] }}">
+                                                    <option value="{{ data_get($item, 'id') }}">
                                                         {{ data_get($item, 'full_address') }}
                                                     </option>
                                                 @endif

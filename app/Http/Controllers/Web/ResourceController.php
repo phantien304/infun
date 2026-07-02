@@ -8,18 +8,6 @@ use App\Models\Entities\Ward;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
 
-/**
- * AJAX resource endpoint cho dropdown địa chỉ trong form checkout / account.
- * Trả JSON shape `{success, data:[{id, name}, ...]}` — frontend
- * `style.js::callResource(District|Ward)` đọc trực tiếp.
- *
- * Zone: dùng `zoneRepo->listAllCached()` (đã filter country_id default + cache
- * system). District / Ward: query model trực tiếp — chỉ "find by FK + load
- * description theo locale", không đủ phức tạp để cần repo riêng.
- *
- * Country mặc định đọc từ `getCoreConfig('zones.country_id_default')` (config
- * `core/config.php` mục `zones.country_id_default = 230` cho Việt Nam).
- */
 class ResourceController extends Controller
 {
     public function zone()
@@ -31,14 +19,14 @@ class ResourceController extends Controller
             ])
             ->values();
 
-        return successData('SearchSuccess', $rows, $rows->count());
+        return respondSuccess($rows);
     }
 
     public function district(Request $request)
     {
         $zoneId = (int) $request->get('zone_id', 0);
         if ($zoneId <= 0) {
-            return successData('SearchSuccess', [], 0);
+            return respondSuccess([]);
         }
 
         $rows = District::query()
@@ -52,14 +40,14 @@ class ResourceController extends Controller
             ])
             ->values();
 
-        return successData('SearchSuccess', $rows, $rows->count());
+        return respondSuccess($rows);
     }
 
     public function ward(Request $request)
     {
         $districtId = (int) $request->get('district_id', 0);
         if ($districtId <= 0) {
-            return successData('SearchSuccess', [], 0);
+            return respondSuccess([]);
         }
 
         $rows = Ward::query()
@@ -73,7 +61,7 @@ class ResourceController extends Controller
             ])
             ->values();
 
-        return successData('SearchSuccess', $rows, $rows->count());
+        return respondSuccess($rows);
     }
 
     public function zoneShipping(Request $request)
@@ -85,6 +73,6 @@ class ResourceController extends Controller
             (int) getCoreConfig('cookie.time'),
         );
 
-        return successNoData('Success');
+        return respondMessage();
     }
 }

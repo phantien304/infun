@@ -237,7 +237,7 @@ Khi thêm cache mới:
 > **`effectivePriceExpression` hiện tại** (cả 2 nhánh từ `product_variant_special`):
 >   - Variant: `MIN/MAX(COALESCE(active product_variant_special.price, pv.price))` aggregate qua variant.
 >   - Simple: `COALESCE(active special của DEFAULT variant, (SELECT pv.price WHERE is_default=1))`.
->   - Toán tử ngày thống nhất 2 nhánh: `date_start <=`, `date_end >` (hết drift cũ).
+>   - Toán tử ngày thống nhất 2 nhánh: `date_start <=`, `date_end >=` (khớp scope `dateStartToEnd`).
 >
 > **N+1 + accessor — bắt buộc nhớ:**
 >   - Accessor `$product->price` đọc `defaultVariant` → **N+1 nếu chưa eager-load
@@ -470,26 +470,23 @@ Trang khuyến mãi = trang list Product + **1 ràng buộc**: product phải c�
 trên đường đi của trang khuyến mãi / homepage. Giữ lại tạm cho backward compat
 (`ProductController::__construct` còn inject), sẽ gỡ khi chắc không còn caller.
 
-## Drift đã biết quanh "active special" (cần thống nhất)
+## Toán tử ngày "active special" — ĐÃ THỐNG NHẤT (2026-07)
 
-3 nguồn so sánh ngày trên `product_special` không đồng bộ:
+Quy ước DUY NHẤT cho mọi check special/coupon/gift/voucher đang active:
+`date_start <= now (hoặc NULL) AND date_end >= now (hoặc NULL)` — 2 đầu inclusive.
 
-| Nguồn | `date_start` | `date_end` |
-|---|---|---|
-| `HasAdvancedScopes::scopeDateStartToEnd` | `<` strict | `>` strict |
-| `Product::effectivePriceExpression` (raw SQL trong scope giá hiệu lực) | `<=` | `>=` |
-| Legacy `_buildQueryForProductSpecials` (đang phế) | `<=` | `>` |
+Nguồn sự thật: `HasAdvancedScopes::scopeDateStartToEnd`. Nơi dùng:
+- `Product::scopeHasActiveSpecial`, `ProductVariant`, `Coupon`, `Gift` → gọi `dateStartToEnd()`.
+- `Product::effectivePriceExpression` (raw SQL, 2 nhánh variant + default) → đã đổi `date_end > ?` → `>= ?` khớp scope.
+- `ProductVariantAggregateObserver` (raw SQL recompute aggregate) → đã đổi `>` → `>=`.
+- Legacy `_buildQueryForProductSpecials` đã gỡ.
 
-`scopeHasActiveSpecial` đang khớp `dateStartToEnd` (đảm bảo relation + scope filter
-nhất quán). Nhưng vẫn còn drift với `effectivePriceExpression`: ở biên `date_end ==
-now()`, scope filter loại product nhưng nếu user vẫn vào được trang chi tiết thì
-COALESCE giá hiệu lực vẫn lấy giá KM. Cần chọn 1 cặp toán tử và sync cả 3 nơi.
+Hết drift ở biên `date_end == now()`: product list on-sale thì giá hiệu lực cũng
+lấy giá KM (trước: scope `>=` include nhưng expr `>` exclude → lệch). Thêm chỗ mới
+cần check date range → GỌI scope `dateStartToEnd()`, KHÔNG viết raw SQL riêng.
 
 ## Việc còn nợ trong `ProductRepository`
 
-- `getProductSpecials(array $productIds)` — tên gây hiểu lầm, thực ra là `Product`
-  lookup theo IDs. Không cache, không gắn relations. Đổi tên `getByIds()` hoặc gỡ
-  nếu không còn caller.
 - `getProductFeature(int $limit)` — chưa cache, trong khi `getProductLatest` /
   `getProductRelated` đều cache qua `rememberCacheTagged`. Drift hành vi.
 
@@ -777,11 +774,81 @@ legacy $repo->getValidator()->validateX(...). Giờ đã chuẩn cùng pattern C
 
 - App\\Validators\\Module\\Client\\InfunStudio\\* (UserValidator, UserAddressValidator,
   UserPhoneValidator, UserWishlistValidator, OrderValidator) không còn caller sau khi
-  rewrite. Xoá thủ công khi tiện.
+  rewrite. ĐÃ XOÁ toàn bộ (2026-07) — không còn file validator legacy nào.
 - AccountController::detailOrder còn inject ad-hoc CheckoutPaymentService qua app(...)
   cho luồng ZaloPay redirect sau repayment — vì DI 6 dependency đã đủ dày. Acceptable.
 - Route::any cho cả GET + POST cùng method controller — nếu cần REST hơn, split
   thành GET edit + POST update để type-hint FormRequest trực tiếp ở signature.
+
+## Auth flow (refactor 2026-07-02)
+
+AuthController (App\\Http\\Controllers\\Web\\AuthController) — luồng khách hàng:
+login / register / social / forgot + reset password / verify email. Cùng pattern
+Account: Controller → Service App\\Services\\Auth\\AuthService → FormRequest
+App\\Http\\Requests\\Web\\Auth*Request.
+
+- Route TÁCH GET/POST (KHÔNG còn Route::any cho auth). Mỗi form 1 GET render +
+  1 POST xử lý; action POST tên `auth.doLogin` / `auth.doRegister` /
+  `auth.doForgotPassword` / `auth.doChangePassword`, CÙNG URL với GET nên blade
+  giữ nguyên `action="{{ route('auth.login') }}"` — không phải sửa form. Nhờ tách
+  route, action POST `do*` type-hint thẳng FormRequest ở signature (validation
+  chỉ chạy trên POST) → bỏ được `app(FormRequest)->validated()` kiểu Route::any cũ.
+  * Ngoại lệ `doChangePassword`: giữ `app(AuthResetPasswordRequest)->validated()`
+    SAU khi check token (link chết thì không validate mật khẩu). Token đọc từ
+    hidden field `request()->get('token')` trong blade change_password.
+
+- Chống brute-force: `doLogin` dùng RateLimiter key `login:<email>|<ip>`, 5 lần
+  sai / 60s; quá ngưỡng flash `messages.auth.throttle` kèm `:seconds`; login OK
+  thì `RateLimiter::clear`.
+
+- i18n: mọi thông điệp auth gom vào nhóm `messages.auth.*` (login_failed,
+  register_failed, social_failed/social_success dùng `:provider`,
+  verify_email_sent, email_not_found, reset_link_sent, token_invalid,
+  password_changed, throttle). ĐÃ XOÁ key legacy PascalCase (LoginWithProvider*,
+  HasSendMail*, MemberNotFound, TokenInvalid, ChangePasswordSuccess).
+  `ErrorAction` giữ vì dùng chung nhiều controller.
+
+- `decodeToken`: `explode('+', base64_decode($token), 2)` — limit 2 để email
+  chứa dấu '+' không bị tách sai (code = time().uniqid không chứa '+').
+
+- Blade `account/_menu_left`: bỏ helper legacy `getCurrentRouteName()` (đã xoá →
+  gây 500 cả khu account) → `request()->routeIs('account.*')`; đóng lại thẻ
+  `</li></ul></div>` vốn thiếu trong file gốc.
+
+## Legacy controller cluster → Web (refactor 2026-07-02)
+
+Dọn các controller còn ở namespace/base legacy `Client\\InfunStudio` +
+`BaseInfunStudioController` (đã xoá) → chuẩn `App\\Http\\Controllers\\Web` extends base
+`Controller`. Nguồn migrate view: project legacy `mt219` (cạnh `infun`).
+
+- `MaintenanceController` — `view('web::page.maintenance')` standalone (không kéo
+  query của render() base khi đang bảo trì).
+- `OrderController` — inject `OrderRepositoryInterface`; `search()` dùng
+  `getOrderByInvoiceNo` (public, không login), render `web::order.search` (raw model:
+  info + người nhận mask PII + timeline `ordersHistories` + items).
+- `CsrfTokenController` — sửa namespace + `respondSuccess(Session::token())`.
+- `TagController` — inject `BlogTagRepositoryInterface`, chỉ còn `getList()` →
+  `web::tag.list` (action tag-detail cũ không route → bỏ).
+- `BlogCategoryController` — reachable qua slug resolver (`Controller::getControllerBySlug`
+  map `url.blog_category`='bc'). Inject 4 repo interface, lọc `filter[category_id]`,
+  tái dùng `web::blog.list` (khuôn `BlogController::getList` + breadcrumb/SEO category).
+- `ErrorController` — `client.infunstudio.page.error404` → `web::page.error404`
+  (migrate: `array_get`→`data_get`, `resizeImage`→`thumbnail`). Thêm lang `seo.404.*`.
+
+View mới: `web::page.maintenance`, `web::order.search`, `web::tag.list`,
+`web::page.error404`. Helper mới: `string2Stars($s, $first, $last, $rep='x')` mask PII.
+
+### Gotcha Blade `@context` (Laravel 12)
+JSON-LD `{"@context":..., "@type":...}` trong blade PHẢI escape `@@context`/`@@type` —
+Laravel 12 có directive `@context` (Context facade); Blade biên dịch nhầm `@context`
+thành PHP → ParseError "unexpected end of file, expecting endif". Mọi view SEO có
+JSON-LD phải dùng `@@`.
+
+### Bug site-wide đã vá: Controller::toUrl 500 mọi trang 404
+`toUrl()` gọi `fireEvent('before/after_redirect')` (trait BaseEvent) → ném lỗi ở nhánh
+redirect → MỌI `$this->toUrl('error.404')` (7 controller Blog/Category/Home/Information/
+Manufacturer/Product/StoreReview) 500 thay vì hiện trang 404. Đã rewrite `toUrl` thành
+redirect thuần (bỏ event hook thừa, không có listener).
 
 ## Schema `product_image` cluster (refactor 2026-06-03)
 
@@ -930,10 +997,9 @@ File `public/web/js/style.js`. Convention chốt sau session 2026-06-03:
 - Fallback: nếu không tìm thấy slide khớp, mới mutate src.
 
 **Variant click toggle off:**
-- Click lại swatch đã `.active` → de-select: `$input.prop('checked', false)`,
-  remove `.active`, `resetMainSlider()` về slide 0, `applyVariant(defaultVariant, false)`
-  reset price/stock.
-- Native radio không hỗ trợ uncheck via click → JS handler dùng
+- Click lại swatch đã `.active` → de-select: uncheck, remove `.active`,
+  `resetMainSlider()` về slide 0, rồi `recompute(optionId)` áp lại giá/stock.
+- Native radio không hỗ trợ uncheck via click → handler dùng
   `$wrapper.hasClass('active')` để detect "was checked" rồi force uncheck.
 
 **Hover thumb → preview swap (KHÔNG dùng slickGoTo):**
@@ -948,16 +1014,17 @@ File `public/web/js/style.js`. Convention chốt sau session 2026-06-03:
   thumb. CSS mirror `.slick-current` visuals (border cam + tam giác đỉnh).
   Mouseleave gỡ class → `.slick-current` thật hiện lại.
 
-**Shopee-style availability (variant out-of-stock filter):**
-- `refreshAvailability()` rule: value V của option O bị disable CHỈ khi:
-  1) Có selection ở option khác (`hasSelection=true`), VÀ
-  2) O chưa được chọn (`optionAlreadySelected=false`), VÀ
-  3) Combo `selected ∪ {O: V}` không có in-stock variant.
-- Init (chưa chọn gì) → ALL enable. Option đã active → mọi value enable
-  (user switch tự do trong cùng option).
-- CSS `.out-of-stock` (custom.css): opacity 0.45 + diagonal stripe overlay
-  + grayscale + line-through cho text + dashed border. Phân biệt rõ với
-  `.active` (border cam solid).
+**Shopee-style availability — BIDIRECTIONAL (cập nhật 2026-07):**
+- `refreshAvailability()`: value V của option O gắn `.out-of-stock` khi
+  `hasSelection` && KHÔNG tồn tại in-stock variant khớp
+  (selection các option KHÁC) ∪ {O:V}. ĐÃ BỎ short-circuit "option đã chọn
+  thì mọi value enable" → cả trục Màu lẫn Size cùng grey nhất quán.
+- Swatch out-of-stock KHÔNG hard-disable — vẫn click được. Click 1 combo
+  không tồn tại → `recompute(optionId)` auto-resolve: bỏ chọn trục xung đột
+  (giữ value vừa click) nên không bao giờ kẹt ở combo không mua được.
+- Value đang chọn không bao giờ tự đánh `.out-of-stock`. Init (chưa chọn) → ALL enable.
+- CSS `.out-of-stock` (custom.css): opacity 0.45 + diagonal stripe + grayscale
+  + line-through; ĐÃ bỏ `pointer-events:none` ở label để swatch click được.
 
 **`applyVariant(variant, swapImg = true)`:**
 - Init `applyVariant(defaultVariant, false)` — set price/stock nhưng KHÔNG
@@ -1075,6 +1142,39 @@ try { ... } catch (\Throwable $exception) {
 
 Cutoff đại khái: closure 1-3 dòng dùng tên ngắn cũng được; quá đó hoặc nested
 nhiều cấp → đặt tên đầy đủ.
+
+## Naming — độ dài & rõ nghĩa (BẮT BUỘC cho code commit)
+
+Áp dụng cho MỌI code ghi vào repo (PHP / JS / blade). KHÔNG áp cho script
+dùng-một-lần (lệnh bash/python migrate, đoạn chạy trong console browser) —
+chỗ đó cho phép gọn để chạy nhanh.
+
+- Biến / hàm / method PHẢI đặt tên rõ nghĩa, đọc là hiểu vai trò. KHÔNG
+  viết tắt 1 ký tự kiểu `$d`, `$s`, `$b`, `$o`, `function g()`, `function P()`.
+  Dùng `$data`, `$payload`, `$response`, `respondSuccess()`, `handleCartError()`...
+- KHÔNG tiền tố `_` cho method (đã bỏ `_getFile` → `uploadedFile`, `_getStorage` → ...).
+- Biến trong closure/loop ngắn được phép gọn NHƯNG vẫn có nghĩa
+  (`$item`, `$row`, `$variant`), không dùng 1 ký tự.
+- Tên tự-document nguồn dữ liệu (xem mục "Naming variable / view-data key").
+- Lý do: code trong repo bị đọc lại / review / bảo trì lâu dài → tên rõ
+  nghĩa quan trọng hơn tiết kiệm vài ký tự khi gõ.
+
+## Response API — envelope thống nhất `respond*` (2026-07)
+
+Helper ở `app/Common/Common.php`. MỌI endpoint JSON dùng bộ này, KHÔNG dùng
+lại `successData/errValidator/errNoValidator/successNoData` (ĐÃ XOÁ).
+
+- Success 2xx: `respondSuccess($data, $msg, $status=200, $meta=[])`,
+  `respondCreated($data,$msg)` (201), `respondAccepted($data,$msg)` (202),
+  `respondMessage($msg,$status=200)` → body `{ success:true, message, data(, meta) }`.
+- Error 4xx/5xx: `respondError($msg,$status,$errors=[])`,
+  `respondNotFound($msg)` (404), `respondUnprocessable($msg,$errors=[])` (422)
+  → body `{ success:false, message(, errors) }`.
+- HTTP status là tín hiệu REST chính; `success` mirror cho JS tiện check.
+- Validation FormRequest: dùng trait `App\Http\Requests\Concerns\RestfulValidation`
+  → 422 `{ success:false, message, errors:{field:[...]} }`. Message để trong i18n.
+- JS đọc: success qua `success`/`.done` (2xx), lỗi qua `error`/`.fail`
+  (đọc `json.message` + `json.errors`).
 
 ## Convention: hàm KHÔNG quá nhiều tham số → Parameter Object
 
@@ -1196,14 +1296,10 @@ hiển thị vào `messages.checkout.*` (2026-06-19).
   History data của order — không thể truncate. Audit riêng (Option C trong
   refactor notes): drop `product_option_id`, thêm `option_id`, không FK
   enforce.
-- `CartService::289, 422, 438, 456` còn dùng key `product_option_id` trong
-  cart serialization. Sửa sang `option_id` sau khi orders_product_option
-  được refactor.
-- `App\Helpers\Cart` legacy CRASH sau migration product_option_value cleanup
-  (line 282 query `option_value_1_id`). Verify không còn caller trước migrate.
-- Variant gallery JS handler chưa được viết — `window.variantGallery` đã
-  inject nhưng chưa có listener swap toàn slider khi user chốt variant. Có
-  sẵn data structure để mở rộng.
+- (2026-07) Cart serialization ĐÃ bỏ key thừa `product_option_id`, chỉ còn
+  `option_id`; `CreateOrderService` đọc `option_id` (vẫn ghi cột DB
+  `product_option_id`). Còn lại DUY NHẤT: rename cột DB
+  `orders_product_option.product_option_id → option_id` (bullet đầu mục này).
 - Admin CMS chưa có UI cho `product_variant.regular_price` — hiện chỉ seed
   generate. Wire `ProductVariantObserver::saved/deleted` recompute
   `product.max_variant_discount_percent` khi xây admin form.
@@ -1429,9 +1525,8 @@ documented, sửa kèm task unify riêng để tránh scope creep.
   chưa support — bổ sung khi dùng thật.
 - DTO `VariantSpecialDTO` nếu cần expose qua API. Hiện chỉ embed vào matrix
   như array.
-- Drift toán tử `date_end` giữa nhánh variant (`>` strict) và nhánh simple
-  (`>=`) trong effectivePriceExpression — chọn 1 và sync khi unify drift
-  `dateStartToEnd` toàn project.
+- (2026-07) ĐÃ unify: `effectivePriceExpression` cả 2 nhánh dùng `date_end >= ?`
+  khớp scope `dateStartToEnd` → hết drift toán tử ngày.
 
 ## Data drift safety nets — variant matrix (2026-06-05)
 
@@ -1452,10 +1547,10 @@ pickable. Stock thật ép tại `OrderService` khi tạo order. Pattern: UI
 optimistic, validation tại checkout. Field `has_stock` expose để JS detect.
 
 JS `style.js refreshAvailability`:
-- Đã chuyển sang **Shopee classic**: init = ALL enable, chỉ disable sau
-  khi user pick value đầu (`!hasSelection || optionAlreadySelected ||
-  isValueAvailable`). Bỏ "dead-end protection từ init" — gây false positive
-  khi data drift.
+- Rule availability = **bidirectional** (cập nhật 2026-07): value grey khi
+  không có in-stock variant khớp (selection option KHÁC) ∪ {O:V}; swatch
+  out-of-stock vẫn click được, `recompute()` auto-resolve trục xung đột.
+  (Chi tiết ở mục "JS interaction pattern — variant".)
 - **`ALL_OOS` safety net** — detect mọi variant `subtract=true + available=0`
   → bỏ qua OOS check, log warning console. Bảo vệ UX khi DB data sai.
 - `applyVariant()`: cũng respect `ALL_OOS` → button mua hàng không bị ẩn.
@@ -2137,11 +2232,11 @@ tránh hết magic, gọi nào ăn nấy.
    Trả `PHP_INT_MAX` cho `untracked/backorder`, `0` cho missing stock.
 5. Persist qua `persistLine()` (chia sẻ với `add()` legacy entry).
 
-`CheckoutController::addToCart` gọi `tryAdd`, trả `errValidator` với
-message giàu ngữ cảnh khi `ok=false`: "Sản phẩm X chỉ còn N trong kho,
-bạn yêu cầu M" / "bạn đã có K trong giỏ, yêu cầu thêm Q (tổng T) nhưng
-kho chỉ còn N". Cũ "chỉ còn 30 trong kho" không tiết lộ M nên user
-tưởng "30 = đủ".
+`CheckoutController::addToCart` gọi `tryAdd`, khi `ok=false` trả
+`respondUnprocessable(...)` (envelope RESTful — xem mục "Response API `respond*`")
+với message giàu ngữ cảnh: "bạn đã có K trong giỏ, yêu cầu thêm Q (tổng T)
+nhưng kho chỉ còn N". Nếu tổ hợp biến thể không tồn tại → `variant_error`
+→ message `messages.ErrorVariantNotFound`.
 
 ### `CreateOrderService::subtractStock` — strict + audit
 

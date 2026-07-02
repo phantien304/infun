@@ -7,6 +7,7 @@ use App\Models\Base\Base;
 class ReviewTagDescription extends Base
 {
     protected $table = 'review_tag_description';
+    protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
 

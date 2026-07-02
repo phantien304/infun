@@ -253,6 +253,25 @@ services:
     networks:
       - infun-net
 
+  # ──────────────────────────────────────────────────────────────────────
+  # Mailpit — mail server local để test gửi mail (SMTP catcher + Web UI)
+  # UI:   http://localhost:8025
+  # SMTP: mailpit:1025 (các container khác gọi qua tên service này)
+  # ──────────────────────────────────────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: infun-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP
+    environment:
+      MP_MAX_MESSAGES: "500"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    networks:
+      - infun-net
+
 volumes:
   mysql_data:
   redis_data:

@@ -31,14 +31,14 @@ class CheckoutPromotions
         return $this;
     }
 
-    public function setVoucherCodes(array $codes): static
+    public function setAppliedVoucherCodes(array $codes): static
     {
         $this->appliedVoucherCodes = $codes;
 
         return $this;
     }
 
-    public function setGifts(array $gifts): static
+    public function setAppliedGifts(array $gifts): static
     {
         $this->appliedGifts = $gifts;
 

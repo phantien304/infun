@@ -27,6 +27,8 @@ class PromotionService
             $promotions->setAppliedCoupons($result['applied'], $result['freeship']);
         }
 
+        $this->giftService->pruneInvalid($cartItems, $subtotal);
+
         return $promotions->setAppliedVoucherCodes($this->voucherService->getAppliedCodes())
                           ->setAppliedGifts($this->giftService->getAppliedGifts());
     }

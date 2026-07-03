@@ -850,6 +850,58 @@ redirect → MỌI `$this->toUrl('error.404')` (7 controller Blog/Category/Home/
 Manufacturer/Product/StoreReview) 500 thay vì hiện trang 404. Đã rewrite `toUrl` thành
 redirect thuần (bỏ event hook thừa, không có listener).
 
+## Checkout — Promotions (coupon / voucher / gift / reward) 2026-07
+
+`PromotionService::resolveAppliedPromotions($cartItems, $subtotal, $hasShipping)` dựng
+`CheckoutPromotions` (items + appliedCoupons + appliedVoucherCodes + appliedGifts). Validate
+theo TỪNG STAGE (không "tin session mù"):
+- **Coupon** — validate SỚM trong resolveAppliedPromotions → `CouponService::applyCodes`
+  (re-query Coupon::active() + validateForCart cho mã trong session). Cần thiết: coupon session
+  có thể hết hạn / bị tắt / hết lượt / giỏ đổi.
+- **Voucher** — resolveAppliedPromotions chỉ lấy CODES (hiển thị). Số tiền + validate thật ở
+  `CheckoutTotalService::lineVouchers` → `resolveVouchers` → `VoucherService::resolveApplied`
+  (phụ thuộc running total nên làm muộn — KHÔNG phải trust session).
+- **Gift** — không có giá trị tiền (lineGifts chỉ đếm). Prune + record (dưới).
+
+### Gift — tự gỡ khi không còn hợp lệ (2026-07)
+`GiftService::pruneInvalid($cartItems, $subtotal)` gỡ khỏi session quà đã tắt / giỏ giảm dưới
+ngưỡng / mất SP trigger / pick sai (re-validate `validateTrigger` + `validatePicks`), chỉ ghi
+session khi có thay đổi. Gọi trong `resolveAppliedPromotions` (chạy cho index/cart/recalc/
+saveOrder). `CheckoutController::cart()` LUÔN build promotions (kể cả giỏ rỗng) để prune cả khi
+giỏ trống. Lớp 2: `recordOrderGifts` re-validate trigger+picks lúc GHI ĐƠN (an toàn cuối) —
+chống cấp quà cho giỏ không còn đủ điều kiện.
+
+### Coupon — memoize cart context
+`applyCodes` (resolveAppliedPromotions) và `listForCart` (viewData) đều gọi `buildCartContext`
+(→ `resolveCartCategoryIds`, query `product_category`). Đã memoize `$cartContextCache` per
+instance (key `subtotal|user|shipping|productIds`) → 1 render resolve category 1 lần thay vì 2.
+`listForCart` vẫn validate cả mã đã áp (để hiển thị trong list) — lượt đó không bỏ được.
+
+## `minimum` (MOQ) → `product_variant` (2026-07)
+
+`minimum` move từ `product` → `product_variant` (migration `2026_07_03_..._move_minimum...`,
+backfill + drop cột cũ), cùng tầng price/stock/sku. `$product->minimum` giữ hoạt động qua
+accessor `Product::getMinimumAttribute()` → `defaultVariant?->minimum ?? 1` (mirror
+getPriceAttribute). Ghi qua `ProductVariantWriter` (`$v['minimum']`); bỏ khỏi
+`ProductWriteService::FLAT_FIELDS`. Cart đọc `$variant?->minimum`; `CartService::validateMinimum`
+kiểm THEO TỪNG DÒNG variant (per-SKU) thay vì gộp theo product. `ProductResource` expose
+`product_variants[].minimum` (CMS round-trip; ô nhập trên form React là TODO).
+
+## TODO — Hệ điểm thưởng (Reward) CHƯA HOẠT ĐỘNG
+
+Cả TÍCH lẫn TIÊU điểm hiện là scaffolding, KHÔNG chạy end-to-end:
+- Có sẵn: ledger `user_reward` (`UserRewardRepository::getTotalPoints` sum, `recordOrderReward`
+  insert transaction_type=12); `CheckoutTotalService::lineReward` (tiêu điểm → giảm tiền); key
+  `reward`/`points` trong cart item + cột `orders_product.reward`; dây nối ở `CreateOrderService`.
+- THIẾU 2 mảnh:
+  1. **Nguồn điểm**: KHÔNG có cột "điểm thưởng mỗi SP" trên product/variant (chỉ có `points` =
+     giá tiêu điểm kiểu OpenCart) và không có config earn-rate → `recordOrderReward` luôn ghi 0
+     (vì `array_sum($item['reward'])`, mà cart hardcode `reward => 0`).
+  2. **Đổ dữ liệu vào cart**: `CartService` hardcode `reward => 0` + `points => 0` → tích luôn 0,
+     `lineReward` luôn skip (pointsTotal=0). Redeem cần đổ `points` từ `variant.points` (đã có cột).
+- Muốn bật: (a) quyết mô hình earn — cột earn trên variant/product HAY global rate (vd 1.000đ→1đ);
+  (b) đổ `reward`/`points` vào cart item từ nguồn đó thay vì hardcode 0.
+
 ## Schema `product_image` cluster (refactor 2026-06-03)
 
 Bảng cũ chỉ có `id, product_id, image, sort_order, timestamps` — không đủ cho

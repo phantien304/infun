@@ -95,21 +95,18 @@ class CheckoutController extends Controller
         $items = [];
         $totalData = [];
         $total = 0;
-        $promotions = null;
+        $promotions = $this->buildAppliedPromotions(hasShipping: false);
         if ($this->cartService->hasItems()) {
-            $promotions = $this->buildAppliedPromotions(hasShipping: false);
             [$error, $items] = $this->validateCart($promotions);
             [$totalData, $total] = $this->totalService->build($promotions, withShipping: false);
         }
         $this->syncCartHeader($items);
 
-        $effectiveCodes = $promotions
-            ? array_map(fn ($a) => (string) $a['coupon']->code, $promotions->appliedCoupons)
-            : [];
+        $effectiveCodes = array_map(fn ($a) => (string) $a['coupon']->code, $promotions->appliedCoupons);
 
         $userEmail = auth()->check() ? (string) auth()->user()->email : '';
         $promo = $this->promotionService->viewData(
-            $promotions ?? new CheckoutPromotions(),
+            $promotions,
             (int) $this->cartService->getSubtotal(),
             $userEmail,
             hasShipping: false,
@@ -131,13 +128,6 @@ class CheckoutController extends Controller
         ]);
     }
 
-    /**
-     * POST /checkout/add-to-cart — RESTful.
-     *  201 Created  → item đã thêm vào giỏ (resource: cart summary + notice HTML)
-     *  404 Not Found → product không tồn tại / không mua được
-     *  422 Unprocessable → vi phạm tồn kho / số lượng (business rule)
-     *  422 (FormRequest) → validation input (option required, quantity, …)
-     */
     public function addToCart(CheckoutAddToCartRequest $request): JsonResponse
     {
         $params = $request->validated();

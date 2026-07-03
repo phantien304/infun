@@ -157,6 +157,38 @@ class GiftService
         session()->forget(getCoreConfig('session.applied_gifts'));
     }
 
+    public function pruneInvalid(array $cartItems, int $cartSubtotal): void
+    {
+        $applied = $this->getAppliedGifts();
+        if (empty($applied)) {
+            return;
+        }
+
+        $cartProductIds = array_unique(array_map(fn ($i) => (int) ($i['id'] ?? 0), $cartItems));
+        $kept = [];
+
+        foreach ($applied as $entry) {
+            $giftId = (int) ($entry['gift_id'] ?? 0);
+            $itemIds = (array) ($entry['item_ids'] ?? []);
+            if ($giftId <= 0 || empty($itemIds)) {
+                continue;
+            }
+
+            $gift = $this->giftRepo->findActiveById($giftId);
+            if (! $gift
+                || $this->validateTrigger($gift, $cartSubtotal, $cartProductIds) !== null
+                || $this->validatePicks($gift, $itemIds) !== null) {
+                continue;
+            }
+
+            $kept[] = $entry;
+        }
+
+        if (count($kept) !== count($applied)) {
+            session()->put(getCoreConfig('session.applied_gifts'), array_values($kept));
+        }
+    }
+
     public function getAppliedGifts(): array
     {
         $raw = (array) session()->get(getCoreConfig('session.applied_gifts'), []);

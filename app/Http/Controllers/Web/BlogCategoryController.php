@@ -31,7 +31,7 @@ class BlogCategoryController extends Controller
     public function index($id = '')
     {
         $category = BlogCategory::with([
-            'description' => fn ($q) => $q->where('language_code', app()->getLocale()),
+            'description',
         ])->find($id);
 
         if (! $category || ! $category->description) {

@@ -12,4 +12,10 @@ class  Currency extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
+
+    protected $casts = [
+        'value'         => 'float',
+        'decimal_place' => 'integer',
+        'sort_order'    => 'integer',
+    ];
 }

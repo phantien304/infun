@@ -110,7 +110,7 @@
                                             </div>
                                             <div class="quantity">Số lượng: {{ $product->quantity }}</div>
                                             <div class="price">Thành tiền:
-                                                {{ number_format((float) $product->total, 0, '', ',') }}đ</div>
+                                                {{ money((float) $product->total) }}</div>
                                         </div>
                                     @endforeach
                                 </div>

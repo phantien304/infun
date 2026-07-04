@@ -117,12 +117,12 @@
                                             </td>
                                             <td class="price" data-title="Đơn Giá">
                                                 <h5 class="text-body">
-                                                    {{ number_format($product['price'], 0, '', ',') . 'đ' }}
+                                                    {{ money($product['price']) }}
                                                 </h5>
                                             </td>
                                             <td class="price" data-title="Tổng cộng">
                                                 <h5 class="text-brand">
-                                                    {{ number_format($product['total'], 0, '', ',') . 'đ' }}</h5>
+                                                    {{ money($product['total']) }}</h5>
                                             </td>
                                         </tr>
                                     @endforeach

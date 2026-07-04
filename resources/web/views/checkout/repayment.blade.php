@@ -156,7 +156,7 @@
                                                             </div>
                                                             <div class="price">
                                                                 Thành tiền :
-                                                                {{ number_format($product->total, 0, '', ',') . 'đ' }}
+                                                                {{ money($product->total) }}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -183,7 +183,7 @@
                                                                     <h6 class="text-muted">{!! $item->title !!}</h6>
                                                                 </td>
                                                                 <td class="cart_total_amount">
-                                                                    <h5 class="text-brand text-end">{!! number_format($item->value, 0, '', ',') . 'đ' !!}
+                                                                    <h5 class="text-brand text-end">{!! money($item->value) !!}
                                                                     </h5>
                                                                 </td>
                                                             </tr>

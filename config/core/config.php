@@ -96,12 +96,18 @@ return [
         'applied_coupons'  => 'checkout.applied_coupons',
         'applied_gifts'    => 'checkout.applied_gifts',
         'applied_vouchers' => 'checkout.applied_vouchers',
+        'checkout_idem'    => 'checkout.idempotency_key',
     ],
     'shipping' => [
         'default' => 'vtp'
     ],
     'payment' => [
         'default' => 'cod'
+    ],
+    'currency' => [
+        'base_code'          => 'VND',
+        'thousand_separator' => ',',
+        'decimal_separator'  => '.',
     ],
     'zalo_pay' => [
         "app_id" => 2554,
@@ -139,6 +145,7 @@ return [
         'information' => 'information_',
         'carriers' => 'carriers_',
         'payments' => 'payments_',
+        'currencies' => 'currencies_',
         'review' => [
             'tag_root'         => 'review_root',
             'tag_criteria'     => 'review_criteria',
@@ -248,6 +255,7 @@ return [
             'transfer'        => 'transfer',
         ],
         'default_warehouse_id' => 1,
+        'reservation_ttl_minutes' => 6,
     ],
     'review' => [
         'status' => [

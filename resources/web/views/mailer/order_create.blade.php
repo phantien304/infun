@@ -100,10 +100,10 @@
                 <td style="font-size: 12px; border-right: 1px solid #DDDDDD; border-bottom: 1px solid #DDDDDD; text-align: left; padding: 7px;">{{ $product['model'] }}</td>
                 <td style="font-size: 12px;	border-right: 1px solid #DDDDDD; border-bottom: 1px solid #DDDDDD; text-align: right; padding: 7px;">{{ $product['quantity'] }}</td>
                 <td style="font-size: 12px;	border-right: 1px solid #DDDDDD; border-bottom: 1px solid #DDDDDD; text-align: right; padding: 7px;">
-                    {{ number_format($product['price'], 0, '', ',').'đ' }}
+                    {{ money($product['price']) }}
                 </td>
                 <td style="font-size: 12px;	border-right: 1px solid #DDDDDD; border-bottom: 1px solid #DDDDDD; text-align: right; padding: 7px;">
-                    {{ number_format($product['total'], 0, '', ',').'đ' }}
+                    {{ money($product['total']) }}
                 </td>
             </tr>
         @endforeach

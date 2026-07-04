@@ -39,6 +39,8 @@
     <div class="container-xl mb-80 mt-50">
         <form action="{{ route('checkout.saveOrder') }}" method="post" enctype="multipart/form-data" id="saveOrder"
             role="form">
+            {{-- Idempotency token: chống double-submit tạo trùng đơn (guest lẫn user) --}}
+            <input type="hidden" name="idempotency_key" value="{{ $idempotencyKey ?? '' }}">
             <div class="row cart-wrap">
                 <div class="col-lg-12">
                     <h1 class="heading-2">Thanh toán</h1>
@@ -271,7 +273,7 @@
                                                                 </div>
                                                                 <div class="price">
                                                                     Thành tiền :
-                                                                    {{ number_format($product['total'], 0, '', ',') . 'đ' }}
+                                                                    {{ money($product['total']) }}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -320,7 +322,7 @@
                             </div>
                             <div class="col-xl-12 mt-3">
                                 <div class="d-grid gap-2 col-12 mx-auto text-center">
-                                    <button type="submit" class="btn btn-lg btn-block">
+                                    <button type="submit" class="btn btn-lg btn-block" data-order-submit>
                                         Đặt hàng<i class="fi-rs-sign-out ml-15"></i>
                                     </button>
                                 </div>
@@ -341,4 +343,26 @@
         @endif
         @include('web::checkout._voucher_modal')
     @endif
+
+    {{-- Chống double-click nút Đặt hàng (lớp frontend của idempotency).
+         Chỉ khoá nút khi form thực sự submit; tự mở lại sau 8s phòng khi
+         validation phía client chặn submit, tránh kẹt nút. --}}
+    <script>
+        (function () {
+            var form = document.getElementById('saveOrder');
+            if (!form) return;
+            form.addEventListener('submit', function () {
+                var btn = form.querySelector('[data-order-submit]');
+                if (!btn || btn.dataset.locked === '1') return;
+                btn.dataset.locked = '1';
+                btn.classList.add('disabled');
+                btn.setAttribute('aria-busy', 'true');
+                setTimeout(function () {
+                    btn.dataset.locked = '';
+                    btn.classList.remove('disabled');
+                    btn.removeAttribute('aria-busy');
+                }, 8000);
+            });
+        })();
+    </script>
 @stop

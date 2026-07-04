@@ -7,13 +7,18 @@ use App\Repositories\Interfaces\CurrencyRepositoryInterface;
 
 class CurrencyService
 {
+    /** Memo trong 1 request (service là singleton) — tránh truy cache store lặp lại. */
+    private ?\Illuminate\Support\Collection $allMemo = null;
+
+    private ?Currency $baseMemo = null;
+
     public function __construct(protected CurrencyRepositoryInterface $repo)
     {
     }
 
     public function all()
     {
-        return $this->repo->listAllCached();
+        return $this->allMemo ??= $this->repo->listAllCached();
     }
 
     public function baseCode(): string
@@ -38,7 +43,13 @@ class CurrencyService
 
     public function base(): Currency
     {
-        $currency = $this->find($this->baseCode()) ?? $this->synthesizeBase();
+        if ($this->baseMemo !== null) {
+            return $this->baseMemo;
+        }
+
+        // clone: không mutate object đang nằm trong collection cache (all()).
+        $found = $this->find($this->baseCode());
+        $currency = $found ? clone $found : $this->synthesizeBase();
 
         $currency->value = 1;
         $symbol = trim((string) getConfigDb('config_currency'));
@@ -47,7 +58,7 @@ class CurrencyService
             $currency->symbol_right = $symbol;
         }
 
-        return $currency;
+        return $this->baseMemo = $currency;
     }
 
     protected function synthesizeBase(): Currency

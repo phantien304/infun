@@ -107,7 +107,6 @@
                                     <span class="text-gray-300">|</span>
                                     @if ($entity->hasVariants)
                                         @php
-                                            $currency = getConfigDb('config_currency');
                                             $currentPrice = $defaultVariant['price'] ?? $entity->price;
                                             $struckRef = $defaultVariant['regular_price'] ?? $basePriceForDiscount;
                                             $showStruck =
@@ -115,10 +114,10 @@
                                         @endphp
                                         <b class="text-gray-500 line-through" id="price-product-old"
                                             style="{{ $showStruck ? '' : 'display:none;' }}">
-                                            {{ number_format($struckRef) . $currency }}
+                                            {{ money($struckRef) }}
                                         </b>
                                         <b class="text-danger" id="price-product">
-                                            {{ $currentPrice > 0 ? number_format($currentPrice) . $currency : getModuleConfig('product.text_contact') }}
+                                            {{ $currentPrice > 0 ? money($currentPrice) : getModuleConfig('product.text_contact') }}
                                         </b>
                                     @elseif ($special && $special->pricePromotion > 0 && $special->pricePromotion < $entity->price)
                                         <b class="text-gray-500 line-through">

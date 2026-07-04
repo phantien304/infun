@@ -31,7 +31,13 @@ class CachePage
             }
         }
         $device = isMobile() ? 'mobile' : 'desktop';
-        $key = 'page_cache_' . md5($request->fullUrl() . '_' . $device);
+
+        $locale = app()->getLocale();
+        $currency = strtoupper((string) $request->cookie(
+            (string) getCoreConfig('currency.cookie', 'currency'),
+            (string) getCoreConfig('currency.base_code', 'VND'),
+        ));
+        $key = 'page_cache_' . md5($request->fullUrl() . '_' . $device . '_' . $locale . '_' . $currency);
 
         if ($cachedContent = $store->get($key)) {
             return response($cachedContent)

@@ -34,9 +34,9 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
             Route::post('saveRepayment', 'CheckoutController@saveRepayment')->name('checkout.saveRepayment');
         });
         Route::any('cart', 'CheckoutController@cart')->name('checkout.cart');
-        Route::post('add-to-cart', 'CheckoutController@addToCart')->name('checkout.addToCart');
+        Route::post('add-to-cart', 'CheckoutController@addToCart')->name('checkout.addToCart')->middleware('throttle:30,1');
         Route::post('consult-sign', 'CheckoutController@consultSign')->name('checkout.consultSign');
-        Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder');
+        Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder')->middleware('throttle:10,1');
         Route::get('success', 'CheckoutController@success')->name('checkout.success');
         Route::get('shipping', 'CheckoutController@recalcTotals')->name('checkout.shipping');
         Route::post('payment/call-back', 'CheckoutController@paymentCallBack')->name('checkout.paymentCallBack')->withoutMiddleware(['cache_page']);
@@ -51,6 +51,9 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::post('vouchers/apply', 'CheckoutVoucherController@apply')->name('checkout.vouchersApply');
         Route::post('vouchers/remove', 'CheckoutVoucherController@remove')->name('checkout.vouchersRemove');
     });
+    Route::get('currency/{code}', 'LocaleController@currency')->name('locale.currency')->withoutMiddleware(['cache_page']);
+    Route::get('language/{code}', 'LocaleController@language')->name('locale.language')->withoutMiddleware(['cache_page']);
+
     Route::prefix('resource')->group(function () {
         Route::get('zone', 'ResourceController@zone')->name('resource.zone');
         Route::post('zone-shipping', 'ResourceController@zoneShipping')->name('resource.zoneShipping');

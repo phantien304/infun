@@ -108,6 +108,11 @@ return [
         'base_code'          => 'VND',
         'thousand_separator' => ',',
         'decimal_separator'  => '.',
+        'cookie'             => 'currency',
+    ],
+    'language' => [
+        'cookie'  => 'language',
+        'allowed' => [],
     ],
     'zalo_pay' => [
         "app_id" => 2554,
@@ -146,6 +151,7 @@ return [
         'carriers' => 'carriers_',
         'payments' => 'payments_',
         'currencies' => 'currencies_',
+        'languages' => 'languages_',
         'review' => [
             'tag_root'         => 'review_root',
             'tag_criteria'     => 'review_criteria',

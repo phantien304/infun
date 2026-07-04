@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             App\Http\Middleware\VerifyCsrfToken::class,
             App\Http\Middleware\DetectArea::class,
+            App\Http\Middleware\SetLocale::class,
         ]);
         $middleware->alias([
             'check_js_request' => \App\Http\Middleware\CheckJsRequest::class,

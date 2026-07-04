@@ -30,8 +30,8 @@ class CachePage
                 return $next($request);
             }
         }
-        $device = isMobile() ? 'mobile' : 'desktop';
 
+        $device = isMobile() ? 'mobile' : 'desktop';
         $locale = app()->getLocale();
         $currency = strtoupper((string) $request->cookie(
             (string) getCoreConfig('currency.cookie', 'currency'),

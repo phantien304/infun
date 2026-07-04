@@ -110,13 +110,13 @@ function getConfigDb($key = '', $default = '')
 function money($amountBase, ?string $code = null): string
 {
     $svc = app(\App\Services\Currency\CurrencyService::class);
-    $currency = $code ? $svc->find($code) : null;
+    $currency = $code ? $svc->findCurrency($code) : null;
 
-    return $svc->format((float) $amountBase, $currency);
+    return $svc->formatPrice((float) $amountBase, $currency);
 }
 function currencyBase(): \App\Models\Entities\Currency
 {
-    return app(\App\Services\Currency\CurrencyService::class)->base();
+    return app(\App\Services\Currency\CurrencyService::class)->baseCurrency();
 }
 function getCoreConfig($key, $default = null, $flip = false)
 {

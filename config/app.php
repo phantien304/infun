@@ -82,6 +82,11 @@ return [
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
+    'locales' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('APP_LOCALES', 'vi'))
+    ))),
+
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 
     /*

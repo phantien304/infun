@@ -33,7 +33,6 @@ class WishlistItemDTO extends Data
             $effective = (float) $variantSpecial->price;
         }
 
-        $currency = (string) getConfigDb('config_currency');
         $stock = (int) ($product->quantity ?? 0);
         $inStock = $stock > 0;
         $stockLabel = $inStock
@@ -50,7 +49,7 @@ class WishlistItemDTO extends Data
             image: $product->image ?? null,
             url: $product ? buildUrl($slug, getModuleConfig('url.product'), (int) $product->id) : '#',
             priceLabel: $effective > 0
-                ? number_format($effective, 0, '', ',') . $currency
+                ? money($effective)
                 : (string) getModuleConfig('product.text_contact'),
             effectivePrice: $effective,
             stockLabel: $stockLabel,

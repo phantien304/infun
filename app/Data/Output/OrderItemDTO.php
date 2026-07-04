@@ -41,7 +41,6 @@ class OrderItemDTO extends Data
 
     public static function fromModel(OrdersProduct $product): self
     {
-        $currency = (string) getConfigDb('config_currency');
         $name = (string) ($product->name ?? '');
         $price = (float) ($product->price ?? 0);
         $total = (float) ($product->total ?? 0);
@@ -65,8 +64,8 @@ class OrderItemDTO extends Data
             quantity: (int) ($product->quantity ?? 0),
             price: $price,
             total: $total,
-            priceLabel: number_format($price, 0, '', ',') . $currency,
-            totalLabel: number_format($total, 0, '', ',') . $currency,
+            priceLabel: money($price),
+            totalLabel: money($total),
             productUrl: $url,
             options: OrderItemOptionDTO::collect($product->ordersProductOptions ?? collect()),
         );

@@ -48,7 +48,6 @@ class VoucherDTO extends Data
         bool $redeemable = true,
         ?string $notRedeemableReason = null,
     ): self {
-        $currency = (string) getConfigDb('config_currency');
         $amount = (float) $voucher->amount;
         $redeemed = (float) $voucher->redeemed_balance;
         $available = max(0.0, $amount - $redeemed);
@@ -66,9 +65,9 @@ class VoucherDTO extends Data
             amount:              $amount,
             redeemedBalance:     $redeemed,
             availableBalance:    $available,
-            amountLabel:         number_format($amount) . $currency,
-            redeemedLabel:       number_format($redeemed) . $currency,
-            availableLabel:      number_format($available) . $currency,
+            amountLabel:         money($amount),
+            redeemedLabel:       money($redeemed),
+            availableLabel:      money($available),
             status:              (int) $voucher->status,
             statusLabel:         self::resolveStatusLabel((int) $voucher->status),
             dateExpire:          $voucher->date_expire?->format('Y-m-d'),

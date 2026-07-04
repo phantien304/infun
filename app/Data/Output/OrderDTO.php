@@ -65,7 +65,6 @@ class OrderDTO extends Data
 
     public static function fromModel(Orders $order): self
     {
-        $currency = (string) getConfigDb('config_currency');
         $waitingStatusId = (int) getConfigDb('order_payment_waiting_status_id');
         $successStatusId = (int) getConfigDb('order_payment_success_status_id');
         $notDelete = (array) getConfigDb('config_order_member_not_delete');
@@ -124,7 +123,7 @@ class OrderDTO extends Data
             zpTransId: $order->zp_trans_id ?? null,
             appTransId: $order->app_trans_id ?? null,
             total: $totalValue,
-            totalLabel: number_format($totalValue, 0, '', ',') . $currency,
+            totalLabel: money($totalValue),
             createdAt: $createdAt?->format('H:i m/d/Y') ?? '',
             createdAtFull: $createdAt?->format('Y-m-d H:i:s') ?? '',
             createdMinutesAgo: $createdMinutesAgo,

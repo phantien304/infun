@@ -107,6 +107,17 @@ function getConfigDb($key = '', $default = '')
 
     return $config;
 }
+function money($amountBase, ?string $code = null): string
+{
+    $svc = app(\App\Services\Currency\CurrencyService::class);
+    $currency = $code ? $svc->find($code) : null;
+
+    return $svc->format((float) $amountBase, $currency);
+}
+function currencyBase(): \App\Models\Entities\Currency
+{
+    return app(\App\Services\Currency\CurrencyService::class)->base();
+}
 function getCoreConfig($key, $default = null, $flip = false)
 {
     $env = config('app.env');

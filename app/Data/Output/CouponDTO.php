@@ -96,19 +96,18 @@ class CouponDTO extends Data
 
     private static function resolveDiscountLabel(Coupon $coupon): string
     {
-        $currency = (string) getConfigDb('config_currency');
         $type = (int) $coupon->type;
 
         if ($type === (int) getCoreConfig('coupon.type.percent')) {
             $label = 'Giảm ' . rtrim(rtrim(number_format((float) $coupon->discount, 2), '0'), '.') . '%';
             if ($coupon->discount_max !== null && (float) $coupon->discount_max > 0) {
-                $label .= ' tối đa ' . number_format((float) $coupon->discount_max) . $currency;
+                $label .= ' tối đa ' . money((float) $coupon->discount_max);
             }
             return $label;
         }
 
         if ($type === (int) getCoreConfig('coupon.type.fixed')) {
-            return 'Giảm ' . number_format((float) $coupon->discount) . $currency;
+            return 'Giảm ' . money((float) $coupon->discount);
         }
 
         if ($type === (int) getCoreConfig('coupon.type.freeship')) {
@@ -123,7 +122,7 @@ class CouponDTO extends Data
         if ($coupon->min_subtotal === null || (float) $coupon->min_subtotal <= 0) {
             return 'Không giới hạn';
         }
-        return 'Đơn từ ' . number_format((float) $coupon->min_subtotal) . (string) getConfigDb('config_currency');
+        return 'Đơn từ ' . money((float) $coupon->min_subtotal);
     }
 
     private static function resolveApplyScopeLabel(int $scope): string

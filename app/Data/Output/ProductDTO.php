@@ -234,22 +234,20 @@ class ProductDTO extends Data
 
     private static function formatPrice(Product $product): string
     {
-        $currency = getConfigDb('config_currency');
-
         if (($product->has_variants ?? false) && ($product->min_variant_price ?? null) !== null) {
             [$min, $max] = self::resolveVariantRange($product);
             if ($min <= 0 && $max <= 0) {
                 return getModuleConfig('product.text_contact');
             }
             if ($min === $max) {
-                return number_format($min) . $currency;
+                return money($min);
             }
-            return number_format($min) . ' – ' . number_format($max) . $currency;
+            return money($min) . ' – ' . money($max);
         }
 
         $price = (float) $product->price;
         return $price > 0
-            ? number_format($price) . $currency
+            ? money($price)
             : getModuleConfig('product.text_contact');
     }
 

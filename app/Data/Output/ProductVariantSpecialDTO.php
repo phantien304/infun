@@ -42,7 +42,7 @@ class ProductVariantSpecialDTO extends Data
     private static function formatPrice(float $price): string
     {
         return $price > 0
-            ? number_format($price) . getConfigDb('config_currency')
+            ? money($price)
             : getModuleConfig('product.text_contact');
     }
 

@@ -8,14 +8,6 @@ use Illuminate\Support\Collection;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Data;
 
-/**
- * Gift DTO cho modal Shopee-style "Chọn quà".
- *
- * Pre-compute label + cờ trạng thái (availableToCart, notAvailableReason,
- * pickedItemIds) trong DTO — blade chỉ render.
- *
- * Service factory `fromModelWithCart(Gift, $cartContext)` set cờ tuỳ context.
- */
 class GiftDTO extends Data
 {
     public function __construct(
@@ -23,34 +15,25 @@ class GiftDTO extends Data
         public string $name,
         public ?string $description,
         public ?string $badge,
-
         public int $triggerType,
         public string $triggerLabel,
         public ?float $minSubtotal,
         public string $minSubtotalLabel,
-
         public int $pickType,
         public string $pickTypeLabel,
         public ?int $pickLimit,
-
         public ?string $dateStart,
         public ?string $dateEnd,
         public string $expiresAtLabel,
-
         public ?int $usesTotal,
         public int $usedCount,
         public ?int $usesRemaining,
-
-        /** @var Collection<int, GiftItemDTO> */
-        #[DataCollectionOf(GiftItemDTO::class)]
         public Collection $items,
-
         public bool $availableToCart,
         public ?string $notAvailableReason,
-
-        /** @var array<int, int> Gift item IDs user đã pick trong session. */
         public array $pickedItemIds,
-    ) {}
+    ) {
+    }
 
     public static function fromModel(
         Gift $gift,
@@ -102,7 +85,7 @@ class GiftDTO extends Data
         if ($gift->min_subtotal === null || (float) $gift->min_subtotal <= 0) {
             return 'Không giới hạn';
         }
-        return 'Đơn từ ' . number_format((float) $gift->min_subtotal) . (string) getConfigDb('config_currency');
+        return 'Đơn từ ' . money((float) $gift->min_subtotal);
     }
 
     private static function resolvePickTypeLabel(Gift $gift): string

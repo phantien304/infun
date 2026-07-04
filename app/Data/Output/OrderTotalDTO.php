@@ -23,14 +23,13 @@ class OrderTotalDTO extends Data
 
     public static function fromModel(OrdersTotal $total): self
     {
-        $currency = (string) getConfigDb('config_currency');
         $value = (float) ($total->value ?? 0);
 
         return new self(
             code: (string) ($total->code ?? ''),
             title: (string) ($total->title ?? ''),
             value: $value,
-            valueLabel: number_format($value, 0, '', ',') . $currency,
+            valueLabel: money($value),
             sortOrder: (int) ($total->sort_order ?? 0),
         );
     }

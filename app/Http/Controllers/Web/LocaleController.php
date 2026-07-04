@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Http\Controllers\Web;
+
+use App\Http\Controllers\Controller;
+use App\Repositories\Interfaces\LanguageRepositoryInterface;
+use App\Services\Currency\CurrencyService;
+use Illuminate\Http\RedirectResponse;
+
+class LocaleController extends Controller
+{
+    public function __construct(
+        protected CurrencyService $currencyService,
+        protected LanguageRepositoryInterface $languageRepo,
+    ) {
+    }
+
+    public function currency(string $code): RedirectResponse
+    {
+        $currency = $this->currencyService->findCurrency($code);
+        if ($currency) {
+            $cookie = (string) getCoreConfig('currency.cookie', 'currency');
+            cookie()->queue(cookie()->forever($cookie, strtoupper($code)));
+        }
+
+        return back();
+    }
+
+    public function language(string $code): RedirectResponse
+    {
+        if ($this->isAllowedLanguage($code)) {
+            $cookie = (string) getCoreConfig('language.cookie', 'language');
+            cookie()->queue(cookie()->forever($cookie, strtolower($code)));
+        }
+
+        return back();
+    }
+
+    protected function isAllowedLanguage(string $code): bool
+    {
+        $code = strtolower($code);
+
+        $allowed = (array) getCoreConfig('language.allowed', []);
+        if (! empty($allowed)) {
+            return in_array($code, array_map('strtolower', $allowed), true);
+        }
+
+        return $this->languageRepo->listAllCached()
+            ->contains(fn ($lang) => strtolower((string) ($lang->code ?? '')) === $code);
+    }
+}

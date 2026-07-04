@@ -7,49 +7,70 @@ use App\Repositories\Interfaces\CurrencyRepositoryInterface;
 
 class CurrencyService
 {
-    /** Memo trong 1 request (service là singleton) — tránh truy cache store lặp lại. */
     private ?\Illuminate\Support\Collection $allMemo = null;
 
     private ?Currency $baseMemo = null;
+
+    private ?Currency $currentMemo = null;
 
     public function __construct(protected CurrencyRepositoryInterface $repo)
     {
     }
 
-    public function all()
+    public function currentCurrency(): Currency
+    {
+        if ($this->currentMemo !== null) {
+            return $this->currentMemo;
+        }
+
+        $code = (string) request()->cookie((string) getCoreConfig('currency.cookie', 'currency'), '');
+        if ($code === '' || strtoupper($code) === $this->baseCurrencyCode()) {
+            return $this->currentMemo = $this->baseCurrency();
+        }
+
+        $pickedCurrency = $this->findCurrency($code);
+
+        return $this->currentMemo = ($picked ?: $this->baseCurrency());
+    }
+
+    public function currentCurrencyCode(): string
+    {
+        return strtoupper((string) $this->currentCurrency()->code);
+    }
+
+    public function allCurrency()
     {
         return $this->allMemo ??= $this->repo->listAllCached();
     }
 
-    public function baseCode(): string
+    public function baseCurrencyCode(): string
     {
         return strtoupper((string) getCoreConfig('currency.base_code', 'VND'));
     }
 
-    public function find(?string $code): ?Currency
+    public function findCurrency(?string $code): ?Currency
     {
         if (! filled($code)) {
             return null;
         }
         $code = strtoupper($code);
 
-        return $this->all()->first(fn (Currency $c) => strtoupper((string) $c->code) === $code);
+        return $this->allCurrency()->first(fn (Currency $c) => strtoupper((string) $c->code) === $code);
     }
 
-    public function isBase(?Currency $currency): bool
+    public function isCurrencyBase(?Currency $currency): bool
     {
-        return $currency !== null && strtoupper((string) $currency->code) === $this->baseCode();
+        return $currency !== null && strtoupper((string) $currency->code) === $this->baseCurrencyCode();
     }
 
-    public function base(): Currency
+    public function baseCurrency(): Currency
     {
         if ($this->baseMemo !== null) {
             return $this->baseMemo;
         }
 
-        // clone: không mutate object đang nằm trong collection cache (all()).
-        $found = $this->find($this->baseCode());
-        $currency = $found ? clone $found : $this->synthesizeBase();
+        $baseCode = $this->findCurrency($this->baseCurrencyCode());
+        $currency = $baseCode ? clone $baseCode : $this->synthesizeBase();
 
         $currency->value = 1;
         $symbol = trim((string) getConfigDb('config_currency'));
@@ -64,7 +85,7 @@ class CurrencyService
     protected function synthesizeBase(): Currency
     {
         $currency = new Currency();
-        $currency->code = $this->baseCode();
+        $currency->code = $this->baseCurrencyCode();
         $currency->value = 1;
         $currency->decimal_place = 0;
         $currency->symbol_left = '';
@@ -73,23 +94,23 @@ class CurrencyService
         return $currency;
     }
 
-    public function convert(float $amountBase, ?Currency $currency = null): float
+    public function convertPrice(float $amountBase, ?Currency $currency = null): float
     {
-        $currency ??= $this->base();
+        $currency ??= $this->currentCurrency();
         $dp = (int) ($currency->decimal_place ?? 0);
 
-        if ($this->isBase($currency)) {
+        if ($this->isCurrencyBase($currency)) {
             return round($amountBase, $dp);
         }
 
         return round($amountBase * (float) ($currency->value ?: 1), $dp);
     }
 
-    public function format(float $amountBase, ?Currency $currency = null): string
+    public function formatPrice(float $amountBase, ?Currency $currency = null): string
     {
-        $currency ??= $this->base();
+        $currency ??= $this->currentCurrency();
 
-        $amount = $this->convert($amountBase, $currency);
+        $amount = $this->convertPrice($amountBase, $currency);
         $number = number_format(
             $amount,
             (int) ($currency->decimal_place ?? 0),

@@ -11,11 +11,13 @@ use App\Http\Supports\BuildsSeoMeta;
 use App\Http\Supports\MenusClient;
 use App\Repositories\Interfaces\CategoryRepositoryInterface;
 use App\Repositories\Interfaces\FilterRepositoryInterface;
+use App\Repositories\Interfaces\LanguageRepositoryInterface;
 use App\Repositories\Interfaces\ManufacturerRepositoryInterface;
 use App\Repositories\Interfaces\MenuRepositoryInterface;
 use App\Repositories\Interfaces\MenuValueRepositoryInterface;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
 use App\Repositories\Interfaces\ZoneRepositoryInterface;
+use App\Services\Currency\CurrencyService;
 use Illuminate\Container\Container;
 
 abstract class Controller
@@ -37,6 +39,8 @@ abstract class Controller
             'menuRepo'         => MenuRepositoryInterface::class,
             'menuValueRepo'    => MenuValueRepositoryInterface::class,
             'productRepo'      => ProductRepositoryInterface::class,
+            'languageRepo'     => LanguageRepositoryInterface::class,
+            'currencyService'  => CurrencyService::class,
         ];
     }
 
@@ -87,8 +91,6 @@ abstract class Controller
 
     protected function toUrl(string $url, $params = [])
     {
-        // Redirect thuần — bỏ event hook before/after_redirect (không có listener,
-        // và máy event cũ làm 500 mọi nhánh 404 gọi toUrl). Xem lịch sử: 2026-07.
         if (str_contains($url, 'http')) {
             return redirect()->to($url);
         }
@@ -116,6 +118,10 @@ abstract class Controller
                 "name" => $breadcrumb['text']
             ];
         }
+        $currentCurrency = $this->currencyService->currentCurrency();
+        $currencySymbol = trim((string) ($currentCurrency->symbol_right ?? ''))
+            ?: trim((string) ($currentCurrency->symbol_left ?? ''));
+
         $this->setViewData([
             'breadcrumbs' => $breadcrumbs,
             'breadcrumbSchema' => $breadcrumbSchema,
@@ -123,7 +129,12 @@ abstract class Controller
             'manufacturers' => ManufacturerDTO::collect($this->manufacturerRepo->listAllCached()),
             'filters' => FilterDTO::collect($this->filterRepo->listAllCached()),
             'zones' => ZoneDTO::collect($this->zoneRepo->listAllCached()),
-            'menus' => $this->getMenus()
+            'menus' => $this->getMenus(),
+            'currencies' => $this->currencyService->allCurrency(),
+            'currentCurrency' => $currentCurrency,
+            'currencySymbol' => $currencySymbol,
+            'languages' => $this->languageRepo->listAllCached(),
+            'currentLocale' => strtolower(app()->getLocale()),
         ]);
         $this->buildDataCommon();
         $data = array_merge($data, $this->getViewData());

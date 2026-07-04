@@ -20,6 +20,8 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Helpers\Router($app['router']);
         });
         $this->registerRepository();
+
+        $this->app->singleton(\App\Services\Currency\CurrencyService::class);
     }
 
     public function boot(): void
@@ -66,24 +68,26 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\Entities\ProductVariantSpecial::class => [\App\Repositories\Interfaces\ProductRepositoryInterface::class],
             \App\Models\Entities\ProductImage::class          => [\App\Repositories\Interfaces\ProductRepositoryInterface::class],
             \App\Models\Entities\ProductCategory::class       => [\App\Repositories\Interfaces\ProductRepositoryInterface::class],
-            \App\Models\Entities\Category::class     => [\App\Repositories\Interfaces\CategoryRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
-            \App\Models\Entities\Manufacturer::class => [\App\Repositories\Interfaces\ManufacturerRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
-            \App\Models\Entities\Filter::class       => [\App\Repositories\Interfaces\FilterRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
-            \App\Models\Entities\FilterValue::class  => [\App\Repositories\Interfaces\FilterRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
-            \App\Models\Entities\BlogCategory::class => [\App\Repositories\Interfaces\BlogCategoryRepositoryInterface::class],
-            \App\Models\Entities\BlogTag::class      => [\App\Repositories\Interfaces\BlogTagRepositoryInterface::class],
-            \App\Models\Entities\Carrier::class => [\App\Repositories\Interfaces\CarrierRepositoryInterface::class],
-            \App\Models\Entities\Payment::class => [\App\Repositories\Interfaces\PaymentRepositoryInterface::class],
-            \App\Models\Entities\Coupon::class         => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
-            \App\Models\Entities\CouponProduct::class  => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
-            \App\Models\Entities\CouponCategory::class => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
-            \App\Models\Entities\Gift::class                => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
-            \App\Models\Entities\GiftItem::class            => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
-            \App\Models\Entities\GiftTriggerProduct::class  => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
-            \App\Models\Entities\Zone::class => [\App\Repositories\Interfaces\ZoneRepositoryInterface::class],
-            \App\Models\Entities\Menu::class      => [\App\Repositories\Interfaces\MenuRepositoryInterface::class],
-            \App\Models\Entities\MenuValue::class => [\App\Repositories\Interfaces\MenuRepositoryInterface::class],
-            \App\Models\Entities\StoreReview::class => [\App\Repositories\Interfaces\StoreReviewRepositoryInterface::class],
+            \App\Models\Entities\Category::class              => [\App\Repositories\Interfaces\CategoryRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
+            \App\Models\Entities\Manufacturer::class          => [\App\Repositories\Interfaces\ManufacturerRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
+            \App\Models\Entities\Filter::class                => [\App\Repositories\Interfaces\FilterRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
+            \App\Models\Entities\FilterValue::class           => [\App\Repositories\Interfaces\FilterRepositoryInterface::class, \App\Repositories\Interfaces\ProductRepositoryInterface::class],
+            \App\Models\Entities\BlogCategory::class          => [\App\Repositories\Interfaces\BlogCategoryRepositoryInterface::class],
+            \App\Models\Entities\BlogTag::class               => [\App\Repositories\Interfaces\BlogTagRepositoryInterface::class],
+            \App\Models\Entities\Carrier::class               => [\App\Repositories\Interfaces\CarrierRepositoryInterface::class],
+            \App\Models\Entities\Payment::class               => [\App\Repositories\Interfaces\PaymentRepositoryInterface::class],
+            \App\Models\Entities\Currency::class              => [\App\Repositories\Interfaces\CurrencyRepositoryInterface::class],
+            \App\Models\Entities\Language::class              => [\App\Repositories\Interfaces\LanguageRepositoryInterface::class],
+            \App\Models\Entities\Coupon::class                => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
+            \App\Models\Entities\CouponProduct::class         => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
+            \App\Models\Entities\CouponCategory::class        => [\App\Repositories\Interfaces\CouponRepositoryInterface::class],
+            \App\Models\Entities\Gift::class                  => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
+            \App\Models\Entities\GiftItem::class              => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
+            \App\Models\Entities\GiftTriggerProduct::class    => [\App\Repositories\Interfaces\GiftRepositoryInterface::class],
+            \App\Models\Entities\Zone::class                  => [\App\Repositories\Interfaces\ZoneRepositoryInterface::class],
+            \App\Models\Entities\Menu::class                  => [\App\Repositories\Interfaces\MenuRepositoryInterface::class],
+            \App\Models\Entities\MenuValue::class             => [\App\Repositories\Interfaces\MenuRepositoryInterface::class],
+            \App\Models\Entities\StoreReview::class           => [\App\Repositories\Interfaces\StoreReviewRepositoryInterface::class],
         ];
 
         $prefix = defined('EVENT_MODEL_TYPE') ? getConstant('EVENT_MODEL_TYPE') : 'eloquent';

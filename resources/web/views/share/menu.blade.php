@@ -10,18 +10,15 @@
                     </div>
                     <div class="header-right flex items-center gap-6 flex-1 justify-end">
                         <div class="search-style-2 flex-1 max-w-xl">
-                            {{-- Header search → route qua Meilisearch (filter[keyword]).
-                                 Repo ProductRepository::list() detect filter.keyword ≠ rỗng
-                                 → dispatch Scout::search; rỗng → fallback Eloquent. --}}
                             <form action="{{ route('product.getList') }}" method="get" role="search">
                                 <input type="search" name="filter[keyword]" class="form-control"
-                                    value="{{ request()->input('filter.keyword') }}"
-                                    placeholder="Tìm sản phẩm..." autocomplete="off"
-                                    aria-label="Tìm sản phẩm">
+                                    value="{{ request()->input('filter.keyword') }}" placeholder="Tìm sản phẩm..."
+                                    autocomplete="off" aria-label="Tìm sản phẩm">
                             </form>
                         </div>
                         <div class="header-action-right">
                             <div class="header-action-2 flex items-center gap-4">
+                                @include('web::share._locale_switcher')
                                 <div class="header-action-icon-2 relative">
                                     <a href="{!! route('account.wishlist') !!}" title="Yêu thích" class="block">
                                         <img class="svgInject" alt="Sản phẩm yêu thích"
@@ -178,9 +175,8 @@
                 <div class="mobile-search search-style-3 mobile-header-border mb-4">
                     <form action="{{ route('product.getList') }}" method="get" role="search">
                         <input type="search" name="filter[keyword]"
-                            value="{{ request()->input('filter.keyword') }}"
-                            placeholder="Tìm sản phẩm..." class="form-control"
-                            autocomplete="off" aria-label="Tìm sản phẩm">
+                            value="{{ request()->input('filter.keyword') }}" placeholder="Tìm sản phẩm..."
+                            class="form-control" autocomplete="off" aria-label="Tìm sản phẩm">
                         <button type="submit" class="btn btn-md mt-2"><i class="fi-rs-search"></i> Tìm</button>
                     </form>
                 </div>

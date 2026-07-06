@@ -953,6 +953,21 @@ trách nhiệm. Index `(product_id, type, is_active, sort_order)` cover query.
 
 ## Schema `product_option` composite PK + `product_option_value` cleanup (2026-06-03)
 
+> ⚠️ **CẬP NHẬT 2026-07-06 — phần dưới là LỊCH SỬ.** `product_option` GIỜ CÓ
+> surrogate PK `id` (BIGINT UNSIGNED AUTO_INCREMENT); khóa tự nhiên
+> `(product_id, option_id)` thành **UNIQUE**. `product_option_value` thêm FK
+> `product_option_id → product_option(id)` CASCADE (giữ `product_id/option_id`
+> denormalized vì nhiều chỗ đọc trực tiếp). Model `ProductOption` bỏ composite
+> PK (`$primaryKeyAutoIncrement = 'id'`), relation `productOptionValues` +
+> `ProductOptionValue::productOption` dùng `product_option_id` — Compoships
+> KHÔNG còn cần cho quan hệ này. Migration
+> `2026_07_06_000000_add_surrogate_id_to_product_option.php`.
+> **Đã dọn nốt (2026-07-06):** drop `product_id/option_id` thừa khỏi
+> `product_option_value` (chỉ còn `product_option_id` + `option_value_id`),
+> UNIQUE giờ `(product_option_id, option_value_id)`. Caller lấy product_id/
+> option_id qua parent `ProductOption`. Migration
+> `2026_07_06_000001_drop_denormalized_cols_from_product_option_value.php`.
+
 `product_option` **KHÔNG có cột `id`** — PK composite `(product_id, option_id)`.
 Model:
 
@@ -1106,6 +1121,12 @@ seed + legacy nhiều nơi nằm thẳng trong Laravel `public/` (vd `public/see
 - `cardQuery()` + `cardScope()` + `cardRelations()` — UI thẻ ngắn
   (list/related/latest/feature/special)
 - `detailRelations()` — UI trang chi tiết (mở rộng từ cardRelations)
+
+> ⚠️ **CẬP NHẬT 2026-07-06:** `cardQuery/cardScope/cardRelations` đã CHUYỂN sang
+> `App\Queries\Product\ProductCardQuery` (`feature/latest/specialLatest/`
+> `relatedIn` + `relations()`). `ProductRepository` delegate qua accessor lazy
+> `cards()`; `detailRelations()` dùng `cards()->relations()`. Xem "Convention:
+> Enum / phân loại / tầng Query (2026-07-06)".
 
 ## Naming variable / view-data key — ngữ nghĩa rõ, không generic
 
@@ -2967,3 +2988,68 @@ Khi debug `logError` không chạy, kiểm theo thứ tự:
 
 `logError` đang dùng `ChannelLog::error('error', ...)` chuẩn — đừng đổi sang
 `\Log::error` (laravel.log) trừ khi cần universal log access.
+
+## Convention: Enum / phân loại / tầng Query (refactor 2026-07-06)
+
+### Enum cho giá trị mã hoá — `app/Enums`
+
+Giá trị mã hoá thuộc **miền đóng, do code sở hữu** → PHP backed enum trong
+`App\Enums`. KHÔNG dùng magic number / `getCoreConfig` / `const` rải rác.
+
+Phép thử enum-vs-config: *"Thêm/bớt một giá trị có buộc viết code xử lý mới
+không?"* — Có → **enum** (vd `role`: thêm role phải thêm nhánh hành vi); Không,
+chỉ là số tinh chỉnh admin đổi được → **config/DB** (vd cửa sổ thanh toán lại
+`240` phút, ngưỡng free-ship).
+
+- `App\Enums\OptionRole : int` — `CustomField = 0`, `Variant = 1`. **CÓ cast**
+  trên `Option` (`protected $casts = ['role' => OptionRole::class]`). An toàn vì
+  DB có CHECK `role IN (0,1)`.
+- `App\Enums\OptionType : string` — 12 widget (select/radio/checkbox/image/text/
+  textarea/email/phone/file/date/datetime/time). **KHÔNG cast** — tập `type` DB
+  legacy chưa enumerate chắc, cast bằng `from()` sẽ ném `ValueError` khi gặp
+  value lạ → chết mọi lần load Option. Dùng như value-object qua
+  `OptionType::tryFrom($s)` (value lạ → `null`, xử lý null-safe).
+
+Quy tắc khi đã cast enum:
+- **Emit ra JSON/payload → `->value`** (giữ contract wire là int/string). Vd
+  `'role' => $role->value`.
+- **Eloquent `pluck()` TỰ áp cast** → giá trị pluck là enum. Vd
+  `Option::...->pluck('role')` cho ra `OptionRole`, dùng trực tiếp.
+- **Mảng payload HTTP không qua model → raw** → parse bằng
+  `OptionRole::fromInput($x['role'] ?? null)` (null/lạ → `CustomField`; default
+  an toàn vì `Variant` tạo SKU, phân loại nhầm tốn kém hơn).
+
+### Logic phân loại → method trên enum/model, KHÔNG so sánh rải ở service
+
+- `OptionRole::isVariant()/isCustomField()`, `OptionRole::fromInput()`.
+- `Option::isVariant()/isCustomField()` (delegate `role`).
+- `OptionType::isVariantWidget()/expectsTextInput()/expectsDateOrFileChoice()`
+  (gom các nhóm `in_array($type, [...])` cũ ở `CheckoutAddToCartRequest`).
+- Service / Resource / Request CHỈ gọi method, KHÔNG viết
+  `$x->role === OptionRole::Variant` rải rác. Đổi định nghĩa "variant" → sửa 1
+  chỗ (enum), không đi grep.
+
+### Tầng Query (`app/Queries`) + Repository = nơi DUY NHẤT chạm DB
+
+- `App\Queries\Query` — marker interface. Query class chỉ DỰNG/CHẠY 1 truy vấn
+  đọc, trả Model/Collection/DTO; KHÔNG cache, KHÔNG business logic.
+- Repository (per aggregate): persistence + caching policy + interface. Khi
+  phình: (1) tách theo consumer (`ProductRepository` vs `ProductCmsRepository`)
+  → (2) rút Query object → (3) chia theo area chỉ khi module hoá thật.
+- Mẫu tham chiếu: `App\Queries\Product\ProductCardQuery`
+  (`feature/latest/specialLatest/relatedIn` + `relations()`). `ProductRepository`
+  **delegate** qua accessor lazy `cards()`, caching giữ ở repo. Thay cho
+  `cardQuery/cardScope/cardRelations` cũ.
+- Ngưỡng tách repo: > ~300–400 dòng hoặc > ~12–15 method. `ProductRepository`
+  từng 545 dòng.
+- Đừng shard repo thành trait chỉ để giảm dòng (giấu coupling); dùng Query object
+  thật. `Concerns/CacheableRepository`, `HasListFilterToolbar` là cross-cutting —
+  OK.
+
+**Việc còn nợ (migrate raw DB vào Repository/Query):** `DB::table` trong
+`CouponService`, `GiftService`, `VoucherService`, `PromotionService`,
+`ReviewService`, `ProductVariantAggregateObserver`; ~45 query Eloquent rải ở
+`AccountService`, cụm `Cart*`, `CartService`, `StockService`,
+`ProductVariantWriter/WriteService`, vài controller. (Seed*/Purge command dùng
+`DB::table` chấp nhận được — tooling dev.) Nên chốt bằng **arch test**: "chỉ
+`App\Repositories` + `App\Queries` được dùng Eloquent/DB builder".

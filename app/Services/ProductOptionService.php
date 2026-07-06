@@ -184,8 +184,8 @@ class ProductOptionService
                     'option_value_id' => (int) $productOptionValue->option_value_id,
                     'name'            => (string) ($productOptionValue->optionValue?->description?->name ?? ''),
                     'image'           => (string) ($productOptionValue->image ?? ''),
-                    'product_id'      => (int) $productOptionValue->product_id,
-                    'option_id'       => (int) $productOptionValue->option_id,
+                    'product_id'      => (int) $productOption->product_id,
+                    'option_id'       => (int) $productOption->option_id,
                 ])
                 ->values()
                 ->all();

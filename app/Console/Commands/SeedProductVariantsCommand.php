@@ -280,10 +280,14 @@ class SeedProductVariantsCommand extends Command
         // Truncate cleanup: xóa declaration + picker preset của seed custom
         // field options. KHÔNG đụng option/option_value gốc (giữ idempotent).
         if ($this->option('truncate')) {
-            $deletedDecl = DB::table('product_option')
-                ->whereIn('option_id', $cfOptionIds)
-                ->delete();
+            // Xoá picker trước (qua product_option_id, khi declaration còn tồn
+            // tại để subquery tra được), rồi mới xoá declaration.
             $deletedPicker = DB::table('product_option_value')
+                ->whereIn('product_option_id', function ($q) use ($cfOptionIds) {
+                    $q->select('id')->from('product_option')->whereIn('option_id', $cfOptionIds);
+                })
+                ->delete();
+            $deletedDecl = DB::table('product_option')
                 ->whereIn('option_id', $cfOptionIds)
                 ->delete();
             $this->line("  xóa {$deletedDecl} product_option + {$deletedPicker} product_option_value (custom field seed)");
@@ -344,7 +348,8 @@ class SeedProductVariantsCommand extends Command
                         // Picker preset cho radio/select — product_option_value
                         // rows. product_option_id chưa biết ở đây (declaration
                         // chưa insert); resolve sau khi insert product_option.
-                        // Giữ product_id/option_id để tra ngược id.
+                        // product_id/option_id chỉ để TRA NGƯỢC id, KHÔNG insert
+                        // (đã bỏ khỏi product_option_value).
                         foreach ($cf['value_ids'] as $povSort => $valueId) {
                             $pickerValues[] = [
                                 'product_id'      => $product->id,
@@ -379,8 +384,14 @@ class SeedProductVariantsCommand extends Command
                         if (! $po) {
                             continue; // declaration bị dedupe/thiếu — bỏ picker mồ côi
                         }
-                        $pv['product_option_id'] = (int) $po->id;
-                        $resolved[] = $pv;
+                        $resolved[] = [
+                            'product_option_id' => (int) $po->id,
+                            'option_value_id'   => $pv['option_value_id'],
+                            'image'             => $pv['image'],
+                            'sort_order'        => $pv['sort_order'],
+                            'created_at'        => $pv['created_at'],
+                            'updated_at'        => $pv['updated_at'],
+                        ];
                     }
 
                     if ($resolved) {

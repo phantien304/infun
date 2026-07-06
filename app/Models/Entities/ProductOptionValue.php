@@ -3,9 +3,12 @@
 namespace App\Models\Entities;
 
 use App\Models\Base\Base;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProductOptionValue extends Base
 {
+    use SoftDeletes;
+
     protected $table = 'product_option_value';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;

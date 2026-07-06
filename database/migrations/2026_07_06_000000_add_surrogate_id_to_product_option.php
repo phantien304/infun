@@ -33,8 +33,7 @@ use Illuminate\Support\Facades\Schema;
  * XAMPP opcache CLI (xem CLAUDE.md): nếu migrate thấy chạy code cũ,
  *   php -d opcache.enable_cli=0 artisan migrate
  */
-return new class extends Migration
-{
+return new class () extends Migration {
     private function foreignKeyExists(string $table, string $constraint): bool
     {
         return DB::table('information_schema.TABLE_CONSTRAINTS')

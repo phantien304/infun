@@ -967,6 +967,20 @@ trách nhiệm. Index `(product_id, type, is_active, sort_order)` cover query.
 > UNIQUE giờ `(product_option_id, option_value_id)`. Caller lấy product_id/
 > option_id qua parent `ProductOption`. Migration
 > `2026_07_06_000001_drop_denormalized_cols_from_product_option_value.php`.
+>
+> **Soft delete + giá custom field (2026-07-06):** cả `product_option` và
+> `product_option_value` giờ có `deleted_at` (SoftDeletes, đồng bộ
+> `option/option_value`). Bất biến: **1 dòng vật lý / natural key** — re-declare
+> thì RESTORE (ProductVariantWriter `withTrashed()` + set `deleted_at = null`),
+> KHÔNG tạo dòng mới → UNIQUE giữ nguyên, không cần partial index. Cascade
+> soft-delete lo bởi `HasCascadeRelations` + `$destroyRelations`. Thêm cột
+> `price DECIMAL(15,4)` **có DẤU** (âm = giảm; KHÔNG dùng `price_prefix`
+> OpenCart) cho phụ phí custom field: `product_option.price` (field cố định) +
+> `product_option_value.price` (từng lựa chọn picker); default 0 nên chưa đổi
+> giá đơn. Đã expose ra `ProductOptionService`. **Việc còn nợ:** cộng option
+> price vào cart total ở `CartService` / `CheckoutTotalService` (hiện CHƯA có xử
+> lý giá option). Migration
+> `2026_07_06_000002_add_soft_delete_and_price_to_product_option_cluster.php`.
 
 `product_option` **KHÔNG có cột `id`** — PK composite `(product_id, option_id)`.
 Model:

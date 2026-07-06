@@ -184,6 +184,7 @@ class ProductOptionService
                     'option_value_id' => (int) $productOptionValue->option_value_id,
                     'name'            => (string) ($productOptionValue->optionValue?->description?->name ?? ''),
                     'image'           => (string) ($productOptionValue->image ?? ''),
+                    'price'           => (float) ($productOptionValue->price ?? 0),
                     'product_id'      => (int) $productOption->product_id,
                     'option_id'       => (int) $productOption->option_id,
                 ])
@@ -195,6 +196,7 @@ class ProductOptionService
             $optionGroups[$index++] = [
                 'option_id'        => $optionId,
                 'value'            => $productOption->value,
+                'price'            => (float) ($productOption->price ?? 0),
                 'required'         => (bool) ($productOption->required ?? false),
                 'type'             => (string) $option->type,
                 'name_display'     => $option->description?->name_display ?? $option->description?->name,

@@ -28,7 +28,8 @@ class ProductVariantWriter
                 continue;
             }
 
-            $po = ProductOption::where('product_id', $product->id)
+            $po = ProductOption::withTrashed()
+                ->where('product_id', $product->id)
                 ->where('option_id', $optionId)
                 ->first() ?? new ProductOption();
 
@@ -38,6 +39,8 @@ class ProductVariantWriter
             $po->value = OptionRole::fromInput($o['role'] ?? null)->isVariant()
                 ? null
                 : ($o['value'] ?? null);
+            $po->price = ($o['price'] ?? '') !== '' ? (float) $o['price'] : 0;
+            $po->deleted_at = null;
             $po->save();
 
             $keep[] = $optionId;

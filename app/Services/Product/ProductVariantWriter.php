@@ -2,7 +2,7 @@
 
 namespace App\Services\Product;
 
-use App\Models\Entities\Option;
+use App\Enums\OptionRole;
 use App\Models\Entities\OptionValue;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductOption;
@@ -35,7 +35,7 @@ class ProductVariantWriter
             $po->product_id = $product->id;
             $po->option_id  = $optionId;
             $po->required   = ! empty($o['required']) ? 1 : 0;
-            $po->value = ((int) ($o['role'] ?? 0) === Option::ROLE_VARIANT)
+            $po->value = OptionRole::fromInput($o['role'] ?? null)->isVariant()
                 ? null
                 : ($o['value'] ?? null);
             $po->save();

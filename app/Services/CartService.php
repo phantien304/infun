@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\OptionRole;
 use App\Models\Entities\Option;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductStock;
@@ -302,9 +303,9 @@ class CartService
         $customOptions = [];
         foreach ($payload as $entry) {
             $optionId = (int) ($entry['option_id'] ?? 0);
-            $role = (int) ($roles[$optionId] ?? getCoreConfig('option.role_custom_field'));
+            $role = $roles->get($optionId) ?? OptionRole::CustomField;
 
-            if ($role === getCoreConfig('option.role_variant')) {
+            if ($role->isVariant()) {
                 $values = $entry['option_value_id'] ?? null;
                 if (is_array($values)) {
                     foreach ($values as $v) {

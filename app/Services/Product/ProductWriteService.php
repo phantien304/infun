@@ -2,7 +2,7 @@
 
 namespace App\Services\Product;
 
-use App\Models\Entities\Option;
+use App\Enums\OptionRole;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductAttribute;
 use App\Models\Entities\ProductCategory;
@@ -45,7 +45,7 @@ class ProductWriteService
             }
 
             $product->has_variants = collect($data['product_options'] ?? [])
-                ->contains(fn ($o) => (int) ($o['role'] ?? 0) === Option::ROLE_VARIANT) ? 1 : 0;
+                ->contains(fn ($o) => OptionRole::fromInput($o['role'] ?? null)->isVariant()) ? 1 : 0;
 
             if (array_key_exists('link_sale_custom', $data)) {
                 $lsc = $data['link_sale_custom'];

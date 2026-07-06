@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\OptionRole;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductVariant;
 use Illuminate\Support\Collection;
@@ -122,7 +123,7 @@ class ProductOptionService
                 'required'         => true,
                 'type'             => $optionType,
                 'name_display'     => $option->description?->name_display ?? $option->description?->name,
-                'role'             => getCoreConfig('option.role_variant'),
+                'role'             => OptionRole::Variant->value,
                 'selectableValues' => $selectableValues,
             ];
         }
@@ -166,7 +167,7 @@ class ProductOptionService
     protected function buildCustomFieldOptions(Product $product): array
     {
         $productOptions = ($product->productOptions ?? collect())
-            ->filter(fn ($productOption) => $productOption->option?->role === getCoreConfig('option.role_custom_field'));
+            ->filter(fn ($productOption) => $productOption->option?->isCustomField() ?? false);
 
         if ($productOptions->isEmpty()) {
             return [];
@@ -197,7 +198,7 @@ class ProductOptionService
                 'required'         => (bool) ($productOption->required ?? false),
                 'type'             => (string) $option->type,
                 'name_display'     => $option->description?->name_display ?? $option->description?->name,
-                'role'             => getCoreConfig('option.role_custom_field'),
+                'role'             => OptionRole::CustomField->value,
                 'selectableValues' => $selectableValues,
             ];
         }

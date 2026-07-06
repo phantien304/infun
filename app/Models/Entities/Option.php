@@ -2,6 +2,7 @@
 
 namespace App\Models\Entities;
 
+use App\Enums\OptionRole;
 use App\Models\Base\Base;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -12,7 +13,18 @@ class Option extends Base
     protected $table = 'option';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $casts = ['role' => OptionRole::class];
     protected static array $destroyRelations = ['optionValues', 'productOptions'];
+
+    public function isVariant(): bool
+    {
+        return $this->role?->isVariant() ?? false;
+    }
+
+    public function isCustomField(): bool
+    {
+        return $this->role?->isCustomField() ?? true;
+    }
 
     public function optionValues()
     {

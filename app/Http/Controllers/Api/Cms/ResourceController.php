@@ -15,20 +15,6 @@ use App\Models\Entities\UserGroup;
 use App\Models\Entities\WeightClass;
 use Illuminate\Http\Request;
 
-/**
- * Cung cấp các "nguồn" (dropdown) cho form CMS.
- * GET /rcms/resource?list_for_product=true  → bundle cho product form.
- * -----------------------------------------------------------
- * Output (khớp infun_cms form đọc):
- *   manufacture, category[{id,title}], filter[{id,name,filter_values[{id,name}]}],
- *   attribute[{id,name,attribute_values[{id,name}]}],
- *   option[{id,name,role,option_values[{id,name}]}],
- *   stock_status, length_class, weight_class, tax_class, user_group.
- *
- * Best-effort: tên relation (filterValues/attributeValues/optionValues) +
- * description name/title cần verify theo schema khi chạy.
- * -----------------------------------------------------------
- */
 class ResourceController extends Controller
 {
     public function index(Request $request)
@@ -65,7 +51,7 @@ class ResourceController extends Controller
                     ->map(fn ($o) => [
                         'id'            => $o->id,
                         'name'          => $o->description?->name ?? $o->name,
-                        'role'          => $o->role,
+                        'role'          => $o->role?->value,
                         'option_values' => ($o->optionValues ?? collect())->map(fn ($v) => [
                             'id'   => $v->id,
                             'name' => $v->description?->name ?? $v->name,

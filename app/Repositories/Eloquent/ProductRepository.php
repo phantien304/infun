@@ -4,6 +4,7 @@ namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductRelated;
+use App\Queries\Product\ProductCardQuery;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
@@ -21,6 +22,14 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     public function model(): string
     {
         return Product::class;
+    }
+
+    private ?ProductCardQuery $cardQuery = null;
+
+    /** Lazy-resolve read model card (tránh đổi constructor của BaseRepository). */
+    protected function cards(): ProductCardQuery
+    {
+        return $this->cardQuery ??= app(ProductCardQuery::class);
     }
 
     protected function allowedFilters(): array
@@ -388,12 +397,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     {
         return $this->rememberCache(
             $this->specialLatestCacheKey($limit),
-            fn () => $this->cardQuery()
-                ->hasActiveSpecial()
-                ->orderBy('product.sort_order', 'DESC')
-                ->orderBy('product.created_at', 'DESC')
-                ->take($limit)
-                ->get(),
+            fn () => $this->cards()->specialLatest($limit),
             getCoreConfig('time.cache'),
             tags: [getCoreConfig('cache.product_root')],
         );
@@ -401,21 +405,14 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     public function getProductFeature(int $limit = 6)
     {
-        return $this->cardQuery()
-            ->where('product.badge', 'feature')
-            ->orderBy('product.id', 'DESC')
-            ->take($limit)
-            ->get();
+        return $this->cards()->feature($limit);
     }
 
     public function getProductLatest(int $limit = 6)
     {
         return $this->rememberCache(
             $this->latestCacheKey($limit),
-            fn () => $this->cardQuery()
-                ->orderBy('product.created_at', 'DESC')
-                ->take($limit)
-                ->get(),
+            fn () => $this->cards()->latest($limit),
             getCoreConfig('time.cache'),
             tags: [getCoreConfig('cache.product_root'), getCoreConfig('cache.product_latest')],
         );
@@ -435,42 +432,15 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
         return $this->rememberCache(
             $key,
-            fn () => $this->cardQuery()
-                ->whereIn('product.id', $productIds)
-                ->orderByRaw('FIELD(product.id, '.implode(',', $productIds).')')
-                ->get(),
+            fn () => $this->cards()->relatedIn($productIds),
             getCoreConfig('time.cache'),
             tags: [getCoreConfig('cache.product_root')],
         );
     }
 
-    protected function cardQuery(): Builder
-    {
-        return $this->cardScope($this->model->newQuery())
-            ->select('product.*')
-            ->with($this->cardRelations());
-    }
-
-    protected function cardScope(Builder $query): Builder
-    {
-        return $query->dateAvailable();
-    }
-
-    protected function cardRelations(): array
-    {
-        return [
-            'description',
-            'manufacturer',
-            'stockStatus',
-            'productCategories.category.description',
-            'defaultVariant.productStock',
-            'defaultVariant.productVariantSpecial',
-        ];
-    }
-
     protected function detailRelations(): array
     {
-        return array_merge($this->cardRelations(), [
+        return array_merge($this->cards()->relations(), [
             'productImages' => fn ($q) => $q
                 ->where('is_active', true)
                 ->whereIn('type', [

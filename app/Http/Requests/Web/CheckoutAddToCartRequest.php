@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Web;
 
+use App\Enums\OptionRole;
+use App\Enums\OptionType;
 use App\Http\Requests\Concerns\RestfulValidation;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -27,37 +29,35 @@ class CheckoutAddToCartRequest extends FormRequest
     {
         $validator->after(function ($v) {
             $options = (array) $this->input('option', []);
-            $variantRole = (string) getCoreConfig('option.role_variant');
 
             foreach ($options as $key => $opt) {
-                $role = (string) ($opt['role'] ?? '');
-                $isVariant = $role === $variantRole;
+                $isVariant = OptionRole::fromInput($opt['role'] ?? null)->isVariant();
                 $required = (int) ($opt['required'] ?? 0) === 1 || $isVariant;
 
                 if (! $required) {
                     continue;
                 }
 
-                $type = $opt['type'] ?? '';
+                $optType = OptionType::tryFrom((string) ($opt['type'] ?? ''));
                 $value = $opt['value'] ?? null;
                 $hasValueId = ! empty($opt['option_value_id']);
 
-                if (in_array($type, ['text', 'textarea', 'email', 'phone'], true) && empty($value)) {
+                if ($optType?->expectsTextInput() && empty($value)) {
                     $v->errors()->add("option.$key.parent", sprintf(trans('messages.TextRequiredInput'), $opt['name'] ?? ''));
                     continue;
                 }
-                if (in_array($type, ['file', 'datetime', 'date', 'time'], true) && empty($value)) {
+                if ($optType?->expectsDateOrFileChoice() && empty($value)) {
                     $v->errors()->add("option.$key.parent", sprintf(trans('messages.TextRequiredChoose'), $opt['name'] ?? ''));
                     continue;
                 }
-                if (in_array($type, ['image', 'select', 'radio', 'checkbox'], true) && ! $hasValueId) {
+                if ($optType?->isVariantWidget() && ! $hasValueId) {
                     $v->errors()->add("option.$key.parent", sprintf(trans('messages.TextRequiredChoose'), $opt['name'] ?? ''));
                     continue;
                 }
-                if ($type === 'email' && filled($value) && ! filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                if ($optType === OptionType::Email && filled($value) && ! filter_var($value, FILTER_VALIDATE_EMAIL)) {
                     $v->errors()->add("option.$key.parent", trans('messages.ErrorEmail'));
                 }
-                if ($type === 'phone' && filled($value) && (strlen($value) < 8 || strlen($value) > 12)) {
+                if ($optType === OptionType::Phone && filled($value) && (strlen($value) < 8 || strlen($value) > 12)) {
                     $v->errors()->add("option.$key.parent", trans('messages.ErrorPhone'));
                 }
             }

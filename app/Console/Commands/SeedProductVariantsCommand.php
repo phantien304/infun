@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Entities\Option;
+use App\Enums\OptionRole;
 use App\Models\Entities\ProductVariant;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -244,7 +244,7 @@ class SeedProductVariantsCommand extends Command
     {
         $result = [];
         foreach (self::CUSTOM_FIELDS as $cf) {
-            $optionId = $this->upsertOption($cf['name'], $cf['type'], getCoreConfig('option.role_custom_field'));
+            $optionId = $this->upsertOption($cf['name'], $cf['type'], OptionRole::CustomField->value);
 
             // Picker preset cho radio/select. text/email/phone/textarea không
             // có values.
@@ -407,8 +407,8 @@ class SeedProductVariantsCommand extends Command
      */
     private function ensureSeedOptions(): array
     {
-        $colorOptionId = $this->upsertOption(self::SEED_COLOR_NAME, 'image', getCoreConfig('option.role_variant'));
-        $sizeOptionId  = $this->upsertOption(self::SEED_SIZE_NAME, 'radio', getCoreConfig('option.role_variant'));
+        $colorOptionId = $this->upsertOption(self::SEED_COLOR_NAME, 'image', OptionRole::Variant->value);
+        $sizeOptionId  = $this->upsertOption(self::SEED_SIZE_NAME, 'radio', OptionRole::Variant->value);
 
         $colorValueIds = [];
         $imageByColorValueId = [];
@@ -429,7 +429,7 @@ class SeedProductVariantsCommand extends Command
     /**
      * Tìm option theo description.name; nếu chưa có, tạo option + description (vi).
      *
-     * @param  int  $role  Option::ROLE_VARIANT | Option::ROLE_CUSTOM_FIELD
+     * @param  int  $role  OptionRole::Variant->value | OptionRole::CustomField->value
      */
     private function upsertOption(string $name, string $type, int $role): int
     {

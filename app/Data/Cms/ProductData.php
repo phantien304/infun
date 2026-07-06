@@ -2,7 +2,7 @@
 
 namespace App\Data\Cms;
 
-use App\Models\Entities\Option;
+use App\Enums\OptionRole;
 use App\Models\Entities\Product;
 use Spatie\LaravelData\Data;
 
@@ -149,9 +149,9 @@ class ProductData extends Data
                 'date_end'      => $d->date_end,
             ])->values()->all(),
             product_options: $p->productOptions->map(function ($po) use ($p) {
-                $role = $po->option?->role ?? Option::ROLE_CUSTOM_FIELD;
+                $role = $po->option?->role ?? OptionRole::CustomField;
                 $valueIds = [];
-                if ($role === Option::ROLE_VARIANT) {
+                if ($role->isVariant()) {
                     $valueIds = $p->productVariants
                         ->flatMap(fn ($v) => $v->productVariantAttributes)
                         ->where('option_id', $po->option_id)
@@ -160,7 +160,7 @@ class ProductData extends Data
                 }
                 return [
                     'option_id'        => $po->option_id,
-                    'role'             => $role,
+                    'role'             => $role->value,
                     'required'         => $po->required,
                     'value'            => $po->value,
                     'option_value_ids' => $valueIds,

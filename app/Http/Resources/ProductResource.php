@@ -2,7 +2,7 @@
 
 namespace App\Http\Resources;
 
-use App\Models\Entities\Option;
+use App\Enums\OptionRole;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
@@ -134,10 +134,10 @@ class ProductResource extends JsonResource
 
             // ----- options (khai báo) -----
             'product_options' => $p->productOptions->map(function ($po) use ($p) {
-                $role = $po->option?->role ?? Option::ROLE_CUSTOM_FIELD;
+                $role = $po->option?->role ?? OptionRole::CustomField;
                 // option_value_ids của variant-role lấy từ pivot variant.
                 $valueIds = [];
-                if ($role === Option::ROLE_VARIANT) {
+                if ($role->isVariant()) {
                     $valueIds = $p->productVariants
                         ->flatMap(fn ($v) => $v->productVariantAttributes)
                         ->where('option_id', $po->option_id)
@@ -146,7 +146,7 @@ class ProductResource extends JsonResource
                 }
                 return [
                     'option_id'        => $po->option_id,
-                    'role'             => $role,
+                    'role'             => $role->value,
                     'required'         => $po->required,
                     'value'            => $po->value,
                     'option_value_ids' => $valueIds,

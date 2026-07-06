@@ -30,7 +30,7 @@ class CurrencyService
 
         $pickedCurrency = $this->findCurrency($code);
 
-        return $this->currentMemo = ($picked ?: $this->baseCurrency());
+        return $this->currentMemo = ($pickedCurrency ?: $this->baseCurrency());
     }
 
     public function currentCurrencyCode(): string
@@ -94,23 +94,23 @@ class CurrencyService
         return $currency;
     }
 
-    public function convertPrice(float $amountBase, ?Currency $currency = null): float
+    public function convertPrice(float $price, ?Currency $currency = null): float
     {
         $currency ??= $this->currentCurrency();
         $dp = (int) ($currency->decimal_place ?? 0);
 
         if ($this->isCurrencyBase($currency)) {
-            return round($amountBase, $dp);
+            return round($price, $dp);
         }
 
-        return round($amountBase * (float) ($currency->value ?: 1), $dp);
+        return round($price * (float) ($currency->value ?: 1), $dp);
     }
 
-    public function formatPrice(float $amountBase, ?Currency $currency = null): string
+    public function formatPrice(float $price, ?Currency $currency = null): string
     {
         $currency ??= $this->currentCurrency();
 
-        $amount = $this->convertPrice($amountBase, $currency);
+        $amount = $this->convertPrice($price, $currency);
         $number = number_format(
             $amount,
             (int) ($currency->decimal_place ?? 0),
@@ -124,6 +124,23 @@ class CurrencyService
             $left = '';
         }
 
-        return $left.$number.$right;
+        return $left . $number . $right;
+    }
+
+    public function formatSnapshot(float $price, ?string $currencyCode, float|int|null $currencyValue): string
+    {
+        $code = strtoupper((string) $currencyCode);
+
+        if ($code === '' || $code === $this->baseCurrencyCode()) {
+            return $this->formatPrice($price, $this->baseCurrency());
+        }
+
+        $currency = $this->findCurrency($code);
+        if (! $currency) {
+            return $this->formatPrice($price, $this->baseCurrency());
+        }
+        $currency->value = (float) ($currencyValue ?: ($currency->value ?: 1));
+
+        return $this->formatPrice($price, $currency);
     }
 }

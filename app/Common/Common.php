@@ -107,16 +107,21 @@ function getConfigDb($key = '', $default = '')
 
     return $config;
 }
-function money($amountBase, ?string $code = null): string
+function money($price, ?string $code = null): string
 {
     $svc = app(\App\Services\Currency\CurrencyService::class);
     $currency = $code ? $svc->findCurrency($code) : null;
 
-    return $svc->formatPrice((float) $amountBase, $currency);
+    return $svc->formatPrice((float) $price, $currency);
 }
 function currencyBase(): \App\Models\Entities\Currency
 {
     return app(\App\Services\Currency\CurrencyService::class)->baseCurrency();
+}
+function moneyAtBuy($price, ?string $currencyCode, $currencyValue): string
+{
+    return app(\App\Services\Currency\CurrencyService::class)
+        ->formatSnapshot((float) $price, $currencyCode, (float) $currencyValue);
 }
 function getCoreConfig($key, $default = null, $flip = false)
 {
@@ -316,12 +321,6 @@ function getIpVisitor()
     }
     return $ip;
 }
-
-
-/**
- * Che bớt chuỗi PII (tên / SĐT) bằng ký tự thay thế — dùng cho trang tra cứu
- * đơn hàng public. VD: string2Stars('Nguyễn Văn An', 0, -4) che hết trừ 4 ký tự cuối.
- */
 function string2Stars($string = '', $first = 0, $last = 0, $rep = 'x')
 {
     $string = (string) $string;

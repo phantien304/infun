@@ -4,26 +4,8 @@ namespace App\Data\Output;
 
 use App\Models\Entities\Orders;
 use Illuminate\Support\Collection;
-use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Data;
 
-/**
- * DTO order cho trang `account.orders` (list) + `account.detailOrder` (detail).
- *
- * Tính 2 cờ derived ở DTO để blade chỉ check boolean, không phải đối chiếu
- * config:
- *  - `isPaymentWaiting` — order đang ở status WAITING (cần thanh toán lại).
- *  - `isPaymentSuccess` — order đã thanh toán xong.
- *  - `canCancel` — order_status_id KHÔNG nằm trong
- *    `config_order_member_not_delete` (bảng config: status nào user không
- *    được tự huỷ).
- *  - `repaymentAllowed` — order WAITING + còn trong window 240 phút từ
- *    created_at (mirror logic legacy).
- *
- * `totalLabel` cho list = giá trị dòng `total` cuối cùng (label "Tổng tiền").
- * Cố gắng lấy từ `ordersTotal` (singular, eager-load relation) hoặc fallback
- * sang `total` column trên orders.
- */
 class OrderDTO extends Data
 {
     public function __construct(
@@ -56,9 +38,7 @@ class OrderDTO extends Data
         public bool $isPaymentSuccess,
         public bool $canCancel,
         public bool $repaymentAllowed,
-        #[DataCollectionOf(OrderItemDTO::class)]
         public Collection $items,
-        #[DataCollectionOf(OrderTotalDTO::class)]
         public Collection $totals,
     ) {
     }
@@ -90,16 +70,15 @@ class OrderDTO extends Data
             $carrierName = (string) ($order->carrier->name ?? '');
         }
 
-        // First product name + count cho list view.
-        $items = $order->relationLoaded('ordersProducts') ? $order->ordersProducts : null;
-        $productCount = $items?->count() ?? 0;
-        $firstProductName = $productCount > 0 ? (string) ($items->first()->name ?? '') : '';
+        $ordersProducts = $order->relationLoaded('ordersProducts') ? $order->ordersProducts : null;
+        $productCount = $ordersProducts?->count() ?? 0;
+        $firstProductName = $productCount > 0 ? (string) ($ordersProducts->first()->name ?? '') : '';
 
-        // Tổng tiền — ưu tiên row `code = total` trong ordersTotals; fallback
-        // sang column `total` của Orders.
-        $totalsCollection = $order->relationLoaded('ordersTotals') ? $order->ordersTotals : collect();
-        $totalRow = $totalsCollection->firstWhere('code', 'total');
-        $totalValue = (float) ($totalRow?->value ?? $order->total ?? 0);
+        $ordersTotals = $order->relationLoaded('ordersTotals') ? $order->ordersTotals : collect();
+        $orderTotal = $ordersTotals->firstWhere('code', 'total');
+        $total = (float) ($orderTotal?->value ?? $order->total ?? 0);
+        $currencyCode = (string) ($order->currency_code ?? '');
+        $currencyValue = (float) ($order->currency_value ?? 1);
 
         $orderStatusId = (int) ($order->order_status_id ?? 0);
 
@@ -122,8 +101,8 @@ class OrderDTO extends Data
             zpRefundId: $order->zp_refund_id ?? null,
             zpTransId: $order->zp_trans_id ?? null,
             appTransId: $order->app_trans_id ?? null,
-            total: $totalValue,
-            totalLabel: money($totalValue),
+            total: $total,
+            totalLabel: moneyAtBuy($total, $currencyCode, $currencyValue),
             createdAt: $createdAt?->format('H:i m/d/Y') ?? '',
             createdAtFull: $createdAt?->format('Y-m-d H:i:s') ?? '',
             createdMinutesAgo: $createdMinutesAgo,
@@ -133,8 +112,12 @@ class OrderDTO extends Data
             isPaymentSuccess: $orderStatusId === $successStatusId,
             canCancel: ! in_array($orderStatusId, array_map('intval', $notDelete), true),
             repaymentAllowed: $orderStatusId === $waitingStatusId && $createdMinutesAgo < 240,
-            items: OrderItemDTO::collect($items ?? collect()),
-            totals: OrderTotalDTO::collect($totalsCollection),
+            items: ($ordersProducts ?? collect())
+                ->map(fn ($product) => OrderProductDTO::fromModel($product, $currencyCode, $currencyValue))
+                ->values(),
+            totals: $ordersTotals
+                ->map(fn ($total) => OrderTotalDTO::fromModel($total, $currencyCode, $currencyValue))
+                ->values(),
         );
     }
 }

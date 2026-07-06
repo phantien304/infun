@@ -6,12 +6,36 @@ use App\Models\Entities\Option;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
+use App\Services\Stock\StockService;
 
 class CartService
 {
     protected ?array $resolvedItems = null;
 
     protected array $shipping = ['width' => 0, 'height' => 0, 'length' => 0, 'weight' => 0];
+
+    /** Cache trong 1 request: [variant_id => qty] mà phiên hiện tại đang giữ chỗ. */
+    protected ?array $holderReservedMap = null;
+
+    public function __construct(protected StockService $stockService)
+    {
+    }
+
+    /**
+     * Lượng tồn phiên hiện tại đang tự giữ cho 1 variant — cộng ngược khi tính
+     * khả bán để phiên không tự chặn chính mình (reserved đã bao gồm hold này).
+     */
+    protected function ownReserved(?int $variantId): int
+    {
+        if (! $variantId) {
+            return 0;
+        }
+        if ($this->holderReservedMap === null) {
+            $this->holderReservedMap = $this->stockService->holderReservedMap((string) session()->getId());
+        }
+
+        return (int) ($this->holderReservedMap[$variantId] ?? 0);
+    }
 
     public function tryAdd(array $payload, Product $product): array
     {
@@ -71,8 +95,9 @@ class CartService
 
         $onHand   = (int) ($stock->on_hand ?? 0);
         $reserved = (int) ($stock->reserved ?? 0);
+        $variantId = $variant?->id ?? $product->defaultVariant?->id;
 
-        return max(0, $onHand - $reserved);
+        return max(0, $onHand - $reserved + $this->ownReserved($variantId ? (int) $variantId : null));
     }
 
     protected function persistLine(int $productId, ?int $variantId, int $quantity, array $variantAttributes, array $customOptions): void
@@ -372,7 +397,19 @@ class CartService
             return false;
         }
 
-        return $stock->canSell($quantity);
+        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
+        if (
+            $policy === (int) getCoreConfig('stock.policy.untracked')
+            || $policy === (int) getCoreConfig('stock.policy.backorder')
+        ) {
+            return true;
+        }
+
+        // Cộng ngược phần phiên hiện tại đang tự giữ để không tự chặn chính mình.
+        $variantId = $variant?->id ?? $product->defaultVariant?->id;
+        $available = $stock->sellableQuantity() + $this->ownReserved($variantId ? (int) $variantId : null);
+
+        return $available >= $quantity;
     }
 
     protected function buildVariantLabel(?ProductVariant $variant): string

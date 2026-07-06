@@ -17,10 +17,6 @@ class ProductOptionValue extends Base
 
     public function productOption()
     {
-        return $this->belongsTo(
-            ProductOption::class,
-            ['product_id', 'option_id'],
-            ['product_id', 'option_id'],
-        );
+        return $this->belongsTo(ProductOption::class, 'product_option_id', 'id');
     }
 }

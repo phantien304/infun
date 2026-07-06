@@ -75,6 +75,15 @@ class OrderRepository extends QueryableRepository implements OrderRepositoryInte
         return $this->resetModel()->where('app_trans_id', $appTransId)->first();
     }
 
+    public function findByIdempotencyKey(string $key): ?Orders
+    {
+        if (! filled($key)) {
+            return null;
+        }
+
+        return $this->resetModel()->where('idempotency_key', $key)->first();
+    }
+
     public function upsertOrder(array $data): Orders
     {
         $order = $this->resetModel()

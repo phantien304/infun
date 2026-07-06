@@ -19,6 +19,8 @@ interface OrderRepositoryInterface extends BaseRepositoryInterface
 
     public function findByAppTransId(string $appTransId): ?Orders;
 
+    public function findByIdempotencyKey(string $key): ?Orders;
+
     public function upsertOrder(array $data): Orders;
 
     public function appendHistory(int $orderId, int $statusId, ?int $userId = null): OrdersHistory;

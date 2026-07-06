@@ -21,7 +21,7 @@ class OrderTotalDTO extends Data
     ) {
     }
 
-    public static function fromModel(OrdersTotal $total): self
+    public static function fromModel(OrdersTotal $total, ?string $currencyCode = null, float $currencyValue = 1.0): self
     {
         $value = (float) ($total->value ?? 0);
 
@@ -29,7 +29,7 @@ class OrderTotalDTO extends Data
             code: (string) ($total->code ?? ''),
             title: (string) ($total->title ?? ''),
             value: $value,
-            valueLabel: money($value),
+            valueLabel: moneyAtBuy($value, $currencyCode, $currencyValue),
             sortOrder: (int) ($total->sort_order ?? 0),
         );
     }

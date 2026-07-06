@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Exceptions\InsufficientStockException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\CheckoutAddToCartRequest;
 use App\Http\Requests\Web\CheckoutSaveOrderRequest;
@@ -19,8 +20,12 @@ use App\Services\Checkout\CheckoutPromotions;
 use App\Services\Checkout\CheckoutTotalService;
 use App\Services\Checkout\CreateOrderService;
 use App\Services\Checkout\PromotionService;
+use App\Services\Stock\StockService;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class CheckoutController extends Controller
 {
@@ -33,6 +38,7 @@ class CheckoutController extends Controller
         protected PaymentRepositoryInterface $paymentRepo,
         protected OrderRepositoryInterface $orderRepo,
         protected PromotionService $promotionService,
+        protected StockService $stockService,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -47,6 +53,16 @@ class CheckoutController extends Controller
 
         $appliedPromotions = $this->buildAppliedPromotions(hasShipping: true);
         [$error, $items] = $this->validateCart($appliedPromotions);
+
+        // Giữ chỗ tồn (hold) cho cart khi vào checkout. Không đủ tồn → hiển thị lỗi.
+        if ($error === '' && ! empty($items)) {
+            $reserve = $this->reserveCart($items);
+            if (! ($reserve['ok'] ?? true)) {
+                $failed = $reserve['failed'] ?? [];
+                $error = sprintf(trans('messages.ErrorStockProduct'), (string) ($failed['name'] ?? ''));
+            }
+        }
+
         $this->syncCartHeader($items);
         [$totalData, $total] = $this->totalService->build($appliedPromotions, withShipping: true);
 
@@ -56,6 +72,7 @@ class CheckoutController extends Controller
         return $this->render('web::checkout.index', [
             'carriers'           => $this->carrierRepo->listAllCached(),
             'payments'           => $this->paymentRepo->listAllCached(),
+            'idempotencyKey'     => $this->currentIdempotencyToken(),
             'error'              => $error,
             'products'           => array_values($items),
             'totalData'          => $totalData,
@@ -223,10 +240,38 @@ class CheckoutController extends Controller
 
         [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
 
-        try {
-            $orderId = $this->createOrderService->create($ctx, $request->validated(), $totalData, $total);
+        // ── Idempotency xếp lớp: form-token (fallback session id + chữ ký giỏ) ──
+        $holder = (string) session()->getId();
+        $token = (string) $request->input('idempotency_key', '');
+        if ($token === '') {
+            $token = (string) session()->get(getCoreConfig('session.checkout_idem'), '');
+        }
+        if ($token === '') {
+            $token = $holder.'|'.$this->cartSignature($items, $total);
+        }
+        $idemValue = md5($token);
+        $idemCacheKey = 'checkout:idem:'.$idemValue;
 
+        // Lớp 1 — cache atomic: chặn burst double-submit sớm.
+        if (! Cache::add($idemCacheKey, 'processing', now()->addSeconds(60))) {
+            $existing = Cache::get($idemCacheKey);
+            if (is_numeric($existing)) {
+                session()->put(getCoreConfig('session.last_order'), (int) $existing);
+
+                return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
+            }
+
+            return redirect(route('checkout.success'));
+        }
+
+        try {
             $params = $request->validated();
+            $params['idempotency_key'] = $idemValue;
+
+            $orderId = $this->createOrderService->create($ctx, $params, $totalData, $total);
+
+            Cache::put($idemCacheKey, $orderId, now()->addSeconds(60));
+
             $this->sendOrderEmails($items, $totalData, $this->buildOrderMailData($params, $orderId));
 
             $payload = $this->paymentService->buildOrderPayload(
@@ -239,18 +284,96 @@ class CheckoutController extends Controller
             $url = $this->paymentService->startPayment($orderId, $payload);
 
             $this->cartService->clear();
+            $this->stockService->releaseHolder($holder);
             session()->put(getCoreConfig('session.last_order'), $orderId);
+            session()->forget(getCoreConfig('session.checkout_idem'));
 
             if (filled($url)) {
                 return redirect($url);
             }
 
             return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
+        } catch (InsufficientStockException $e) {
+            Cache::forget($idemCacheKey);
+            logError($e);
+
+            return redirect(route('checkout.index'))
+                ->with('failed', sprintf(trans('messages.ErrorStockProduct'), ''))
+                ->withInput();
+        } catch (QueryException $e) {
+            // Lớp 2 — DB UNIQUE(idempotency_key): 2 request cùng token đua nhau.
+            if ($this->isDuplicateKey($e)) {
+                $existing = $this->orderRepo->findByIdempotencyKey($idemValue);
+                if ($existing) {
+                    Cache::put($idemCacheKey, $existing->id, now()->addSeconds(60));
+                    session()->put(getCoreConfig('session.last_order'), $existing->id);
+                    session()->forget(getCoreConfig('session.checkout_idem'));
+
+                    return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
+                }
+            }
+
+            Cache::forget($idemCacheKey);
+            logError($e);
+
+            return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
         } catch (\Throwable $e) {
+            Cache::forget($idemCacheKey);
             logError($e);
 
             return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
         }
+    }
+
+    /** Token idempotency của phiên checkout — sinh 1 lần (UUID), xoay sau khi đặt xong. */
+    protected function currentIdempotencyToken(): string
+    {
+        $key = getCoreConfig('session.checkout_idem');
+        $token = (string) session()->get($key, '');
+        if ($token === '') {
+            $token = (string) Str::uuid();
+            session()->put($key, $token);
+        }
+
+        return $token;
+    }
+
+    /** Lỗi vi phạm UNIQUE (MySQL 1062 / SQLSTATE 23000). */
+    protected function isDuplicateKey(QueryException $e): bool
+    {
+        return (int) ($e->errorInfo[1] ?? 0) === 1062
+            || (string) $e->getCode() === '23000';
+    }
+
+    /**
+     * Chữ ký ổn định của giỏ hàng cho khoá idempotency.
+     *
+     * @param  array<int,array{id?:int, product_variant_id?:int|null, quantity?:int}>  $items
+     */
+    protected function cartSignature(array $items, int $total): string
+    {
+        $parts = [];
+        foreach ($items as $item) {
+            $parts[] = ($item['id'] ?? 0).':'.($item['product_variant_id'] ?? 0).':'.($item['quantity'] ?? 0);
+        }
+        sort($parts);
+
+        return md5(implode('|', $parts).'#'.$total);
+    }
+
+    /**
+     * Giữ chỗ tồn cho cart hiện tại (holder = session id).
+     *
+     * @param  array<int,mixed>  $items
+     * @return array{ok:bool, failed?:array{name:string, available:int, requested:int}}
+     */
+    protected function reserveCart(array $items): array
+    {
+        return $this->stockService->reserveCart(
+            $items,
+            (string) session()->getId(),
+            (int) getCurrentUserId() ?: null,
+        );
     }
 
     public function saveRepayment(CheckoutSaveRepaymentRequest $request)
@@ -411,11 +534,16 @@ class CheckoutController extends Controller
             ->first();
         $payment = $this->paymentRepo->findByCode((string) ($params['payment_code'] ?? ''));
 
+        // Snapshot đồng đang chọn để mailer (chạy queue, không cookie) format đúng đồng.
+        $currency = $this->currencyService->currentCurrency();
+
         return array_merge($params, [
-            'order_id'     => $orderId,
-            'uniqid'       => strtoupper(uniqid()),
-            'order_status' => $status?->name ?? '',
-            'payment_name' => $payment?->description?->name ?? 'Trả tiền khi nhận hàng',
+            'order_id'       => $orderId,
+            'uniqid'         => strtoupper(uniqid()),
+            'order_status'   => $status?->name ?? '',
+            'payment_name'   => $payment?->description?->name ?? 'Trả tiền khi nhận hàng',
+            'currency_code'  => $currency->code,
+            'currency_value' => $currency->value,
         ]);
     }
 }

@@ -179,9 +179,13 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     protected function withRelations(): array
     {
         $relations = $this->cardRelations();
-        $selected = (array) request()->input('filter.filter_value_id', []);
+        $selected = self::positiveIntList(request()->input('filter.filter_value_id', []));
         if (! empty($selected)) {
-            $relations[] = ['productFilters' => fn ($q) => $q->whereIn('filter_value_id', $selected)];
+            // Dùng KEY chuỗi cho eager-load có ràng buộc. Nếu push bằng
+            // $relations[] = ['productFilters' => fn...] thì mảng con lọt vào
+            // with() với key số → Eloquent coi cả mảng là "tên relation" và gọi
+            // $model->{$name}() → lỗi "Method name must be a string".
+            $relations['productFilters'] = fn ($q) => $q->whereIn('filter_value_id', $selected);
             $relations[] = 'productFilters.filterValue.description';
         }
 

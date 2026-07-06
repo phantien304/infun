@@ -17,7 +17,7 @@ use Spatie\LaravelData\Data;
  * `childrenLabel` đã pre-format từ unserialize(children) — tránh blade gọi
  * unserialize trực tiếp (dữ liệu legacy có thể lỗi serialize → blade crash).
  */
-class OrderItemOptionDTO extends Data
+class OrderProductOptionDTO extends Data
 {
     public function __construct(
         public int $id,

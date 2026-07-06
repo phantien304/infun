@@ -5,10 +5,10 @@ namespace App\Services\Checkout;
 use App\Models\Entities\OrdersProduct;
 use App\Models\Entities\OrdersProductOption;
 use App\Models\Entities\OrdersTotal;
-use App\Models\Entities\ProductStock;
-use App\Models\Entities\StockMovement;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
+use App\Services\Currency\CurrencyService;
+use App\Services\Stock\StockService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -30,6 +30,8 @@ class CreateOrderService
         protected OrderRepositoryInterface $orderRepo,
         protected UserRewardRepositoryInterface $rewardRepo,
         protected PromotionService $promotions,
+        protected StockService $stock,
+        protected CurrencyService $currencyService,
     ) {
     }
 
@@ -55,6 +57,9 @@ class CreateOrderService
     protected function buildOrderRow(CheckoutPromotions $ctx, array $params, int $total, string $uniqid): array
     {
         $shipping = (array) session()->get(getCoreConfig('session.cart_shipping'), []);
+        // Snapshot đồng đang chọn: total lưu theo ĐỒNG GỐC; currency_code/value/id
+        // đóng băng để hiển thị lại đơn đúng tỷ giá tại thời điểm mua.
+        $currency = $this->currencyService->currentCurrency();
 
         return [
             'id'                => (int) ($params['id'] ?? 0),
@@ -76,11 +81,6 @@ class CreateOrderService
             'payment_code'      => $params['payment_code'] ?? '',
             'carrier_code'      => $params['carrier_code'] ?? '',
             'comment'           => $params['comment'] ?? '',
-            // Cột legacy denormalized — dữ liệu KM thật nằm ở coupon_history /
-            // voucher_history. Giữ cột (ghi null) để không đổi shape insert.
-            'voucher'           => null,
-            'coupon'            => null,
-            'reward'            => null,
             'width_class_id'    => getConfigDb('config_length_class_id'),
             'width'             => $shipping['width'] ?? 0,
             'height'            => $shipping['height'] ?? 0,
@@ -88,7 +88,9 @@ class CreateOrderService
             'weight_class_id'   => getConfigDb('config_weight_class_id'),
             'weight'            => $shipping['weight'] ?? 0,
             'total'             => $total,
-            'currency_code'     => 'VND',
+            'currency_id'       => $currency->id,
+            'currency_code'     => $currency->code,
+            'currency_value'    => $currency->value,
             'language_code'     => app()->getLocale(),
             'order_status_id'   => getConfigDb('order_status_id'),
             'user_agent'        => request()->server('HTTP_USER_AGENT', ''),
@@ -145,60 +147,18 @@ class CreateOrderService
         }
     }
 
+    /**
+     * Trừ tồn cho 1 dòng đơn — uỷ quyền StockService::deductForOrder (lockForUpdate
+     * + GUARD chống oversell: ném InsufficientStockException để rollback cả đơn khi
+     * vượt tồn với policy DENY). Đồng thời nhả hold của phiên (holder = session id).
+     */
     protected function subtractStock(array $item): void
     {
-        $variantId = $item['product_variant_id'] ?? null;
-        $qty = (int) $item['quantity'];
-
-        if (! $variantId) {
-            logError(sprintf(
-                'subtractStock: order line for product %s has no product_variant_id; stock not decremented',
-                $item['id'] ?? 'unknown',
-            ));
-            return;
-        }
-
-        $warehouseId = (int) getCoreConfig('stock.default_warehouse_id');
-
-        $stock = ProductStock::where('product_variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId)
-            ->lockForUpdate()
-            ->first();
-
-        if (! $stock) {
-            logError(sprintf(
-                'subtractStock: no product_stock row for variant %d; stock not decremented',
-                $variantId,
-            ));
-            return;
-        }
-
-        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
-        if ($policy === (int) getCoreConfig('stock.policy.untracked')) {
-            return;
-        }
-
-        $newOnHand = (int) ($stock->on_hand ?? 0) - $qty;
-        $stock->on_hand = $newOnHand;
-        $stock->version = (int) ($stock->version ?? 0) + 1;
-        $stock->save();
-
-        $isBackorder = $newOnHand < 0
-            && $policy === (int) getCoreConfig('stock.policy.backorder');
-
-        StockMovement::create([
-            'product_variant_id' => $variantId,
-            'warehouse_id'       => $warehouseId,
-            'type'               => $isBackorder
-                ? (string) getCoreConfig('stock.movement_type.sale_backorder')
-                : (string) getCoreConfig('stock.movement_type.sale'),
-            'quantity_change'    => -$qty,
-            'on_hand_after'      => $newOnHand,
-            'reference_type'     => 'order',
-            'reference_id'       => $item['order_id'] ?? null,
-            'user_id'            => (int) getCurrentUserId() ?: null,
-            'note'               => $isBackorder ? 'Sale exceeded on_hand — backorder backlog' : null,
-        ]);
+        $this->stock->deductForOrder(
+            $item,
+            (string) session()->getId(),
+            (int) getCurrentUserId() ?: null,
+        );
     }
 
     protected function writeOrderTotals(int $orderId, array $totalData): void

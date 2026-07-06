@@ -267,8 +267,10 @@ class SeedProductVariantsCommand extends Command
      * Gắn custom field options cho % product. 1 product có thể nhận 1-2 custom
      * field random + cũng có thể đang có variant Color/Size (mixed product).
      *
-     * Insert qua composite PK (product_id, option_id) — insertOrIgnore tự
-     * dedupe khi product đã có declaration đó.
+     * product_option giờ có surrogate PK `id`; khóa tự nhiên (product_id,
+     * option_id) là UNIQUE — insertOrIgnore vẫn tự dedupe khi product đã có
+     * declaration đó. Picker (product_option_value) cần product_option_id nên
+     * được resolve sau khi insert declaration.
      */
     private function seedCustomFields(int $percent, int $chunk): void
     {
@@ -339,10 +341,10 @@ class SeedProductVariantsCommand extends Command
                             'updated_at' => $now,
                         ];
 
-                        // Picker preset cho radio/select — insert
-                        // product_option_value rows. Composite FK
-                        // (product_id, option_id) đã point tới declaration
-                        // sẽ insert cùng batch.
+                        // Picker preset cho radio/select — product_option_value
+                        // rows. product_option_id chưa biết ở đây (declaration
+                        // chưa insert); resolve sau khi insert product_option.
+                        // Giữ product_id/option_id để tra ngược id.
                         foreach ($cf['value_ids'] as $povSort => $valueId) {
                             $pickerValues[] = [
                                 'product_id'      => $product->id,
@@ -362,8 +364,29 @@ class SeedProductVariantsCommand extends Command
                     $totalDecl += count($declarations);
                 }
                 if ($pickerValues) {
-                    DB::table('product_option_value')->insertOrIgnore($pickerValues);
-                    $totalPicker += count($pickerValues);
+                    // product_option_value.product_option_id giờ NOT NULL —
+                    // resolve id của declaration vừa insert theo (product_id,
+                    // option_id) (khóa tự nhiên UNIQUE trên product_option).
+                    $poMap = DB::table('product_option')
+                        ->whereIn('product_id', array_values(array_unique(array_column($pickerValues, 'product_id'))))
+                        ->whereIn('option_id', $cfOptionIds)
+                        ->get(['id', 'product_id', 'option_id'])
+                        ->keyBy(fn ($r) => $r->product_id . ':' . $r->option_id);
+
+                    $resolved = [];
+                    foreach ($pickerValues as $pv) {
+                        $po = $poMap->get($pv['product_id'] . ':' . $pv['option_id']);
+                        if (! $po) {
+                            continue; // declaration bị dedupe/thiếu — bỏ picker mồ côi
+                        }
+                        $pv['product_option_id'] = (int) $po->id;
+                        $resolved[] = $pv;
+                    }
+
+                    if ($resolved) {
+                        DB::table('product_option_value')->insertOrIgnore($resolved);
+                        $totalPicker += count($resolved);
+                    }
                 }
 
                 $bar->advance(count($products));

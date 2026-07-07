@@ -248,20 +248,6 @@ return [
         'role_variant' => 1,
     ],
     'stock' => [
-        'policy' => [
-            'deny'      => 0,
-            'backorder' => 1,
-            'untracked' => 2,
-        ],
-        'movement_type' => [
-            'receive'         => 'receive',
-            'sale'            => 'sale',
-            'sale_backorder'  => 'sale_backorder',
-            'reserve'         => 'reserve',
-            'release'         => 'release',
-            'adjust'          => 'adjust',
-            'transfer'        => 'transfer',
-        ],
         'default_warehouse_id' => 1,
         'reservation_ttl_minutes' => 6,
     ],

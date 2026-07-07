@@ -1,4 +1,5 @@
 <?php
+
 return [
     'action_create_or_update' => 'save',
     'storage_domain' => 'http://infunstudio.co/',
@@ -73,6 +74,7 @@ return [
     ],
     'product' => [
         'text_instock' => 'Còn hàng',
+        'text_backorder' => 'Đặt trước - giao sau',
         'text_outstock' => 'Hết hàng',
         'text_contact' => 'Liên hệ',
         'badge' => [

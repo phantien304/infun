@@ -4,6 +4,7 @@ namespace App\Data\Output;
 
 use App\Data\Concerns\HasThumbnail;
 use App\Data\Concerns\LazyData;
+use App\Enums\StockPolicy;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductStock;
 use Illuminate\Support\Collection;
@@ -321,16 +322,16 @@ class ProductDTO extends Data
 
     private static function stockLabelFromPolicy(Product $product, ProductStock $stock): string
     {
-        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
+        $policy = $stock->policy();
         $available = max(0, (int) ($stock->on_hand ?? 0) - (int) ($stock->reserved ?? 0));
 
-        if ($policy === (int) getCoreConfig('stock.policy.untracked')) {
+        if ($policy === StockPolicy::Untracked) {
             return getModuleConfig('product.text_instock');
         }
 
-        if ($policy === (int) getCoreConfig('stock.policy.backorder') && $available <= 0) {
+        if ($policy === StockPolicy::Backorder && $available <= 0) {
             return getModuleConfig('product.text_backorder')
-                ?? 'Đặt trước - giao sau';
+                ?? '';
         }
 
         if ($available <= 0) {

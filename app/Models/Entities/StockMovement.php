@@ -2,6 +2,7 @@
 
 namespace App\Models\Entities;
 
+use App\Enums\StockMovementType;
 use App\Models\Base\Base;
 
 class StockMovement extends Base
@@ -23,6 +24,7 @@ class StockMovement extends Base
     ];
 
     protected $casts = [
+        'type'            => StockMovementType::class,
         'quantity_change' => 'integer',
         'on_hand_after'   => 'integer',
     ];

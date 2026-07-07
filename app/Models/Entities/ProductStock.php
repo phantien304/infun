@@ -2,6 +2,7 @@
 
 namespace App\Models\Entities;
 
+use App\Enums\StockPolicy;
 use App\Models\Base\Base;
 
 class ProductStock extends Base
@@ -14,13 +15,18 @@ class ProductStock extends Base
         'on_hand'          => 'integer',
         'reserved'         => 'integer',
         'subtract'         => 'boolean',
-        'inventory_policy' => 'integer',
         'version'          => 'integer',
+        'inventory_policy' => StockPolicy::class,
     ];
 
     public function productVariant()
     {
         return $this->belongsTo(ProductVariant::class, 'product_variant_id', 'id');
+    }
+
+    public function policy(): StockPolicy
+    {
+        return $this->inventory_policy ?? StockPolicy::Deny;
     }
 
     public function sellableQuantity(): int
@@ -33,11 +39,7 @@ class ProductStock extends Base
 
     public function canSell(int $qty): bool
     {
-        $policy = (int) ($this->inventory_policy ?? getCoreConfig('stock.policy.deny'));
-        if (
-            $policy === (int) getCoreConfig('stock.policy.untracked')
-            || $policy === (int) getCoreConfig('stock.policy.backorder')
-        ) {
+        if ($this->policy()->bypassesStockCheck()) {
             return true;
         }
 
@@ -46,8 +48,6 @@ class ProductStock extends Base
 
     public function tracksMovements(): bool
     {
-        $policy = (int) ($this->inventory_policy ?? getCoreConfig('stock.policy.deny'));
-
-        return $policy !== (int) getCoreConfig('stock.policy.untracked');
+        return $this->policy()->tracksMovements();
     }
 }

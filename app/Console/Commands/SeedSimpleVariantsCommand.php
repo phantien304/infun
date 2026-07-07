@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\StockMovementType;
+use App\Enums\StockPolicy;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -40,17 +42,10 @@ class SeedSimpleVariantsCommand extends Command
 
     protected $description = 'Backfill 1 default variant + product_stock cho product SIMPLE (chưa có variant). Dùng sau products:seed.';
 
-    /** Mirror ProductStock::POLICY_* constants. */
-    private const POLICY_MAP = [
-        'deny'       => 0,
-        'backorder'  => 1,
-        'untracked'  => 2,
-    ];
-
     public function handle(): int
     {
         $chunk    = max(500, (int) $this->option('chunk'));
-        $policy   = self::POLICY_MAP[$this->option('policy')] ?? 0;
+        $policy   = (StockPolicy::fromName($this->option('policy')) ?? StockPolicy::Deny)->value;
         $warehouseId = (int) (getCoreConfig('stock.default_warehouse_id') ?? 1);
 
         // Đếm trước để biết khối lượng + cho progress bar.
@@ -134,7 +129,7 @@ class SeedSimpleVariantsCommand extends Command
                             : rand(1, 100);
                         // subtract legacy có thể đã drop → dùng --policy flag.
                         $rowPolicy = $hasSubtract
-                            ? (((int) ($row->subtract ?? 1)) === 1 ? 0 : 2)
+                            ? (((int) ($row->subtract ?? 1)) === 1 ? StockPolicy::Deny->value : StockPolicy::Untracked->value)
                             : $policy;
 
                         // Giá khởi điểm: product cũ không còn cột price (đã drop) →
@@ -168,7 +163,7 @@ class SeedSimpleVariantsCommand extends Command
                             'warehouse_id'       => $warehouseId,
                             'on_hand'            => $onHand,
                             'reserved'           => 0,
-                            'subtract'           => $rowPolicy === 2 ? 0 : 1,
+                            'subtract'           => $rowPolicy === StockPolicy::Untracked->value ? 0 : 1,
                             'inventory_policy'   => $rowPolicy,
                             'version'            => 0,
                             'created_at'         => $now,
@@ -179,7 +174,7 @@ class SeedSimpleVariantsCommand extends Command
                             'id'                 => $mid,
                             'product_variant_id' => $vid,
                             'warehouse_id'       => $warehouseId,
-                            'type'               => 'receive',
+                            'type'               => StockMovementType::Receive->value,
                             'quantity_change'    => $onHand,
                             'on_hand_after'      => $onHand,
                             'reference_type'     => 'seed',

@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Eloquent;
 
+use App\Enums\StockPolicy;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductRelated;
 use App\Repositories\Base\QueryableRepository;
@@ -52,16 +53,15 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                     return;
                 }
 
-                $backorder = (int) getCoreConfig('stock.policy.backorder');
-                $untracked = (int) getCoreConfig('stock.policy.untracked');
-                $inStockExists = function ($qq) use ($backorder, $untracked) {
+                $bypassStockPolicies = [StockPolicy::Backorder->value, StockPolicy::Untracked->value];
+                $inStockExists = function ($qq) use ($bypassStockPolicies) {
                     $qq->select(DB::raw(1))
                         ->from('product_variant as pv')
                         ->join('product_stock as ps', 'ps.product_variant_id', '=', 'pv.id')
                         ->whereColumn('pv.product_id', 'product.id')
                         ->whereNull('pv.deleted_at')
-                        ->where(function ($w) use ($backorder, $untracked) {
-                            $w->whereIn('ps.inventory_policy', [$backorder, $untracked])
+                        ->where(function ($w) use ($bypassStockPolicies) {
+                            $w->whereIn('ps.inventory_policy', $bypassStockPolicies)
                                 ->orWhereRaw('(ps.on_hand - ps.reserved) > 0');
                         });
                 };
@@ -181,10 +181,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         $relations = $this->cardRelations();
         $selected = self::positiveIntList(request()->input('filter.filter_value_id', []));
         if (! empty($selected)) {
-            // Dùng KEY chuỗi cho eager-load có ràng buộc. Nếu push bằng
-            // $relations[] = ['productFilters' => fn...] thì mảng con lọt vào
-            // with() với key số → Eloquent coi cả mảng là "tên relation" và gọi
-            // $model->{$name}() → lỗi "Method name must be a string".
             $relations['productFilters'] = fn ($q) => $q->whereIn('filter_value_id', $selected);
             $relations[] = 'productFilters.filterValue.description';
         }
@@ -283,16 +279,15 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             }
 
             if ($inStockRaw->count() === 1) {
-                $backorder = (int) getCoreConfig('stock.policy.backorder');
-                $untracked = (int) getCoreConfig('stock.policy.untracked');
-                $inStockExists = function ($qq) use ($backorder, $untracked) {
+                $bypassStockPolicies = [StockPolicy::Backorder->value, StockPolicy::Untracked->value];
+                $inStockExists = function ($qq) use ($bypassStockPolicies) {
                     $qq->select(DB::raw(1))
                         ->from('product_variant as pv')
                         ->join('product_stock as ps', 'ps.product_variant_id', '=', 'pv.id')
                         ->whereColumn('pv.product_id', 'product.id')
                         ->whereNull('pv.deleted_at')
-                        ->where(function ($w) use ($backorder, $untracked) {
-                            $w->whereIn('ps.inventory_policy', [$backorder, $untracked])
+                        ->where(function ($w) use ($bypassStockPolicies) {
+                            $w->whereIn('ps.inventory_policy', $bypassStockPolicies)
                                 ->orWhereRaw('(ps.on_hand - ps.reserved) > 0');
                         });
                 };

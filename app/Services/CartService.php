@@ -88,11 +88,7 @@ class CartService
             return 0;
         }
 
-        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
-        if (
-            $policy === (int) getCoreConfig('stock.policy.untracked')
-            || $policy === (int) getCoreConfig('stock.policy.backorder')
-        ) {
+        if ($stock->policy()->bypassesStockCheck()) {
             return PHP_INT_MAX;
         }
 
@@ -460,11 +456,7 @@ class CartService
             return false;
         }
 
-        $policy = (int) ($stock->inventory_policy ?? getCoreConfig('stock.policy.deny'));
-        if (
-            $policy === (int) getCoreConfig('stock.policy.untracked')
-            || $policy === (int) getCoreConfig('stock.policy.backorder')
-        ) {
+        if ($stock->policy()->bypassesStockCheck()) {
             return true;
         }
 

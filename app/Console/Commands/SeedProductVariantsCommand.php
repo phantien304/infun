@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Enums\OptionRole;
+use App\Enums\StockMovementType;
 use App\Models\Entities\ProductVariant;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -661,7 +662,7 @@ class SeedProductVariantsCommand extends Command
                     'id'                 => $movementId,
                     'product_variant_id' => $variantId,
                     'warehouse_id'       => $warehouseId,
-                    'type'               => 'receive',
+                    'type'               => StockMovementType::Receive->value,
                     'quantity_change'    => $onHand,
                     'on_hand_after'      => $onHand,
                     'reference_type'     => 'seed',

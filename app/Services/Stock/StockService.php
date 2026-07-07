@@ -2,6 +2,8 @@
 
 namespace App\Services\Stock;
 
+use App\Enums\StockMovementType;
+use App\Enums\StockPolicy;
 use App\Exceptions\InsufficientStockException;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\StockMovement;
@@ -26,21 +28,6 @@ class StockService
     private function warehouseId(): int
     {
         return (int) getCoreConfig('stock.default_warehouse_id');
-    }
-
-    private function policyDeny(): int
-    {
-        return (int) getCoreConfig('stock.policy.deny');
-    }
-
-    private function policyBackorder(): int
-    {
-        return (int) getCoreConfig('stock.policy.backorder');
-    }
-
-    private function policyUntracked(): int
-    {
-        return (int) getCoreConfig('stock.policy.untracked');
     }
 
     private function ttlMinutes(): int
@@ -117,9 +104,8 @@ class StockService
             return ['ok' => true];
         }
 
-        $policy = (int) ($stock->inventory_policy ?? $this->policyDeny());
         // Backorder & untracked luôn bán được → không cần giữ chỗ.
-        if ($policy !== $this->policyDeny()) {
+        if ($stock->policy()->bypassesStockCheck()) {
             return ['ok' => true];
         }
 
@@ -150,9 +136,7 @@ class StockService
             StockMovement::create([
                 'product_variant_id' => $variantId,
                 'warehouse_id'       => $warehouseId,
-                'type'               => (string) getCoreConfig(
-                    $delta > 0 ? 'stock.movement_type.reserve' : 'stock.movement_type.release'
-                ),
+                'type'               => $delta > 0 ? StockMovementType::Reserve : StockMovementType::Release,
                 'quantity_change'    => $delta,
                 'on_hand_after'      => $onHand,
                 'reference_type'     => 'reservation',
@@ -245,7 +229,7 @@ class StockService
             StockMovement::create([
                 'product_variant_id' => $variantId,
                 'warehouse_id'       => $warehouseId,
-                'type'               => (string) getCoreConfig('stock.movement_type.release'),
+                'type'               => StockMovementType::Release,
                 'quantity_change'    => $qty,
                 'on_hand_after'      => $onHand,
                 'reference_type'     => 'reservation',
@@ -318,8 +302,8 @@ class StockService
             return;
         }
 
-        $policy = (int) ($stock->inventory_policy ?? $this->policyDeny());
-        if ($policy === $this->policyUntracked()) {
+        $policy = $stock->policy();
+        if ($policy === StockPolicy::Untracked) {
             $this->consumeHolderReservation($holder, $variantId, $warehouseId, $qty, (int) ($stock->on_hand ?? 0), $userId);
 
             return;
@@ -329,7 +313,7 @@ class StockService
         $newOnHand = $onHand - $qty;
 
         // GUARD: chặn oversell cho policy DENY khi cửa hàng bật kiểm tra tồn.
-        if ($newOnHand < 0 && $policy === $this->policyDeny() && $this->stockCheckoutEnabled()) {
+        if ($newOnHand < 0 && $policy === StockPolicy::Deny && $this->stockCheckoutEnabled()) {
             throw new InsufficientStockException($variantId, $qty, max(0, $onHand));
         }
 
@@ -341,14 +325,12 @@ class StockService
         $stock->version = (int) ($stock->version ?? 0) + 1;
         $stock->save();
 
-        $isBackorder = $newOnHand < 0 && $policy === $this->policyBackorder();
+        $isBackorder = $newOnHand < 0 && $policy === StockPolicy::Backorder;
 
         StockMovement::create([
             'product_variant_id' => $variantId,
             'warehouse_id'       => $warehouseId,
-            'type'               => $isBackorder
-                ? (string) getCoreConfig('stock.movement_type.sale_backorder')
-                : (string) getCoreConfig('stock.movement_type.sale'),
+            'type'               => $isBackorder ? StockMovementType::SaleBackorder : StockMovementType::Sale,
             'quantity_change'    => -$qty,
             'on_hand_after'      => $newOnHand,
             'reference_type'     => 'order',

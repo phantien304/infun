@@ -977,10 +977,18 @@ trách nhiệm. Index `(product_id, type, is_active, sort_order)` cover query.
 > `price DECIMAL(15,4)` **có DẤU** (âm = giảm; KHÔNG dùng `price_prefix`
 > OpenCart) cho phụ phí custom field: `product_option.price` (field cố định) +
 > `product_option_value.price` (từng lựa chọn picker); default 0 nên chưa đổi
-> giá đơn. Đã expose ra `ProductOptionService`. **Việc còn nợ:** cộng option
-> price vào cart total ở `CartService` / `CheckoutTotalService` (hiện CHƯA có xử
-> lý giá option). Migration
+> giá đơn. Đã expose ra `ProductOptionService`. Migration
 > `2026_07_06_000002_add_soft_delete_and_price_to_product_option_cluster.php`.
+>
+> **Wiring giá vào cart (2026-07-06):** `CartService::customOptionsSurcharge()`
+> tính phụ phí per-unit của 1 line (picker → `product_option_value.price` của
+> value đã chọn; field nhập tự do → `product_option.price` khi có value), cộng
+> vào `resolvePrice()` NGAY trong `getItems()` — nguồn giá DUY NHẤT. Nhờ vậy lan
+> tự động tới `getSubtotal()` → `CheckoutTotalService` (sub_total) → snapshot đơn
+> (`CreateOrderService` dùng `$item['price']`/`['total']`). `splitOptionPayload`
+> + `makeKeySession` giờ mang `option_value_id` để mỗi lựa chọn picker (giá khác
+> nhau) thành line riêng. price có DẤU (âm = giảm); SoftDeletes tự loại option đã
+> xoá khỏi phụ phí.
 
 `product_option` **KHÔNG có cột `id`** — PK composite `(product_id, option_id)`.
 Model:
@@ -1135,12 +1143,6 @@ seed + legacy nhiều nơi nằm thẳng trong Laravel `public/` (vd `public/see
 - `cardQuery()` + `cardScope()` + `cardRelations()` — UI thẻ ngắn
   (list/related/latest/feature/special)
 - `detailRelations()` — UI trang chi tiết (mở rộng từ cardRelations)
-
-> ⚠️ **CẬP NHẬT 2026-07-06:** `cardQuery/cardScope/cardRelations` đã CHUYỂN sang
-> `App\Queries\Product\ProductCardQuery` (`feature/latest/specialLatest/`
-> `relatedIn` + `relations()`). `ProductRepository` delegate qua accessor lazy
-> `cards()`; `detailRelations()` dùng `cards()->relations()`. Xem "Convention:
-> Enum / phân loại / tầng Query (2026-07-06)".
 
 ## Naming variable / view-data key — ngữ nghĩa rõ, không generic
 
@@ -3043,27 +3045,30 @@ Quy tắc khi đã cast enum:
   `$x->role === OptionRole::Variant` rải rác. Đổi định nghĩa "variant" → sửa 1
   chỗ (enum), không đi grep.
 
-### Tầng Query (`app/Queries`) + Repository = nơi DUY NHẤT chạm DB
+### Đọc tái dùng: model scope + repository method (KHÔNG có tầng Query riêng)
 
-- `App\Queries\Query` — marker interface. Query class chỉ DỰNG/CHẠY 1 truy vấn
-  đọc, trả Model/Collection/DTO; KHÔNG cache, KHÔNG business logic.
-- Repository (per aggregate): persistence + caching policy + interface. Khi
-  phình: (1) tách theo consumer (`ProductRepository` vs `ProductCmsRepository`)
-  → (2) rút Query object → (3) chia theo area chỉ khi module hoá thật.
-- Mẫu tham chiếu: `App\Queries\Product\ProductCardQuery`
-  (`feature/latest/specialLatest/relatedIn` + `relations()`). `ProductRepository`
-  **delegate** qua accessor lazy `cards()`, caching giữ ở repo. Thay cho
-  `cardQuery/cardScope/cardRelations` cũ.
-- Ngưỡng tách repo: > ~300–400 dòng hoặc > ~12–15 method. `ProductRepository`
-  từng 545 dòng.
-- Đừng shard repo thành trait chỉ để giảm dòng (giấu coupling); dùng Query object
-  thật. `Concerns/CacheableRepository`, `HasListFilterToolbar` là cross-cutting —
-  OK.
+**Đã thử tầng `app/Queries/` (ProductCardQuery, CartQuery) rồi GỠ BỎ
+(2026-07-06).** Over-engineer cho monolith này: một class nhiều finder trả entity
+thực chất là repository đội lốt; tách ra còn tạo đường nối mong manh (đã gây bug
+"undefined method" khi xoá `cardScope/cardRelations` mà sót caller nội bộ trong
+`list()`/search).
 
-**Việc còn nợ (migrate raw DB vào Repository/Query):** `DB::table` trong
+Chốt: **query tái dùng dùng cơ chế Laravel sẵn có, KHÔNG dựng namespace ngang cấp
+`Models/Services/Repositories`.**
+
+- **Model scope** cho mảnh query tái dùng: `dateAvailable()`, `hasActiveSpecial()`,
+  `effectivePriceBetween()`... (đang dùng). `ProductRepository::cardQuery/cardScope/
+  cardRelations` giữ là method riêng của repo — thế là đủ.
+- **Repository method** cho read theo aggregate (+ caching; controller map DTO bằng
+  `ProductDTO::collect(...)` như cũ).
+- **Chỉ** cân nhắc tầng đọc riêng khi có **read model xuyên nhiều aggregate** thật
+  (báo cáo / view phức tạp) — codebase chưa có, nên chưa dựng.
+- Ràng buộc đã học: `ProductDTO` chứa `Lazy::create(fn…)` (closure) → KHÔNG
+  serialize/cache được DTO. Cache **model**, map DTO ở biên (controller).
+
+**Việc còn nợ (tùy chọn, KHÔNG bắt buộc):** `DB::table` / query Eloquent thô rải ở
 `CouponService`, `GiftService`, `VoucherService`, `PromotionService`,
-`ReviewService`, `ProductVariantAggregateObserver`; ~45 query Eloquent rải ở
-`AccountService`, cụm `Cart*`, `CartService`, `StockService`,
-`ProductVariantWriter/WriteService`, vài controller. (Seed*/Purge command dùng
-`DB::table` chấp nhận được — tooling dev.) Nên chốt bằng **arch test**: "chỉ
-`App\Repositories` + `App\Queries` được dùng Eloquent/DB builder".
+`ReviewService`, `ProductVariantAggregateObserver`, `AccountService`,
+`StockService`... có thể hạ dần thành **model scope / repository method** nếu thấy
+cần — không dựng tầng mới. (Seed*/Purge command dùng `DB::table` chấp nhận được —
+tooling dev.)

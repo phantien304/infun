@@ -467,6 +467,7 @@ $(document).ready(function () {
         };
 
         var PRICE_SELECTOR = 'b#price-product';
+        var __basePrice = (typeof priceProduct === 'number' ? priceProduct : 0);
 
         var VARIANT_OPTION_IDS = (function () {
             var ids = new Set();
@@ -516,6 +517,26 @@ $(document).ready(function () {
         function formatPriceLabel(price) {
             if (!price || price <= 0) return 'Liên hệ';
             return number_format(price) + 'đ';
+        }
+
+        function customFieldSurcharge() {
+            var total = 0;
+            $('.input-option input[type=radio]:checked, .input-option input[type=checkbox]:checked').each(function () {
+                total += parseFloat($(this).attr('data-price')) || 0;
+            });
+            $('.input-option select').each(function () {
+                total += parseFloat($(this).find('option:selected').attr('data-price')) || 0;
+            });
+            $('.input-option input.input-choose, .input-option textarea.textarea-choose').each(function () {
+                if (($(this).val() || '').trim() !== '') {
+                    total += parseFloat($(this).attr('data-price')) || 0;
+                }
+            });
+            return total;
+        }
+
+        function renderTotalPrice() {
+            $(PRICE_SELECTOR).html(formatPriceLabel(__basePrice + customFieldSurcharge()));
         }
 
         function goToImageBySrc(targetSrc) {
@@ -577,7 +598,8 @@ $(document).ready(function () {
             var currentPrice = (typeof variant.effective_price === 'number')
                 ? variant.effective_price
                 : variant.price;
-            $(PRICE_SELECTOR).html(formatPriceLabel(currentPrice));
+            __basePrice = currentPrice;
+            renderTotalPrice();
             updateDiscountBadge(variant);
 
             var inStock = ALL_OOS
@@ -743,6 +765,7 @@ $(document).ready(function () {
                 applyVariant(defaultVariant, false);
             }
             refreshAvailability();
+            renderTotalPrice();
         }
 
         $(function () {
@@ -799,6 +822,7 @@ $(document).ready(function () {
         $(document).on('input change', '.input-choose, .textarea-choose', function () {
             var $el = $(this);
             $('#option-value-' + $el.data('option')).val($el.val());
+            renderTotalPrice();
         });
     })();
 

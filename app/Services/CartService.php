@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Enums\OptionRole;
 use App\Models\Entities\Option;
 use App\Models\Entities\Product;
+use App\Models\Entities\ProductOption;
+use App\Models\Entities\ProductOptionValue;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
 use App\Services\Stock\StockService;
@@ -198,7 +200,8 @@ class CartService
 
             $variant = isset($row['product_variant_id']) ? $variants->get($row['product_variant_id']) : null;
 
-            $price = $this->resolvePrice($product, $variant);
+            $price = $this->resolvePrice($product, $variant)
+                + $this->customOptionsSurcharge((int) ($row['product_id'] ?? 0), $row['custom_options'] ?? []);
             $stockOk = $this->checkStock($product, $variant, (int) $row['quantity']);
 
             $desc = $product->description;
@@ -319,8 +322,10 @@ class CartService
                 continue;
             }
 
+            $rawValueId = $entry['option_value_id'] ?? 0;
             $customOptions[] = [
                 'option_id'         => $optionId,
+                'option_value_id'   => (int) (is_array($rawValueId) ? ($rawValueId[0] ?? 0) : $rawValueId),
                 'name'              => (string) ($entry['name'] ?? ''),
                 'type'              => (string) ($entry['type'] ?? ''),
                 'variation'         => (int) ($entry['variation'] ?? 2),
@@ -383,6 +388,56 @@ class CartService
         }
 
         return (int) $product->price;
+    }
+
+    protected function customOptionsSurcharge(int $productId, array $customOptions): int
+    {
+        if (empty($customOptions) || $productId <= 0) {
+            return 0;
+        }
+
+        $optionIds = array_values(array_unique(array_filter(
+            array_map(fn ($c) => (int) ($c['option_id'] ?? 0), $customOptions)
+        )));
+        if (empty($optionIds)) {
+            return 0;
+        }
+
+        $poRows = ProductOption::where('product_id', $productId)
+            ->whereIn('option_id', $optionIds)
+            ->get(['id', 'option_id', 'price'])
+            ->keyBy('option_id');
+        if ($poRows->isEmpty()) {
+            return 0;
+        }
+
+        $valueIds = array_values(array_unique(array_filter(
+            array_map(fn ($c) => (int) ($c['option_value_id'] ?? 0), $customOptions)
+        )));
+
+        $povPrices = collect();
+        if (! empty($valueIds)) {
+            $povPrices = ProductOptionValue::whereIn('product_option_id', $poRows->pluck('id')->all())
+                ->whereIn('option_value_id', $valueIds)
+                ->get(['product_option_id', 'option_value_id', 'price'])
+                ->keyBy(fn ($r) => $r->product_option_id.':'.$r->option_value_id);
+        }
+
+        $surcharge = 0;
+        foreach ($customOptions as $c) {
+            $po = $poRows->get((int) ($c['option_id'] ?? 0));
+            if (! $po) {
+                continue;
+            }
+            $valueId = (int) ($c['option_value_id'] ?? 0);
+            if ($valueId > 0) {
+                $surcharge += (int) ($povPrices->get($po->id.':'.$valueId)->price ?? 0);
+            } elseif (($c['value'] ?? '') !== '') {
+                $surcharge += (int) $po->price;
+            }
+        }
+
+        return $surcharge;
     }
 
     protected function checkStock(Product $product, ?ProductVariant $variant, int $quantity): bool
@@ -473,7 +528,7 @@ class CartService
     {
         $payload = json_encode([
             'v' => $variantId,
-            'c' => array_map(fn ($c) => $c['option_id'].':'.$c['value'], $customOptions),
+            'c' => array_map(fn ($c) => $c['option_id'].':'.($c['option_value_id'] ?? 0).':'.$c['value'], $customOptions),
         ]);
 
         return $productId.':'.md5($payload).$productId;

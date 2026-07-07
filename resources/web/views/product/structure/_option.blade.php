@@ -15,6 +15,7 @@
                     @if ($option['required'])
                         <span class="required text-danger">(*)</span>
                     @endif
+                    @include('web::product.structure._option_price', ['amount' => data_get($option, 'price', 0)])
                 </label>
             </div>
             <div class="xl:w-3/4 flex-1">
@@ -26,9 +27,11 @@
                                     name="option[{{ $option['option_id'] }}][option_value_id]"
                                     value="{{ $optionValue['id'] }}" data-option="{{ $option['option_id'] }}"
                                     data-option-id="{{ data_get($option, 'option_id') }}"
-                                    data-option-value-id="{{ $optionValue['id'] }}">
+                                    data-option-value-id="{{ $optionValue['id'] }}"
+                                    data-price="{{ (float) data_get($optionValue, 'price', 0) }}">
                                 <label for="opt-{{ $optionValue['id'] }}">
                                     {{ $optionValue['name'] }}
+                                    @include('web::product.structure._option_price', ['amount' => data_get($optionValue, 'price', 0)])
                                 </label>
                             </div>
                         @endforeach
@@ -65,7 +68,8 @@
                             @foreach ($option['selectableValues'] as $optionValue)
                                 <option value="{{ $optionValue['id'] }}"
                                     data-option-value-id="{{ $optionValue['id'] }}"
-                                    data-label="{{ $optionValue['name'] }}">{{ $optionValue['name'] }}</option>
+                                    data-price="{{ (float) data_get($optionValue, 'price', 0) }}"
+                                    data-label="{{ $optionValue['name'] }}">{{ $optionValue['name'] }}@php $povp = (float) data_get($optionValue, 'price', 0); @endphp @if ($povp != 0)({{ $povp > 0 ? '+' : '−' }}{{ money(abs($povp)) }})@endif</option>
                             @endforeach
                         </select>
                     </div>
@@ -78,9 +82,11 @@
                                     name="option[{{ $option['option_id'] }}][option_value_id][]"
                                     value="{{ $optionValue['id'] }}" data-option="{{ $option['option_id'] }}"
                                     data-option-id="{{ data_get($option, 'option_id') }}"
-                                    data-option-value-id="{{ $optionValue['id'] }}">
+                                    data-option-value-id="{{ $optionValue['id'] }}"
+                                    data-price="{{ (float) data_get($optionValue, 'price', 0) }}">
                                 <label class="form-check-label" for="opt-{{ $optionValue['id'] }}">
                                     {{ $optionValue['name'] }}
+                                    @include('web::product.structure._option_price', ['amount' => data_get($optionValue, 'price', 0)])
                                 </label>
                             </div>
                         @endforeach
@@ -88,19 +94,19 @@
                 @endif
                 @if ($option['type'] == 'text')
                     <input type="text" class="input-choose form-control" id="option-{{ $option['option_id'] }}"
-                        data-option="{{ $option['option_id'] }}" @if ($option['required']) required @endif>
+                        data-option="{{ $option['option_id'] }}" data-price="{{ (float) data_get($option, 'price', 0) }}" @if ($option['required']) required @endif>
                 @endif
                 @if ($option['type'] == 'textarea')
                     <textarea class="textarea-choose form-control" id="option-{{ $option['option_id'] }}" data-option="{{ $option['option_id'] }}"
-                        rows="5"></textarea>
+                        data-price="{{ (float) data_get($option, 'price', 0) }}" rows="5"></textarea>
                 @endif
                 @if ($option['type'] == 'email')
                     <input type="email" class="input-choose form-control" id="option-{{ $option['option_id'] }}"
-                        data-option="{{ $option['option_id'] }}" @if ($option['required']) required @endif>
+                        data-option="{{ $option['option_id'] }}" data-price="{{ (float) data_get($option, 'price', 0) }}" @if ($option['required']) required @endif>
                 @endif
                 @if ($option['type'] == 'phone')
                     <input type="tel" class="input-choose form-control" id="option-{{ $option['option_id'] }}"
-                        data-option="{{ $option['option_id'] }}" @if ($option['required']) required @endif>
+                        data-option="{{ $option['option_id'] }}" data-price="{{ (float) data_get($option, 'price', 0) }}" @if ($option['required']) required @endif>
                 @endif
                 @if ($option['type'] == 'file')
                     <div id="option-{{ $option['option_id'] }}">

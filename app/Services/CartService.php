@@ -9,6 +9,8 @@ use App\Models\Entities\ProductOption;
 use App\Models\Entities\ProductOptionValue;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
+use App\Services\Measurement\LengthService;
+use App\Services\Measurement\WeightService;
 use App\Services\Stock\StockService;
 
 class CartService
@@ -17,17 +19,15 @@ class CartService
 
     protected array $shipping = ['width' => 0, 'height' => 0, 'length' => 0, 'weight' => 0];
 
-    /** Cache trong 1 request: [variant_id => qty] mà phiên hiện tại đang giữ chỗ. */
     protected ?array $holderReservedMap = null;
 
-    public function __construct(protected StockService $stockService)
-    {
+    public function __construct(
+        protected StockService $stockService,
+        protected LengthService $lengthService,
+        protected WeightService $weightService,
+    ) {
     }
 
-    /**
-     * Lượng tồn phiên hiện tại đang tự giữ cho 1 variant — cộng ngược khi tính
-     * khả bán để phiên không tự chặn chính mình (reserved đã bao gồm hold này).
-     */
     protected function ownReserved(?int $variantId): int
     {
         if (! $variantId) {
@@ -211,6 +211,8 @@ class CartService
 
             $variantLabel = $this->buildVariantLabel($variant);
             $variantDisplay = $this->buildVariantDisplay($row, $variant);
+            $weightClassId = (int) $product->weight_class_id ?? getConfigDb('config_weight_class_id');
+            $lengthClassId = (int) $product->length_class_id ?? getConfigDb('config_length_class_id');
 
             $quantity = (int) $row['quantity'];
             $items[$key] = [
@@ -230,11 +232,11 @@ class CartService
                 'reward'             => 0,
                 'points'             => 0,
                 'weight'             => ($product->weight ?? 0) * $quantity,
-                'weight_class_id'    => $product->weight_class_id,
+                'weight_class_id'    => $weightClassId,
                 'length'             => $product->length,
                 'width'              => $product->width,
                 'height'             => $product->height,
-                'length_class_id'    => $product->length_class_id,
+                'length_class_id'    => $lengthClassId,
                 'url'                => buildUrl($slug, getModuleConfig('url.product'), $product->id),
                 'variant_label'      => $variantLabel,
                 'option'             => $variantDisplay,
@@ -242,10 +244,15 @@ class CartService
             ];
 
             if ($product->shipping) {
-                $this->shipping['width']  = max($this->shipping['width'], (int) $product->width);
-                $this->shipping['height'] = max($this->shipping['height'], (int) $product->height);
-                $this->shipping['length'] = max($this->shipping['length'], (int) $product->length);
-                $this->shipping['weight'] += (int) (($product->weight ?? 0) * $quantity);
+                $width  = $this->lengthService->convertToSystem((float) $product->width, $lengthClassId);
+                $height = $this->lengthService->convertToSystem((float) $product->height, $lengthClassId);
+                $length = $this->lengthService->convertToSystem((float) $product->length, $lengthClassId);
+                $weight = $this->weightService->convertToSystem((float) ($product->weight ?? 0), $weightClassId);
+
+                $this->shipping['width']  = max($this->shipping['width'], $width);
+                $this->shipping['height'] = max($this->shipping['height'], $height);
+                $this->shipping['length'] = max($this->shipping['length'], $length);
+                $this->shipping['weight'] += $weight * $quantity;
             }
         }
 

@@ -3,41 +3,23 @@
 namespace App\Services;
 
 use App\Repositories\Interfaces\SettingRepositoryInterface;
-use Illuminate\Support\Facades\Cache;
 
 class ConfigDbService
 {
-    protected string $keyCache;
+    private ?array $configsMemo = null;
 
     public function __construct(protected SettingRepositoryInterface $settingRepo)
     {
-        $this->keyCache = getCoreConfig('cache.setting');
     }
 
-    public function getConfig()
+    public function getConfigs(): array
     {
-        return Cache::remember($this->keyCache, now()->addDays(30), function () {
-            $config = [];
-            $settings = $this->settingRepo->listAll();
-            foreach ($settings as $item) {
-                $config[$item->key] = $this->parseValue($item);
-            }
-            return $config;
-        });
+        return $this->configsMemo ??= $this->settingRepo->listAllCached();
     }
 
-    protected function parseValue($item)
+    public function clearCache(): void
     {
-        if ($item->serialized || is_numeric($item->value)) {
-            $decoded = json_decode($item->value, true);
-            return (json_last_error() === JSON_ERROR_NONE) ? $decoded : $item->value;
-        }
-
-        return $item->value;
-    }
-
-    public function clearCache()
-    {
-        return Cache::forget($this->keyCache);
+        $this->configsMemo = null;
+        $this->settingRepo->flushCache();
     }
 }

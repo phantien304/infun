@@ -14,7 +14,7 @@ class CheckJsRequest
         if ($request->get('json') && $request->ajax()) {
             return $next($request);
         }
-        $data = app()->make(ConfigDbService::class)->getConfig();
+        $data = app()->make(ConfigDbService::class)->getConfigs();
         return response()->view('cms::index', ['data' => $data]);
     }
 }

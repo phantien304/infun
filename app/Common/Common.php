@@ -100,12 +100,12 @@ function isMobile()
 function getConfigDb($key = '', $default = '')
 {
     $configService = app(\App\Services\ConfigDbService::class);
-    $config = $configService->getConfig();
+    $configs = $configService->getConfigs();
     if (filled($key)) {
-        return data_get($config, $key, $default);
+        return data_get($configs, $key, $default);
     }
 
-    return $config;
+    return $configs;
 }
 function money($price, ?string $code = null): string
 {

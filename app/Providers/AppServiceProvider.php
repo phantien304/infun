@@ -12,16 +12,20 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton('channellog', function ($app) {
-            return new \App\Helpers\ChannelWriter();
-        });
         $this->app->bind('mystorage', 'App\Helpers\MyStorage');
+
+        $this->registerRepository();
+
         $this->app->singleton('myrouter', function ($app) {
             return new \App\Helpers\Router($app['router']);
         });
-        $this->registerRepository();
-
+        $this->app->singleton('channellog', function ($app) {
+            return new \App\Helpers\ChannelWriter();
+        });
         $this->app->singleton(\App\Services\Currency\CurrencyService::class);
+        $this->app->singleton(\App\Services\ConfigDbService::class);
+        $this->app->singleton(\App\Services\Measurement\LengthService::class);
+        $this->app->singleton(\App\Services\Measurement\WeightService::class);
     }
 
     public function boot(): void

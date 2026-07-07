@@ -132,7 +132,7 @@ return [
         'menu' => 'menu_',
         'categories' => 'categories_',
         'zones' => 'zones_',
-        'setting' => 'setting',
+        'setting' => 'setting_map',
         'language' => 'language',
         'manufacturers' => 'manufacturers_',
         'store_reviews' => 'store_reviews_',
@@ -152,6 +152,8 @@ return [
         'payments' => 'payments_',
         'currencies' => 'currencies_',
         'languages' => 'languages_',
+        'length_classes' => 'length_classes',
+        'weight_classes' => 'weight_classes',
         'review' => [
             'tag_root'         => 'review_root',
             'tag_criteria'     => 'review_criteria',

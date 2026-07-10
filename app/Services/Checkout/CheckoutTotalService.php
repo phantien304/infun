@@ -261,6 +261,6 @@ class CheckoutTotalService
 
     protected function money(int $amount): string
     {
-        return number_format($amount, 0, '', ',').'đ';
+        return money($amount);
     }
 }

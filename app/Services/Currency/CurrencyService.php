@@ -4,10 +4,11 @@ namespace App\Services\Currency;
 
 use App\Models\Entities\Currency;
 use App\Repositories\Interfaces\CurrencyRepositoryInterface;
+use Illuminate\Support\Collection;
 
 class CurrencyService
 {
-    private ?\Illuminate\Support\Collection $allMemo = null;
+    private ?Collection $allMemo = null;
 
     private ?Currency $baseMemo = null;
 

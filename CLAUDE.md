@@ -927,6 +927,18 @@ Edge chấp nhận: điểm activated bị tiêu rồi đơn mới hủy → bal
 `config_reward_earn_divisor`=100, `config_reward_redeem_rate`=1,
 `config_reward_redeem_max_percent`=50, `config_reward_expiry_months`=0.
 
+**Semantics tiền tệ (chốt 2026-07-10)** — `config_reward_earn_divisor` (X = 1
+điểm) và `config_reward_redeem_rate` (1 điểm = X) đơn vị **BASE CURRENCY**.
+An toàn vì kiến trúc giá kiểu OpenCart: DB lưu giá base, mọi tính toán nội bộ
+(resolvePrice → totals → orders.total, earn/redeem) chạy base; đa tiền tệ CHỈ
+là lớp hiển thị (`CurrencyService::convertPrice/formatPrice` nhân
+`currency_value` lúc render, order snapshot currency_code/value). KHÔNG BAO GIỜ
+tính earn/redeem trên số tiền đã convert. Nếu sau này chuyển sang niêm yết/thu
+tiền native từng currency → phải đổi scalar này thành per-currency map hoặc
+earn theo % (currency-neutral). Đi kèm: `CheckoutTotalService::money()` đã bỏ
+hardcode `'đ'` → delegate helper `money()` global (CurrencyService::formatPrice)
+để mọi dòng totals (subtotal/coupon/ship/reward) hiển thị đúng currency đang chọn.
+
 **Redeem endpoint (DONE 2026-07-10)** — `CheckoutRewardController`:
 GET `checkout/reward` (balance + applied, withoutMiddleware cache_page),
 POST `checkout/reward/apply` (validate: enabled/auth/cart/points>0/≤balance

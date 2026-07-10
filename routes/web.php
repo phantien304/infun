@@ -9,6 +9,10 @@ Route::post('/give-me-csrf', function () {
     return redirect()->route('home');
 });
 Route::post('file/upload', 'FileController@upload')->name('file.upload');
+Route::get('l/{slug}', 'AffiliateRedirectController@show')
+    ->name('affiliate.redirect')
+    ->middleware(['maintenance', 'throttle:60,1'])
+    ->where('slug', '[A-Za-z0-9]{1,10}');
 Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function () {
     Route::get('/san-pham', 'ProductController@getList')->name('product.getList');
     Route::get('/khuyen-mai', 'ProductController@special')->name('product.special');

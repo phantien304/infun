@@ -979,7 +979,16 @@ Kế hoạch đầy đủ + business đã chốt: xem `AFFILIATE-PLAN.md`. Tóm 
   sẵn approve/reject cho observer Phase 3 — pattern giống reward).
 - CHÚ Ý kiểu FK: user.id BIGINT UNSIGNED, coupon/category/orders.id INT
   SIGNED → PK affiliate INT SIGNED.
-- Phase 2-6 (tracking middleware, conversion, portal, admin/payout,
+
+**Phase 2 (tracking) DONE 2026-07-10**: route `GET l/{slug}` →
+`AffiliateRedirectController` (log click server-side tại redirect, token 12
+ký tự, cookie `aff_ref`, 302 kèm auto-UTM, safeDestination chống
+open-redirect); middleware `TrackAffiliateRef` append web group
+(bootstrap/app.php — aff_click validate-only, ?ref= log click, last-click
+ghi đè cookie, exception nuốt + logError); `AffiliateAttributionService`
+(Services/Affiliate — coupon KOL > cookie token, chặn self-referral, trả
+`AffiliateAttribution`); core config `affiliate.*` (cookie/params/throttle).
+- Phase 3-6 (conversion khi tạo đơn + observer, portal, admin/payout,
   anti-fraud) CHƯA làm — theo AFFILIATE-PLAN.md mục 3.
 
 ## Schema `product_image` cluster (refactor 2026-06-03)

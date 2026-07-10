@@ -78,6 +78,12 @@ return [
         'enable' => 1,
         'disable' => 0
     ],
+    'affiliate' => [
+        'cookie'                 => 'aff_ref',      // chứa click_token (kiểu uls_trackid Shopee)
+        'param_ref'              => 'ref',          // ?ref=CODE — link tay không qua shortener
+        'param_click'            => 'aff_click',    // token gắn bởi redirect /l/{slug}
+        'click_throttle_minutes' => 30,             // cùng session + affiliate không log click mới
+    ],
     'cookie' => [
         'time' => 1051200,
         'user' => [

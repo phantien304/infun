@@ -263,4 +263,31 @@ Migration `2026_07_10_000001_create_affiliate_tables.php`:
   — idempotent theo order_id / approveForOrder / rejectForOrder — sẵn cho
   observer Phase 3).
 
-### Phase 2-6 — chưa làm (xem mục 3)
+### Phase 2 — DONE 2026-07-10
+
+- **Core config** `core.config.affiliate`: cookie `aff_ref` (chứa click_token),
+  param `ref` / `aff_click`, throttle 30 phút.
+- **Route** `GET l/{slug}` (name affiliate.redirect, regex [A-Za-z0-9]{1,10},
+  middleware maintenance + throttle:60,1, KHÔNG cache_page) →
+  `AffiliateRedirectController@show`: lookup link → affiliate phải Active +
+  hệ bật (không thì vẫn redirect, chỉ bỏ track) → throttle-reuse click cũ
+  hoặc `recordClick` (token 12 ký tự, tăng clicks_count affiliate+link) →
+  queue cookie aff_ref TTL config_affiliate_cookie_days → 302 destination
+  kèm auto-UTM (aff, aff_click, utm_source=aff_<code>, utm_medium=affiliates,
+  utm_campaign=link_<slug>, utm_content=sub_id). Chống open-redirect:
+  `safeDestination()` chỉ nhận path tương đối hoặc cùng host app.url.
+- **Middleware** `TrackAffiliateRef` (append web group, bootstrap/app.php):
+  GET + hệ bật; `aff_click` → validate token (findValidByToken: còn hạn +
+  affiliate Active) + refresh cookie, KHÔNG log lần 2; `?ref=CODE` →
+  findActiveByCode + throttle-reuse hoặc log click mới + cookie. Last-click:
+  cookie ghi đè. Mọi exception nuốt + logError — tracking không phá page.
+- **AffiliateAttributionService** (app/Services/Affiliate): `resolve()` —
+  coupon KOL trong session.applied_coupons (qua findActiveByCouponCode)
+  ưu tiên trước cookie token; self-referral (user hiện tại = chủ affiliate)
+  → bỏ. Trả `AffiliateAttribution` (affiliateId, affiliateUserId,
+  commissionRate riêng nếu có, clickId | couponCode).
+- **DTOs** `App\Data\Affiliate`: AffiliateClickData (fromRequest() dựng
+  context ip/UA/UTM), AffiliateAttribution. Repo mới AffiliateClickRepository
+  (recordClick + aggregate, findRecent throttle, findValidByToken).
+
+### Phase 3-6 — chưa làm (xem mục 3)

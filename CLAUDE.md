@@ -887,20 +887,53 @@ getPriceAttribute). Ghi qua `ProductVariantWriter` (`$v['minimum']`); bỏ khỏ
 kiểm THEO TỪNG DÒNG variant (per-SKU) thay vì gộp theo product. `ProductResource` expose
 `product_variants[].minimum` (CMS round-trip; ô nhập trên form React là TODO).
 
-## TODO — Hệ điểm thưởng (Reward) CHƯA HOẠT ĐỘNG
+## Hệ điểm thưởng (Reward) — HYBRID backend DONE 2026-07-10, còn endpoint + UI
 
-Cả TÍCH lẫn TIÊU điểm hiện là scaffolding, KHÔNG chạy end-to-end:
-- Có sẵn: ledger `user_reward` (`UserRewardRepository::getTotalPoints` sum, `recordOrderReward`
-  insert transaction_type=12); `CheckoutTotalService::lineReward` (tiêu điểm → giảm tiền); key
-  `reward`/`points` trong cart item + cột `orders_product.reward`; dây nối ở `CreateOrderService`.
-- THIẾU 2 mảnh:
-  1. **Nguồn điểm**: KHÔNG có cột "điểm thưởng mỗi SP" trên product/variant (chỉ có `points` =
-     giá tiêu điểm kiểu OpenCart) và không có config earn-rate → `recordOrderReward` luôn ghi 0
-     (vì `array_sum($item['reward'])`, mà cart hardcode `reward => 0`).
-  2. **Đổ dữ liệu vào cart**: `CartService` hardcode `reward => 0` + `points => 0` → tích luôn 0,
-     `lineReward` luôn skip (pointsTotal=0). Redeem cần đổ `points` từ `variant.points` (đã có cột).
-- Muốn bật: (a) quyết mô hình earn — cột earn trên variant/product HAY global rate (vd 1.000đ→1đ);
-  (b) đổ `reward`/`points` vào cart item từ nguồn đó thay vì hardcode 0.
+Chuyển từ mô hình OpenCart (points-price per product) sang hybrid. Migration
+`2026_07_10_000000_reward_hybrid_schema` (thêm `user_reward.expires_at` + index,
+backfill `status` NULL→1, DROP `orders.reward` varchar legacy, seed 5 setting).
+
+**TÍCH điểm (earn)** — `CartService::resolveReward(product, price, qty)`:
+nguồn chính bảng `product_reward` theo user group (eager-load constrain
+`getUserGroupId()`, CMS tab Reward nhập — đóng vai trò OVERRIDE per-product);
+fallback earn-rate toàn cục `config_reward_earn_divisor` (X đồng = 1 điểm,
+0 = tắt fallback). Row ghi ở `CreateOrderService::writeUserReward` →
+`recordOrderReward` với **status=PENDING**.
+
+**Vòng đời theo trạng thái đơn** — `OrderRewardObserver` (đăng ký trong
+AppServiceProvider) bắt `Orders.updated` khi `order_status_id` đổi (mọi flow đều
+qua `orderRepo->upsertOrder` = Eloquent save nên observer cover hết):
+- status ∈ `order_complete_status_all` → `activateOrderReward`: PENDING→AVAILABLE,
+  gán `expires_at = now + config_reward_expiry_months tháng` (0 = NULL = vĩnh viễn).
+- status = `order_cancel_status_id` → `revokeOrderReward` (earn → REVOKED) +
+  `refundRedeem` (hoàn điểm đã tiêu bằng row dương type=14, idempotent).
+
+**TIÊU điểm (redeem)** — `CheckoutTotalService::lineReward` hybrid: điểm = tiền
+(`config_reward_redeem_rate`: 1 điểm = X đồng), cap `config_reward_redeem_max_percent`
+% giá trị đơn; clamp theo balance; KHÔNG còn phân bổ theo `item.points` — key
+`points` trong cart item + `CartService::resolvePoints()` đã XÓA (không consumer;
+cột `product.points`/`variant.points` thành vestigial, CMS vẫn ghi được nhưng
+checkout không đọc). Row totalData
+code=reward mang thêm key `points` = điểm thực tiêu sau cap →
+`CreateOrderService::writeRewardRedeem` ghi row ÂM type=13 (idempotent).
+
+**Ledger semantics** — enum `App\Enums\RewardTransactionType` (OnOrder=12,
+Redeem=13 âm, RedeemRefund=14 dương) + `App\Enums\RewardStatus` (Pending=0,
+Available=1, Revoked=2); repo query bằng `->value`.
+`getTotalPoints` = SUM(points) WHERE status=1 AND (expires_at NULL OR > now).
+Edge chấp nhận: điểm activated bị tiêu rồi đơn mới hủy → balance âm tạm.
+
+**Settings seed** (bảng `setting`, admin đổi trong CMS): `config_reward_point_enabled`=1,
+`config_reward_earn_divisor`=100, `config_reward_redeem_rate`=1,
+`config_reward_redeem_max_percent`=50, `config_reward_expiry_months`=0.
+
+**CÒN THIẾU:**
+1. **Redeem endpoint**: chưa có nơi nào SET `session.reward` — cần POST
+   checkout/reward (apply/remove) kiểu CheckoutCouponController.
+2. **UI storefront**: điểm trên product page, ô nhập điểm ở checkout, lịch sử
+   điểm ở account (list `user_reward` + balance).
+3. **Job quét expires_at** (optional): balance query đã tự loại điểm hết hạn,
+   job chỉ cần nếu muốn ghi row EXPIRE tường minh cho user xem lịch sử.
 
 ## Schema `product_image` cluster (refactor 2026-06-03)
 

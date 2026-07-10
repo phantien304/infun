@@ -66,6 +66,7 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Entities\Setting::observe(\App\Observers\SettingObserver::class);
         \App\Models\Entities\ProductVariant::observe(\App\Observers\ProductVariantAggregateObserver::class);
         \App\Models\Entities\ProductVariantSpecial::observe(\App\Observers\ProductVariantAggregateObserver::class);
+        \App\Models\Entities\Orders::observe(\App\Observers\OrderRewardObserver::class);
 
         $cacheMap = [
             \App\Models\Entities\Product::class               => [\App\Repositories\Interfaces\ProductRepositoryInterface::class],

@@ -84,7 +84,14 @@ class CheckoutTotalService
             'value' => 0,
         ];
     }
-    // todo
+    /**
+     * Tiêu điểm — hybrid 2026-07-10: điểm = tiền trừ thẳng vào đơn
+     * (config_reward_redeem_rate: 1 điểm = X đồng), cap theo % giá trị đơn
+     * (config_reward_redeem_max_percent). Bỏ mô hình OpenCart phân bổ theo
+     * item.points. Key `points` trong totalData row = số điểm THỰC tiêu
+     * (sau cap) — CreateOrderService đọc để ghi row âm vào user_reward;
+     * writeOrderTotals không lưu key thừa nên vô hại với orders_total.
+     */
     protected function lineReward(CheckoutPromotions $promotions, array &$totalData, int &$total): void
     {
         if (getConfigDb('config_reward_point_enabled') == setting('reward_point.disable')) {
@@ -95,33 +102,33 @@ class CheckoutTotalService
         }
 
         $available = $this->rewardRepo->getTotalPoints((int) auth()->id());
-        $reward = (int) session()->get(getCoreConfig('session.reward'));
-        if ($reward <= 0 || $reward > $available) {
+        $requested = (int) session()->get(getCoreConfig('session.reward'));
+        $points = min($requested, $available);
+        if ($points <= 0 || $total <= 0) {
             return;
         }
 
-        $pointsTotal = 0;
-        foreach ($promotions->items as $item) {
-            $pointsTotal += (int) ($item['points'] ?? 0);
-        }
-        if ($pointsTotal <= 0) {
-            return;
-        }
+        $rate = max(1, (int) getConfigDb('config_reward_redeem_rate', 1));
+        $capPercent = (int) getConfigDb('config_reward_redeem_max_percent', 100);
+        $maxDiscount = $capPercent > 0 && $capPercent < 100
+            ? intdiv($total * $capPercent, 100)
+            : $total;
 
-        $discountTotal = 0;
-        foreach ($promotions->items as $item) {
-            if (! empty($item['points'])) {
-                $discountTotal += (int) ($item['total'] * ($reward / $pointsTotal));
-            }
+        $discount = min($points * $rate, $maxDiscount);
+        $pointsUsed = intdiv($discount, $rate);
+        $discount = $pointsUsed * $rate;
+        if ($pointsUsed <= 0) {
+            return;
         }
 
         $totalData[] = [
-            'code'  => 'reward',
-            'title' => sprintf(trans('messages.TextReward'), $reward),
-            'text'  => '-'.$this->money($discountTotal),
-            'value' => -$discountTotal,
+            'code'   => 'reward',
+            'title'  => sprintf(trans('messages.TextReward'), $pointsUsed),
+            'text'   => '-'.$this->money($discount),
+            'value'  => -$discount,
+            'points' => $pointsUsed,
         ];
-        $total -= $discountTotal;
+        $total -= $discount;
     }
 
     protected function lineShipping(CheckoutPromotions $promotions, array &$totalData, int &$total): void

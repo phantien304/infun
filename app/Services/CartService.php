@@ -194,6 +194,7 @@ class CartService
             'weightClass',
             'defaultVariant.productStocks',
             'defaultVariant.productVariantSpecial',
+            'productRewards' => fn ($q) => $q->where('user_group_id', getUserGroupId()),
         ])->whereIn('id', $productIds)->dateAvailable()->get()->keyBy('id');
 
         $variants = $productVariantIds
@@ -247,8 +248,7 @@ class CartService
                 'in_stock'           => $stockOk,
                 'price'              => $price,
                 'total'              => $price * $quantity,
-                'reward'             => 0,
-                'points'             => 0,
+                'reward'             => $this->resolveReward($product, $price, $quantity),
                 'weight'             => ($product->weight ?? 0) * $quantity,
                 'weight_class_id'    => $weightClassId,
                 'length'             => $product->length,
@@ -394,6 +394,25 @@ class CartService
             ->value('id');
 
         return $id ? (int) $id : null;
+    }
+
+    protected function resolveReward(Product $product, int $price, int $quantity): int
+    {
+        if (getConfigDb('config_reward_point_enabled') == setting('reward_point.disable')) {
+            return 0;
+        }
+
+        $perUnit = (int) ($product->productRewards->first()?->points ?? 0);
+        if ($perUnit > 0) {
+            return $perUnit * $quantity;
+        }
+
+        $divisor = (int) getConfigDb('config_reward_earn_divisor');
+        if ($divisor > 0) {
+            return intdiv(max(0, $price), $divisor) * $quantity;
+        }
+
+        return 0;
     }
 
     protected function resolvePrice(Product $product, ?ProductVariant $variant): int

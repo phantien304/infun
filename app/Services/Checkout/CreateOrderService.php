@@ -32,6 +32,7 @@ class CreateOrderService
             $this->writeOrderTotals($order->id, $totalData);
             $this->promotionService->recordForOrder($promotions, $order->id, $total);
             $this->writeUserReward($promotions);
+            $this->writeRewardRedeem($order->id, $totalData);
 
             return $order->id;
         });
@@ -153,12 +154,26 @@ class CreateOrderService
         }
     }
 
-    protected function writeUserReward(CheckoutPromotions $ctx): void
+    protected function writeUserReward(CheckoutPromotions $promotions): void
     {
-        if (! auth()->check() || ! $ctx->orderId) {
+        if (! auth()->check() || ! $promotions->orderId) {
             return;
         }
-        $points = (int) array_sum(array_column($ctx->items, 'reward'));
-        $this->userRewardRepo->recordOrderReward((int) auth()->id(), $ctx->orderId, $points);
+        $points = (int) array_sum(array_column($promotions->items, 'reward'));
+        $this->userRewardRepo->recordOrderReward((int) getCurrentUserId(), $promotions->orderId, $points);
+    }
+
+    protected function writeRewardRedeem(int $orderId, array $totalData): void
+    {
+        if (! auth()->check()) {
+            return;
+        }
+        foreach ($totalData as $row) {
+            if (($row['code'] ?? '') === 'reward' && (int) ($row['points'] ?? 0) > 0) {
+                $this->userRewardRepo->recordRedeem((int) getCurrentUserId(), $orderId, (int) $row['points']);
+
+                return;
+            }
+        }
     }
 }

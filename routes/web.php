@@ -52,6 +52,9 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::post('gifts/remove', 'CheckoutGiftController@remove')->name('checkout.giftsRemove');
         Route::post('vouchers/apply', 'CheckoutVoucherController@apply')->name('checkout.vouchersApply');
         Route::post('vouchers/remove', 'CheckoutVoucherController@remove')->name('checkout.vouchersRemove');
+        Route::get('reward', 'CheckoutRewardController@show')->name('checkout.reward')->withoutMiddleware(['cache_page']);
+        Route::post('reward/apply', 'CheckoutRewardController@apply')->name('checkout.rewardApply');
+        Route::post('reward/remove', 'CheckoutRewardController@remove')->name('checkout.rewardRemove');
     });
     Route::get('currency/{code}', 'LocaleController@currency')->name('locale.currency')->withoutMiddleware(['cache_page']);
     Route::get('language/{code}', 'LocaleController@language')->name('locale.language')->withoutMiddleware(['cache_page']);
@@ -90,6 +93,7 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
             Route::post('cancel-order', 'AccountController@cancelOrder')->name('account.cancelOrder');
             Route::any('orders', 'AccountController@orders')->name('account.orders');
             Route::any('orders/{id?}', 'AccountController@detailOrder')->name('account.detailOrder');
+            Route::get('rewards', 'AccountController@rewards')->name('account.rewards');
             Route::any('newsletter', 'AccountController@newsletter')->name('account.newsletter');
             Route::any('logout', 'AccountController@logout')->name('account.logout');
         });

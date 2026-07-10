@@ -322,6 +322,9 @@
                                 <div id="voucher-promo-row-container">
                                     @include('web::checkout._voucher_promo_row')
                                 </div>
+                                <div id="reward-promo-row-container">
+                                    @include('web::checkout._reward_promo_row')
+                                </div>
                             </div>
                             <div class="col-xl-12 mt-3">
                                 <div class="d-grid gap-2 col-12 mx-auto text-center">

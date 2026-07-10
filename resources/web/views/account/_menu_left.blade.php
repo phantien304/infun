@@ -43,6 +43,12 @@
             </a>
         </li>
         <li class="nav-item">
+            <a href="{{ route('account.rewards') }}" title="Điểm thưởng"
+                class="nav-link @if (request()->routeIs('account.rewards')) active @endif">
+                <i class="far fa-star mr-10"></i>Điểm thưởng
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="{{ route('account.newsletter') }}" title="Đăng ký nhận tin khuyến mãi"
                 class="nav-link @if (request()->routeIs('account.newsletter')) active @endif">
                 <i class="fas fa-newspaper mr-10"></i>Đăng ký nhận tin khuyến mãi

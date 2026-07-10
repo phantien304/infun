@@ -14,6 +14,7 @@ use App\Models\Entities\OrdersStatus;
 use App\Repositories\Interfaces\CarrierRepositoryInterface;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\PaymentRepositoryInterface;
+use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 use App\Services\CartService;
 use App\Services\Checkout\CheckoutPaymentService;
 use App\Services\Checkout\CheckoutPromotions;
@@ -39,6 +40,7 @@ class CheckoutController extends Controller
         protected OrderRepositoryInterface $orderRepo,
         protected PromotionService $promotionService,
         protected StockService $stockService,
+        protected UserRewardRepositoryInterface $userRewardRepo,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -84,6 +86,9 @@ class CheckoutController extends Controller
             'giftItems'          => $promo['giftItems'],
             'myVouchers'         => $promo['myVouchers'],
             'appliedVoucherCodes' => $promo['appliedVoucherCodes'],
+            'rewardEnabled'      => getConfigDb('config_reward_point_enabled') != setting('reward_point.disable'),
+            'rewardBalance'      => auth()->check() ? $this->userRewardRepo->getTotalPoints((int) getCurrentUserId()) : 0,
+            'rewardApplied'      => (int) session()->get(getCoreConfig('session.reward'), 0),
         ]);
     }
 

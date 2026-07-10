@@ -14,6 +14,7 @@ use App\Http\Requests\Web\AccountChangePasswordRequest;
 use App\Http\Requests\Web\AccountUpdateProfileRequest;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserRepositoryInterface;
+use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 use App\Services\Account\AccountService;
 use App\Services\Account\AddressService;
 use App\Services\Account\WishlistService;
@@ -21,22 +22,6 @@ use App\Services\Checkout\RefundService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * Trang account (đã đăng nhập): profile / password / address / wishlist /
- * orders / newsletter.
- *
- * Refactor 2026-05-31 — xem CLAUDE.md mục "Account flow":
- *  - Namespace mới `App\Http\Controllers\Web` (cũ `Client\InfunStudio`).
- *  - Base extends `App\Http\Controllers\Controller` (lazyMap repo + render).
- *  - Service layer mới: AccountService / AddressService / WishlistService.
- *  - RefundService tách khỏi CheckoutPaymentService cho cancel order.
- *  - FormRequest mới thay validator legacy
- *    `OrderValidator::validateCancelOrder` / `UserValidator::validateUpdateUser`
- *    v.v. (validator legacy đã gỡ).
- *  - DTO: UserDTO / UserAddressDTO / WishlistItemDTO / OrderDTO ... thay raw model.
- *  - Helper: `getCurrentUserId()` thay `getUserLoginId()`, `request()->cookie()`
- *    thay `getCookie()`, `processMetaSeo()` thay `_processMetaSeo()`.
- */
 class AccountController extends Controller
 {
     public function __construct(
@@ -46,6 +31,7 @@ class AccountController extends Controller
         protected RefundService $refundService,
         protected UserRepositoryInterface $userRepo,
         protected OrderRepositoryInterface $orderRepo,
+        protected UserRewardRepositoryInterface $userRewardRepo,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -59,8 +45,6 @@ class AccountController extends Controller
 
         return $this->render('web::account.index');
     }
-
-    // ===== Profile / password / newsletter ============================
 
     public function edit(Request $request)
     {
@@ -115,8 +99,6 @@ class AccountController extends Controller
         ]);
     }
 
-    // ===== Address =====================================================
-
     public function address(Request $request)
     {
         if ($request->has('remove')) {
@@ -167,8 +149,6 @@ class AccountController extends Controller
         return back();
     }
 
-    // ===== Wishlist ====================================================
-
     public function wishList(Request $request)
     {
         $userId = (int) getCurrentUserId();
@@ -206,8 +186,6 @@ class AccountController extends Controller
         );
     }
 
-    // ===== Orders ======================================================
-
     public function orders(Request $request)
     {
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.account_orders_history'), 'href' => '', 'separator' => false]);
@@ -220,6 +198,19 @@ class AccountController extends Controller
 
         return $this->render('web::account.orders', [
             'entities' => $paginator,
+        ]);
+    }
+
+    public function rewards(Request $request)
+    {
+        $this->setBreadcrumb(['text' => 'Điểm thưởng', 'href' => '', 'separator' => false]);
+        $this->processMetaSeo('buildForSeoByConfig', 'account.rewards.title', 'account.rewards.description');
+
+        $userId = (int) getCurrentUserId();
+
+        return $this->render('web::account.rewards', [
+            'balance'  => $this->userRewardRepo->getTotalPoints($userId),
+            'entities' => $this->userRewardRepo->getHistoryForUser($userId),
         ]);
     }
 
@@ -270,7 +261,6 @@ class AccountController extends Controller
                 $data['comment'] ?? null,
             );
         } catch (\RuntimeException $e) {
-            // RefundService trả [false, null] → throw 'refund_failed'.
             if ($e->getMessage() === 'refund_failed') {
                 return back()->with('failed', trans('messages.RefundFailed'))->withInput();
             }
@@ -289,8 +279,6 @@ class AccountController extends Controller
         return back()->with('success', trans('messages.CancelSuccess'));
     }
 
-    // ===== Logout ======================================================
-
     public function logout()
     {
         $this->addressService->clearVisitorCookie();
@@ -300,8 +288,6 @@ class AccountController extends Controller
 
         return redirect(route('auth.login'));
     }
-
-    // ===== private helpers ============================================
 
     protected function handleProfileUpdate(Request $request)
     {

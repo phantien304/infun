@@ -927,13 +927,30 @@ Edge chấp nhận: điểm activated bị tiêu rồi đơn mới hủy → bal
 `config_reward_earn_divisor`=100, `config_reward_redeem_rate`=1,
 `config_reward_redeem_max_percent`=50, `config_reward_expiry_months`=0.
 
-**CÒN THIẾU:**
-1. **Redeem endpoint**: chưa có nơi nào SET `session.reward` — cần POST
-   checkout/reward (apply/remove) kiểu CheckoutCouponController.
-2. **UI storefront**: điểm trên product page, ô nhập điểm ở checkout, lịch sử
-   điểm ở account (list `user_reward` + balance).
-3. **Job quét expires_at** (optional): balance query đã tự loại điểm hết hạn,
-   job chỉ cần nếu muốn ghi row EXPIRE tường minh cho user xem lịch sử.
+**Redeem endpoint (DONE 2026-07-10)** — `CheckoutRewardController`:
+GET `checkout/reward` (balance + applied, withoutMiddleware cache_page),
+POST `checkout/reward/apply` (validate: enabled/auth/cart/points>0/≤balance
+→ SET session.reward), POST `checkout/reward/remove` (forget). Endpoint chỉ
+validate cho UX — nguồn sự thật là `lineReward` (tự clamp balance + cap lúc
+build totals). Lang: `messages.checkout.reward.*`.
+
+**UI storefront (DONE 2026-07-10):**
+- Checkout: `_reward_promo_row.blade.php` (Alpine `rewardBox()`, input điểm +
+  apply/remove gọi 2 POST endpoint, reload theo pattern voucher modal);
+  CheckoutController@index truyền `rewardEnabled/rewardBalance/rewardApplied`.
+- Product page: `RewardEarnService::perUnit()` (extract từ CartService::
+  resolveReward — CartService giờ delegate qua service này, inject constructor)
+  → ProductController@index truyền `rewardEarn` → block "Mua nhận X điểm"
+  dưới giá. firstWhere user_group nên chạy cả khi productRewards load đủ group.
+- Account: route GET `account/rewards` (auth group) → AccountController@rewards
+  → view `account/rewards.blade.php` (balance badge + bảng ledger phân trang
+  `getHistoryForUser`, label từ enum RewardStatus/RewardTransactionType, hàng
+  hết hạn hiện badge "Hết hạn"); menu item trong `_menu_left`. `UserReward`
+  cast `expires_at => datetime`.
+
+**CÒN THIẾU (optional):**
+- **Job quét expires_at**: balance query đã tự loại điểm hết hạn, job chỉ cần
+  nếu muốn ghi row EXPIRE tường minh cho user xem lịch sử.
 
 ## Schema `product_image` cluster (refactor 2026-06-03)
 

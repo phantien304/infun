@@ -14,6 +14,7 @@ use App\Repositories\Interfaces\ReviewRepositoryInterface;
 use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
 use App\Repositories\Interfaces\UserWishlistRepositoryInterface;
 use App\Services\ProductOptionService;
+use App\Services\Reward\RewardEarnService;
 
 class ProductController extends Controller
 {
@@ -22,6 +23,7 @@ class ProductController extends Controller
         protected ReviewRepositoryInterface $reviewRepo,
         protected StoreReviewRepositoryInterface $storeReviewRepo,
         protected ProductOptionService $productOptionService,
+        protected RewardEarnService $rewardEarn,
     ) {
         $this->breadcrumbs = [
             ['text' => trans('messages.breadcrumbs.home'), 'href' => '/', 'separator' => false],
@@ -71,6 +73,7 @@ class ProductController extends Controller
 
         return $this->render('web::product.index', [
             'entity'             => $product,
+            'rewardEarn'         => $this->rewardEarn->perUnit($entity, (int) $entity->price),
             'productOptions'     => $optionTree['optionGroups'],
             'variantMatrix'      => $optionTree['variantMatrix'],
             'defaultVariant'     => $optionTree['defaultVariant'],

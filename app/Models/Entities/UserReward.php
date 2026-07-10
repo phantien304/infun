@@ -9,6 +9,7 @@ class UserReward extends Base
     protected $table = 'user_reward';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $casts = ['expires_at' => 'datetime'];
 
     public function user()
     {

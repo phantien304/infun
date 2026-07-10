@@ -12,6 +12,7 @@ use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
 use App\Services\Measurement\LengthService;
 use App\Services\Measurement\WeightService;
+use App\Services\Reward\RewardEarnService;
 use App\Services\Stock\StockService;
 use App\Services\Stock\WarehouseService;
 use Illuminate\Support\Collection;
@@ -29,6 +30,7 @@ class CartService
         protected LengthService $lengthService,
         protected WeightService $weightService,
         protected WarehouseService $warehouseService,
+        protected RewardEarnService $rewardEarnService,
     ) {
     }
 
@@ -398,21 +400,7 @@ class CartService
 
     protected function resolveReward(Product $product, int $price, int $quantity): int
     {
-        if (getConfigDb('config_reward_point_enabled') == setting('reward_point.disable')) {
-            return 0;
-        }
-
-        $perUnit = (int) ($product->productRewards->first()?->points ?? 0);
-        if ($perUnit > 0) {
-            return $perUnit * $quantity;
-        }
-
-        $divisor = (int) getConfigDb('config_reward_earn_divisor');
-        if ($divisor > 0) {
-            return intdiv(max(0, $price), $divisor) * $quantity;
-        }
-
-        return 0;
+        return $this->rewardEarnService->perUnit($product, $price) * $quantity;
     }
 
     protected function resolvePrice(Product $product, ?ProductVariant $variant): int
@@ -500,8 +488,6 @@ class CartService
             return true;
         }
 
-        // Cộng ngược phần phiên hiện tại đang tự giữ để không tự chặn chính mình
-        // (ownReserved đã SUM qua mọi kho — khớp tổng sellableQuantity bên dưới).
         $variantId = $variant?->id ?? $product->defaultVariant?->id;
         $available = (int) $stocks->sum(fn (ProductStock $s) => $s->sellableQuantity())
             + $this->ownReserved($variantId ? (int) $variantId : null);

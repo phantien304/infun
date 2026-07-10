@@ -109,6 +109,12 @@ return [
             'used_up'           => "Voucher đã dùng hết",
             'invalid_order'     => "Đơn hàng không hợp lệ",
         ],
+        'reward' => [
+            'disabled'   => 'Điểm thưởng hiện không khả dụng',
+            'empty_cart' => 'Giỏ hàng trống',
+            'invalid'    => 'Số điểm không hợp lệ',
+            'not_enough' => 'Bạn chỉ có %s điểm khả dụng',
+        ],
         'coupon_choose_required' => 'Vui lòng chọn voucher',
         'coupon_none_applied'    => 'Không có voucher nào áp dụng được',
         'coupon_login_save'      => 'Vui lòng đăng nhập để lưu voucher',

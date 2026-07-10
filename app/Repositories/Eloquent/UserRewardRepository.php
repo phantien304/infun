@@ -7,17 +7,21 @@ use App\Enums\RewardTransactionType;
 use App\Models\Entities\UserReward;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
-/**
- * Ledger điểm thưởng (hybrid 2026-07-10). Semantics ở App\Enums\
- * RewardTransactionType (12=earn, 13=redeem âm, 14=refund) và RewardStatus
- * (0=pending, 1=available, 2=revoked).
- */
 class UserRewardRepository extends QueryableRepository implements UserRewardRepositoryInterface
 {
     public function model(): string
     {
         return UserReward::class;
+    }
+
+    public function getHistoryForUser(int $userId, int $perPage = 20): LengthAwarePaginator
+    {
+        return $this->resetModel()
+            ->where('user_id', $userId)
+            ->orderByDesc('id')
+            ->paginate($perPage);
     }
 
     public function getTotalPoints(int $userId): int

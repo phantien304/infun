@@ -137,6 +137,12 @@
                                         </span>
                                     @endif
                                 </div>
+                                @if (!empty($rewardEarn) && $rewardEarn > 0)
+                                    <div class="mt-1 text-sm text-yellow-600">
+                                        <i class="fi-rs-star"></i>
+                                        Mua sản phẩm này nhận {{ number_format($rewardEarn, 0, '', ',') }} điểm thưởng
+                                    </div>
+                                @endif
                             </div>
                             <div class="description mb-30">
                                 @if ($entity->manufacturer)

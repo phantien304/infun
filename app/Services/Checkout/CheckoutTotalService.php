@@ -8,7 +8,7 @@ class CheckoutTotalService
 {
     public function __construct(
         protected ShippingFeeService $shippingFee,
-        protected UserRewardRepositoryInterface $rewardRepo,
+        protected UserRewardRepositoryInterface $userRewardRepo,
         protected PromotionService $promotionService,
     ) {
     }
@@ -21,7 +21,7 @@ class CheckoutTotalService
         $this->lineSubTotal($totalData, $totalPrice);
         $this->linesAppliedCoupons($promotions, $totalData, $totalPrice);
         $this->lineGifts($totalData);
-        $this->lineReward($promotions, $totalData, $totalPrice);
+        $this->lineReward($totalData, $totalPrice);
         if ($withShipping) {
             $this->lineShipping($promotions, $totalData, $totalPrice);
         }
@@ -84,15 +84,8 @@ class CheckoutTotalService
             'value' => 0,
         ];
     }
-    /**
-     * Tiêu điểm — hybrid 2026-07-10: điểm = tiền trừ thẳng vào đơn
-     * (config_reward_redeem_rate: 1 điểm = X đồng), cap theo % giá trị đơn
-     * (config_reward_redeem_max_percent). Bỏ mô hình OpenCart phân bổ theo
-     * item.points. Key `points` trong totalData row = số điểm THỰC tiêu
-     * (sau cap) — CreateOrderService đọc để ghi row âm vào user_reward;
-     * writeOrderTotals không lưu key thừa nên vô hại với orders_total.
-     */
-    protected function lineReward(CheckoutPromotions $promotions, array &$totalData, int &$total): void
+
+    protected function lineReward(array &$totalData, int &$total): void
     {
         if (getConfigDb('config_reward_point_enabled') == setting('reward_point.disable')) {
             return;
@@ -101,7 +94,7 @@ class CheckoutTotalService
             return;
         }
 
-        $available = $this->rewardRepo->getTotalPoints((int) auth()->id());
+        $available = $this->userRewardRepo->getTotalPoints((int) getCurrentUserId());
         $requested = (int) session()->get(getCoreConfig('session.reward'));
         $points = min($requested, $available);
         if ($points <= 0 || $total <= 0) {

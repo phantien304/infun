@@ -2,8 +2,11 @@
 
 namespace App\Models\Entities;
 
+use App\Enums\StockPolicy;
 use App\Models\Base\Base;
+use App\Services\Stock\WarehouseService;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 class ProductVariant extends Base
 {
@@ -62,7 +65,80 @@ class ProductVariant extends Base
     public function productStock()
     {
         return $this->hasOne(ProductStock::class, 'product_variant_id', 'id')
-            ->where('warehouse_id', getCoreConfig('stock.default_warehouse_id'));
+            ->where('warehouse_id', (int) (getConfigDb('config_warehouse_id') ?: 1));
+    }
+
+    // =====================================================================
+    // TỒN KHO ĐA KHO (dùng cho hiển thị: trang chi tiết, card, matrix variant)
+    //
+    // Các hàm dưới TỔNG HỢP tồn qua NHIỀU kho sellable thay vì chỉ đọc row kho
+    // mặc định (relation productStock singular). Chúng thao tác trên collection
+    // productStocks đã eager-load → không sinh query nếu đã nạp sẵn.
+    // Logic khớp CartService / StockService để hiển thị và bán khớp nhau.
+    // =====================================================================
+
+    /**
+     * Các row tồn thuộc kho ĐANG bán được (is_active && is_sellable).
+     *
+     * @return Collection<int,ProductStock>
+     */
+    public function sellableStocks(): Collection
+    {
+        $rows = $this->productStocks;
+        if (! $rows instanceof Collection) {
+            return collect();
+        }
+
+        return $rows->whereIn('warehouse_id', app(WarehouseService::class)->sellableIds())->values();
+    }
+
+    /**
+     * Row tồn "hiệu lực" để lấy policy / subtract: ưu tiên kho mặc định,
+     * fallback row đầu tiên.
+     */
+    public function effectiveStockRow(): ?ProductStock
+    {
+        $stocks = $this->sellableStocks();
+
+        return $stocks->firstWhere('warehouse_id', app(WarehouseService::class)->defaultId())
+            ?? $stocks->first();
+    }
+
+    public function effectiveStockPolicy(): StockPolicy
+    {
+        return $this->effectiveStockRow()?->policy() ?? StockPolicy::Deny;
+    }
+
+    /**
+     * Tổng tồn khả bán = Σ (on_hand - reserved) qua mọi kho sellable.
+     * KHÔNG áp sentinel policy — dùng để hiển thị SỐ LƯỢNG thực.
+     */
+    public function sellableQuantityTotal(): int
+    {
+        return (int) $this->sellableStocks()->sum(fn (ProductStock $s) => $s->sellableQuantity());
+    }
+
+    public function hasSellableStock(): bool
+    {
+        return $this->sellableStocks()->isNotEmpty();
+    }
+
+    /**
+     * Có bán được $qty không (đa kho): policy bỏ qua kiểm tra tồn (untracked/
+     * backorder) → luôn true; ngược lại so với tổng tồn khả bán.
+     */
+    public function canSellQuantity(int $qty): bool
+    {
+        $stocks = $this->sellableStocks();
+        if ($stocks->isEmpty()) {
+            return false;
+        }
+
+        if ($this->effectiveStockPolicy()->bypassesStockCheck()) {
+            return true;
+        }
+
+        return $this->sellableQuantityTotal() >= $qty;
     }
 
     public function descriptions()

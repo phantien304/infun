@@ -54,7 +54,6 @@ class CheckoutController extends Controller
         $appliedPromotions = $this->buildAppliedPromotions(hasShipping: true);
         [$error, $items] = $this->validateCart($appliedPromotions);
 
-        // Giữ chỗ tồn (hold) cho cart khi vào checkout. Không đủ tồn → hiển thị lỗi.
         if ($error === '' && ! empty($items)) {
             $reserve = $this->reserveCart($items);
             if (! ($reserve['ok'] ?? true)) {
@@ -240,33 +239,24 @@ class CheckoutController extends Controller
 
         [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
 
-        // ── Idempotency xếp lớp: form-token (fallback session id + chữ ký giỏ) ──
-        $holder = (string) session()->getId();
-        $token = (string) $request->input('idempotency_key', '');
-        if ($token === '') {
-            $token = (string) session()->get(getCoreConfig('session.checkout_idem'), '');
+        $sessionId = (string) session()->getId();
+        $idemKey = (string) $request->input('idempotency_key', '');
+        if ($idemKey === '') {
+            $idemKey = (string) session()->get(getCoreConfig('session.checkout_idem'), '');
         }
-        if ($token === '') {
-            $token = $holder.'|'.$this->cartSignature($items, $total);
+        if ($idemKey === '') {
+            $idemKey = $sessionId.'|'.$this->cartSignature($items, $total);
         }
-        $idemValue = md5($token);
-        $idemCacheKey = 'checkout:idem:'.$idemValue;
+        $idemKeyMd5 = md5($idemKey);
+        $idemCacheKey = $this->buildIdempotencyKey($idemKeyMd5);
 
-        // Lớp 1 — cache atomic: chặn burst double-submit sớm.
         if (! Cache::add($idemCacheKey, 'processing', now()->addSeconds(60))) {
-            $existing = Cache::get($idemCacheKey);
-            if (is_numeric($existing)) {
-                session()->put(getCoreConfig('session.last_order'), (int) $existing);
-
-                return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
-            }
-
-            return redirect(route('checkout.success'));
+            return $this->handleDuplicateSubmit($idemCacheKey, $idemKeyMd5);
         }
 
         try {
             $params = $request->validated();
-            $params['idempotency_key'] = $idemValue;
+            $params['idempotency_key'] = $idemKeyMd5;
 
             $orderId = $this->createOrderService->create($ctx, $params, $totalData, $total);
 
@@ -284,7 +274,7 @@ class CheckoutController extends Controller
             $url = $this->paymentService->startPayment($orderId, $payload);
 
             $this->cartService->clear();
-            $this->stockService->releaseHolder($holder);
+            $this->stockService->releaseHolder($sessionId);
             session()->put(getCoreConfig('session.last_order'), $orderId);
             session()->forget(getCoreConfig('session.checkout_idem'));
 
@@ -303,7 +293,7 @@ class CheckoutController extends Controller
         } catch (QueryException $e) {
             // Lớp 2 — DB UNIQUE(idempotency_key): 2 request cùng token đua nhau.
             if ($this->isDuplicateKey($e)) {
-                $existing = $this->orderRepo->findByIdempotencyKey($idemValue);
+                $existing = $this->orderRepo->findByIdempotencyKey($idemKeyMd5);
                 if ($existing) {
                     Cache::put($idemCacheKey, $existing->id, now()->addSeconds(60));
                     session()->put(getCoreConfig('session.last_order'), $existing->id);
@@ -325,7 +315,74 @@ class CheckoutController extends Controller
         }
     }
 
-    /** Token idempotency của phiên checkout — sinh 1 lần (UUID), xoay sau khi đặt xong. */
+    protected function handleDuplicateSubmit(string $idemCacheKey, string $idemKeyMd5)
+    {
+        $valueCache = Cache::get($idemCacheKey);
+
+        if (is_numeric($valueCache)) {
+            session()->put(getCoreConfig('session.last_order'), (int) $valueCache);
+
+            return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
+        }
+
+        if ($valueCache === null) {
+            return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
+        }
+
+        session()->put(getCoreConfig('session.checkout_pending'), $idemKeyMd5);
+
+        return redirect(route('checkout.processing'));
+    }
+
+    protected function pendingOrderState(): array
+    {
+        $pendingKey = (string) getCoreConfig('session.checkout_pending');
+        $idemKeyMd5 = (string) session()->get($pendingKey, '');
+
+        if ($idemKeyMd5 === '') {
+            return ['status' => 'none', 'redirect' => route('checkout.index')];
+        }
+
+        $valueCache = Cache::get($this->buildIdempotencyKey($idemKeyMd5));
+
+        if (is_numeric($valueCache)) {
+            session()->put(getCoreConfig('session.last_order'), (int) $valueCache);
+            session()->forget($pendingKey);
+
+            return ['status' => 'done', 'redirect' => route('checkout.success')];
+        }
+
+        if ($valueCache === null) {
+            session()->forget($pendingKey);
+
+            return ['status' => 'failed', 'redirect' => route('checkout.index')];
+        }
+
+        return ['status' => 'processing', 'redirect' => null];
+    }
+
+    public function processing()
+    {
+        $state = $this->pendingOrderState();
+
+        if ($state['status'] === 'done') {
+            return redirect($state['redirect'])->with('success', trans('messages.SuccessCreateOrder'));
+        }
+        if ($state['status'] === 'failed') {
+            return redirect($state['redirect'])->with('failed', trans('messages.ErrorCreateOrder'));
+        }
+        if ($state['status'] === 'none') {
+            return redirect($state['redirect']);
+        }
+
+        return view('web::checkout.processing');
+    }
+
+    public function orderStatus()
+    {
+        return respondSuccess($this->pendingOrderState());
+    }
+
     protected function currentIdempotencyToken(): string
     {
         $key = getCoreConfig('session.checkout_idem');
@@ -338,18 +395,17 @@ class CheckoutController extends Controller
         return $token;
     }
 
-    /** Lỗi vi phạm UNIQUE (MySQL 1062 / SQLSTATE 23000). */
+    protected function buildIdempotencyKey(string $idemKeyMd5): string
+    {
+        return 'checkout:idem:'.$idemKeyMd5;
+    }
+
     protected function isDuplicateKey(QueryException $e): bool
     {
         return (int) ($e->errorInfo[1] ?? 0) === 1062
             || (string) $e->getCode() === '23000';
     }
 
-    /**
-     * Chữ ký ổn định của giỏ hàng cho khoá idempotency.
-     *
-     * @param  array<int,array{id?:int, product_variant_id?:int|null, quantity?:int}>  $items
-     */
     protected function cartSignature(array $items, int $total): string
     {
         $parts = [];
@@ -361,12 +417,6 @@ class CheckoutController extends Controller
         return md5(implode('|', $parts).'#'.$total);
     }
 
-    /**
-     * Giữ chỗ tồn cho cart hiện tại (holder = session id).
-     *
-     * @param  array<int,mixed>  $items
-     * @return array{ok:bool, failed?:array{name:string, available:int, requested:int}}
-     */
     protected function reserveCart(array $items): array
     {
         return $this->stockService->reserveCart(

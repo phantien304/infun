@@ -5,6 +5,7 @@ namespace App\Repositories\Base;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\DB;
 
 abstract class BaseRepository implements BaseRepositoryInterface
 {
@@ -29,6 +30,11 @@ abstract class BaseRepository implements BaseRepositoryInterface
     public function resetModel()
     {
         return $this->makeModel();
+    }
+
+    public function transaction(\Closure $callback)
+    {
+        return DB::transaction($callback);
     }
 
     public function getDetail(int $id)

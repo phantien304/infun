@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\OptionRole;
+use App\Enums\StockPolicy;
 use App\Models\Entities\Option;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductOption;
@@ -12,6 +13,8 @@ use App\Models\Entities\ProductVariant;
 use App\Services\Measurement\LengthService;
 use App\Services\Measurement\WeightService;
 use App\Services\Stock\StockService;
+use App\Services\Stock\WarehouseService;
+use Illuminate\Support\Collection;
 
 class CartService
 {
@@ -25,6 +28,7 @@ class CartService
         protected StockService $stockService,
         protected LengthService $lengthService,
         protected WeightService $weightService,
+        protected WarehouseService $warehouseService,
     ) {
     }
 
@@ -59,7 +63,7 @@ class CartService
         }
 
         $variant = $variantId
-            ? ProductVariant::with(['productStock'])->find($variantId)
+            ? ProductVariant::with(['productStocks'])->find($variantId)
             : null;
 
         if (! $variant) {
@@ -80,23 +84,41 @@ class CartService
         return ['ok' => true, 'variant_id' => $variantId, 'quantity' => $quantity];
     }
 
+    /** Các row tồn thuộc kho sellable của variant (fallback default variant). */
+    protected function sellableStocks(Product $product, ?ProductVariant $variant): Collection
+    {
+        $rows = $variant?->productStocks ?? $product->defaultVariant?->productStocks;
+        if (! ($rows instanceof Collection)) {
+            return collect();
+        }
+
+        return $rows->whereIn('warehouse_id', $this->warehouseService->sellableIds());
+    }
+
+    protected function effectivePolicy(Collection $stocks): StockPolicy
+    {
+        $row = $stocks->firstWhere('warehouse_id', $this->warehouseService->defaultId())
+            ?? $stocks->first();
+
+        return $row?->policy() ?? StockPolicy::Deny;
+    }
+
     protected function resolveQuantityAvailable(Product $product, ?ProductVariant $variant): int
     {
-        $stock = $variant?->productStock ?? $product->defaultVariant?->productStock;
+        $stocks = $this->sellableStocks($product, $variant);
 
-        if (! ($stock instanceof ProductStock)) {
+        if ($stocks->isEmpty()) {
             return 0;
         }
 
-        if ($stock->policy()->bypassesStockCheck()) {
+        if ($this->effectivePolicy($stocks)->bypassesStockCheck()) {
             return PHP_INT_MAX;
         }
 
-        $onHand   = (int) ($stock->on_hand ?? 0);
-        $reserved = (int) ($stock->reserved ?? 0);
         $variantId = $variant?->id ?? $product->defaultVariant?->id;
+        $available = (int) $stocks->sum(fn (ProductStock $s) => $s->sellableQuantity());
 
-        return max(0, $onHand - $reserved + $this->ownReserved($variantId ? (int) $variantId : null));
+        return max(0, $available + $this->ownReserved($variantId ? (int) $variantId : null));
     }
 
     protected function persistLine(int $productId, ?int $variantId, int $quantity, array $variantAttributes, array $customOptions): void
@@ -170,13 +192,13 @@ class CartService
         $products = Product::with([
             'description',
             'weightClass',
-            'defaultVariant.productStock',
+            'defaultVariant.productStocks',
             'defaultVariant.productVariantSpecial',
         ])->whereIn('id', $productIds)->dateAvailable()->get()->keyBy('id');
 
         $variants = $productVariantIds
             ? ProductVariant::with([
-                'productStock',
+                'productStocks',
                 'description',
                 'productVariantAttributes.optionValue.description',
                 'productVariantAttributes.option.description',
@@ -449,20 +471,21 @@ class CartService
             return true;
         }
 
-        $stock = $variant?->productStock
-            ?? $product->defaultVariant?->productStock;
+        $stocks = $this->sellableStocks($product, $variant);
 
-        if (! ($stock instanceof ProductStock)) {
+        if ($stocks->isEmpty()) {
             return false;
         }
 
-        if ($stock->policy()->bypassesStockCheck()) {
+        if ($this->effectivePolicy($stocks)->bypassesStockCheck()) {
             return true;
         }
 
-        // Cộng ngược phần phiên hiện tại đang tự giữ để không tự chặn chính mình.
+        // Cộng ngược phần phiên hiện tại đang tự giữ để không tự chặn chính mình
+        // (ownReserved đã SUM qua mọi kho — khớp tổng sellableQuantity bên dưới).
         $variantId = $variant?->id ?? $product->defaultVariant?->id;
-        $available = $stock->sellableQuantity() + $this->ownReserved($variantId ? (int) $variantId : null);
+        $available = (int) $stocks->sum(fn (ProductStock $s) => $s->sellableQuantity())
+            + $this->ownReserved($variantId ? (int) $variantId : null);
 
         return $available >= $quantity;
     }

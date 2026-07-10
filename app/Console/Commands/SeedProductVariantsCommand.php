@@ -571,10 +571,10 @@ class SeedProductVariantsCommand extends Command
         $variantId  = $startVariantId;
         $stockId    = $startStockId;
         $movementId = $startMovementId;
-        // Pulled once per batch from core.stock.default_warehouse_id so the
+        // Pulled once per batch from setting config_warehouse_id so the
         // seed payload follows the same single source of truth as runtime
-        // callers (ProductVariant::productStock, CreateOrderService, ...).
-        $warehouseId = (int) getCoreConfig('stock.default_warehouse_id');
+        // callers (ProductVariant::productStock, StockService, ...).
+        $warehouseId = (int) (getConfigDb('config_warehouse_id') ?: 1);
 
         foreach ($products as $product) {
             if (rand(1, 100) > $percent) {

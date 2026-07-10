@@ -6,28 +6,21 @@ use App\Enums\StockMovementType;
 use App\Enums\StockPolicy;
 use App\Exceptions\InsufficientStockException;
 use App\Models\Entities\ProductStock;
-use App\Models\Entities\StockMovement;
 use App\Models\Entities\StockReservation;
+use App\Repositories\Interfaces\ProductStockRepositoryInterface;
+use App\Repositories\Interfaces\StockMovementRepositoryInterface;
+use App\Repositories\Interfaces\StockReservationRepositoryInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
-/**
- * Nguồn duy nhất để thay đổi tồn kho có kiểm soát concurrency.
- *
- * Ba nhóm thao tác:
- *  - reserve / release   : giữ chỗ (hold) tồn cho một phiên checkout, có TTL.
- *  - deductForOrder      : trừ tồn thật khi tạo đơn, có GUARD chống oversell.
- *  - holderReservedMap   : trả về phần tồn mà chính phiên đang giữ, để lớp cart
- *                          cộng ngược lại (tránh phiên tự chặn chính mình).
- *
- * Mọi ghi vào product_stock đều đi qua lockForUpdate() trong transaction để
- * loại race condition khi nhiều request cùng chạm 1 variant lúc flash sale.
- */
 class StockService
 {
-    private function warehouseId(): int
-    {
-        return (int) getCoreConfig('stock.default_warehouse_id');
+    public function __construct(
+        protected ProductStockRepositoryInterface $productStockRepo,
+        protected StockReservationRepositoryInterface $stockReservationRepo,
+        protected StockMovementRepositoryInterface $stockMovementRepo,
+        protected WarehouseService $warehouseService,
+    ) {
     }
 
     private function ttlMinutes(): int
@@ -40,39 +33,46 @@ class StockService
         return (bool) getConfigDb('config_stock_checkout');
     }
 
-    // =====================================================================
-    // RESERVATION
-    // =====================================================================
+    private function lockSellableStocks(int $variantId): Collection
+    {
+        $ids = $this->warehouseService->sellableIds();
 
-    /**
-     * Giữ chỗ cho toàn bộ cart theo kiểu all-or-nothing trong 1 transaction.
-     * Chỉ variant có policy DENY mới cần giữ (backorder/untracked luôn bán được).
-     *
-     * @param  array<int,array{product_variant_id?:int|null,quantity:int,name?:string}>  $items
-     * @return array{ok:bool, failed?:array{name:string, available:int, requested:int}}
-     */
-    public function reserveCart(array $items, string $holder, ?int $userId): array
+        $productStocks = $this->productStockRepo->lockSellableStocks($variantId, $ids);
+
+        $flipIds = array_flip($ids);
+
+        return $productStocks->sortBy(fn (ProductStock $s) => $flipIds[(int) $s->warehouse_id] ?? PHP_INT_MAX)->values();
+    }
+
+    private function effectiveStockPolicy(Collection $stocks): StockPolicy
+    {
+        $row = $stocks->firstWhere('warehouse_id', $this->warehouseService->defaultId())
+            ?? $stocks->first();
+
+        return $row?->policy() ?? StockPolicy::Deny;
+    }
+
+    public function reserveCart(array $items, string $sessionHolder, ?int $userId): array
     {
         if (! $this->stockCheckoutEnabled()) {
             return ['ok' => true];
         }
 
         try {
-            return DB::transaction(function () use ($items, $holder, $userId) {
+            return $this->productStockRepo->transaction(function () use ($items, $sessionHolder, $userId) {
                 foreach ($items as $item) {
                     $variantId = (int) ($item['product_variant_id'] ?? 0);
-                    $qty = (int) ($item['quantity'] ?? 0);
-                    if ($variantId <= 0 || $qty <= 0) {
+                    $quantity = (int) ($item['quantity'] ?? 0);
+                    if ($variantId <= 0 || $quantity <= 0) {
                         continue;
                     }
 
-                    $result = $this->reserveOne($holder, $userId, $variantId, $qty);
+                    $result = $this->reserveOne($sessionHolder, $userId, $variantId, $quantity);
                     if (! ($result['ok'] ?? false)) {
-                        // Ném để rollback các dòng đã giữ trong cùng lượt gọi này.
                         throw new ReservationUnavailable([
                             'name'      => (string) ($item['name'] ?? ''),
                             'available' => (int) ($result['available'] ?? 0),
-                            'requested' => $qty,
+                            'requested' => $quantity,
                         ]);
                     }
                 }
@@ -84,95 +84,89 @@ class StockService
         }
     }
 
-    /**
-     * Giữ chỗ cho 1 variant. Idempotent theo (holder, variant): gọi lại chỉ điều
-     * chỉnh delta so với lượng phiên đang giữ và gia hạn TTL.
-     *
-     * @return array{ok:bool, available?:int}
-     */
-    private function reserveOne(string $holder, ?int $userId, int $variantId, int $wantQty): array
+    private function reserveOne(string $sessionHolder, ?int $userId, int $variantId, int $wantQuantity): array
     {
-        $warehouseId = $this->warehouseId();
+        $productStocks = $this->lockSellableStocks($variantId);
 
-        $stock = ProductStock::where('product_variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId)
-            ->lockForUpdate()
-            ->first();
-
-        // Không có row tồn → không quản kho ở đây; để guard lúc tạo đơn lo.
-        if (! $stock) {
+        if ($productStocks->isEmpty()) {
             return ['ok' => true];
         }
 
-        // Backorder & untracked luôn bán được → không cần giữ chỗ.
-        if ($stock->policy()->bypassesStockCheck()) {
+        if ($this->effectiveStockPolicy($productStocks)->bypassesStockCheck()) {
             return ['ok' => true];
         }
 
-        $existing = StockReservation::where('holder', $holder)
-            ->where('product_variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId)
-            ->first();
+        $stockReservations = $this->stockReservationRepo->reservationsForVariant($sessionHolder, $variantId)->keyBy('warehouse_id');
 
-        $prev = (int) ($existing->quantity ?? 0);
-        $onHand = (int) ($stock->on_hand ?? 0);
-        $reserved = (int) ($stock->reserved ?? 0);
-
-        // Tồn tối đa phiên NÀY có thể giữ = on_hand - (reserved của phiên khác).
-        $maxForHolder = $onHand - ($reserved - $prev);
-
-        if ($wantQty > $maxForHolder) {
-            return ['ok' => false, 'available' => max(0, $maxForHolder)];
+        $maxQtyForHolder = 0;
+        foreach ($productStocks as $stock) {
+            $alreadyHeldQuantity = (int) ($stockReservations->get((int) $stock->warehouse_id)?->quantity ?? 0);
+            $maxQtyForHolder += max(0, (int) $stock->on_hand - ((int) $stock->reserved - $alreadyHeldQuantity));
         }
 
-        $delta = $wantQty - $prev;
+        if ($wantQuantity > $maxQtyForHolder) {
+            return ['ok' => false, 'available' => max(0, $maxQtyForHolder)];
+        }
+
+        $remainingQuantity = $wantQuantity;
         $expiresAt = Carbon::now()->addMinutes($this->ttlMinutes());
 
-        if ($delta !== 0) {
-            $stock->reserved = $reserved + $delta;
-            $stock->version = (int) ($stock->version ?? 0) + 1;
-            $stock->save();
+        foreach ($productStocks as $stock) {
+            $warehouseId = (int) $stock->warehouse_id;
 
-            StockMovement::create([
-                'product_variant_id' => $variantId,
-                'warehouse_id'       => $warehouseId,
-                'type'               => $delta > 0 ? StockMovementType::Reserve : StockMovementType::Release,
-                'quantity_change'    => $delta,
-                'on_hand_after'      => $onHand,
-                'reference_type'     => 'reservation',
-                'reference_id'       => null,
-                'user_id'            => $userId ?: null,
-                'note'               => 'hold='.$holder,
-            ]);
-        }
+            $existingHold = $stockReservations->get($warehouseId);
+            $alreadyHeldQuantity = (int) ($existingHold?->quantity ?? 0);
+            $availableToHold = max(0, (int) $stock->on_hand - ((int) $stock->reserved - $alreadyHeldQuantity));
+            $quantityToHold = min($remainingQuantity, $availableToHold);
+            $remainingQuantity -= $quantityToHold;
 
-        if ($existing) {
-            $existing->quantity = $wantQty;
-            $existing->user_id = $userId ?: $existing->user_id;
-            $existing->expires_at = $expiresAt;
-            $existing->save();
-        } else {
-            StockReservation::create([
-                'holder'             => $holder,
-                'user_id'            => $userId ?: null,
-                'product_variant_id' => $variantId,
-                'warehouse_id'       => $warehouseId,
-                'quantity'           => $wantQty,
-                'expires_at'         => $expiresAt,
-            ]);
+            $reservedDelta = $quantityToHold - $alreadyHeldQuantity;
+            if ($reservedDelta !== 0) {
+                $stock->reserved = (int) $stock->reserved + $reservedDelta;
+                $stock->version = (int) ($stock->version ?? 0) + 1;
+                $this->productStockRepo->save($stock);
+
+                $this->stockMovementRepo->create([
+                    'product_variant_id' => $variantId,
+                    'warehouse_id'       => $warehouseId,
+                    'type'               => $reservedDelta > 0 ? StockMovementType::Reserve : StockMovementType::Release,
+                    'quantity_change'    => $reservedDelta,
+                    'on_hand_after'      => (int) $stock->on_hand,
+                    'reference_type'     => 'reservation',
+                    'reference_id'       => null,
+                    'user_id'            => $userId ?: null,
+                    'note'               => 'hold='.$sessionHolder,
+                ]);
+            }
+
+            if ($quantityToHold > 0) {
+                if ($existingHold) {
+                    $existingHold->quantity = $quantityToHold;
+                    $existingHold->user_id = $userId ?: $existingHold->user_id;
+                    $existingHold->expires_at = $expiresAt;
+                    $this->stockReservationRepo->saveReservation($existingHold);
+                } else {
+                    $this->stockReservationRepo->createReservation([
+                        'holder'             => $sessionHolder,
+                        'user_id'            => $userId ?: null,
+                        'product_variant_id' => $variantId,
+                        'warehouse_id'       => $warehouseId,
+                        'quantity'           => $quantityToHold,
+                        'expires_at'         => $expiresAt,
+                    ]);
+                }
+            } elseif ($existingHold) {
+                $this->stockReservationRepo->deleteReservation($existingHold);
+            }
         }
 
         return ['ok' => true];
     }
 
-    /**
-     * Nhả toàn bộ hold của 1 phiên (khi rời checkout / xoá cart / sau khi đặt đơn
-     * xong với các dòng thừa). Trả về số row đã nhả.
-     */
     public function releaseHolder(string $holder): int
     {
-        return (int) DB::transaction(function () use ($holder) {
-            $rows = StockReservation::where('holder', $holder)->get();
+        return (int) $this->productStockRepo->transaction(function () use ($holder) {
+            $rows = $this->stockReservationRepo->reservationsForHolder($holder);
             $count = 0;
             foreach ($rows as $row) {
                 $this->releaseReservationRow($row);
@@ -183,20 +177,13 @@ class StockService
         });
     }
 
-    /**
-     * Nhả các hold đã hết hạn — gọi định kỳ bởi command stock:release-expired.
-     * Trả về số hold đã nhả.
-     */
     public function releaseExpired(int $limit = 500): int
     {
-        $expired = StockReservation::whereNotNull('expires_at')
-            ->where('expires_at', '<', Carbon::now())
-            ->limit($limit)
-            ->get();
+        $expired = $this->stockReservationRepo->expiredReservations($limit);
 
         $count = 0;
         foreach ($expired as $row) {
-            DB::transaction(function () use ($row) {
+            $this->productStockRepo->transaction(function () use ($row) {
                 $this->releaseReservationRow($row);
             });
             $count++;
@@ -205,28 +192,21 @@ class StockService
         return $count;
     }
 
-    /**
-     * Nhả 1 row hold: product_stock.reserved -= quantity, ghi movement, xoá row.
-     * Phải chạy trong transaction (caller đảm bảo).
-     */
     private function releaseReservationRow(StockReservation $row): void
     {
         $variantId = (int) $row->product_variant_id;
         $warehouseId = (int) $row->warehouse_id;
         $qty = (int) $row->quantity;
 
-        $stock = ProductStock::where('product_variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId)
-            ->lockForUpdate()
-            ->first();
+        $productStock = $this->productStockRepo->lockStock($variantId, $warehouseId);
 
-        if ($stock && $qty > 0) {
-            $onHand = (int) ($stock->on_hand ?? 0);
-            $stock->reserved = max(0, (int) ($stock->reserved ?? 0) - $qty);
-            $stock->version = (int) ($stock->version ?? 0) + 1;
-            $stock->save();
+        if ($productStock && $qty > 0) {
+            $onHand = (int) ($productStock->on_hand ?? 0);
+            $productStock->reserved = max(0, (int) ($productStock->reserved ?? 0) - $qty);
+            $productStock->version = (int) ($productStock->version ?? 0) + 1;
+            $this->productStockRepo->save($productStock);
 
-            StockMovement::create([
+            $this->stockMovementRepo->create([
                 'product_variant_id' => $variantId,
                 'warehouse_id'       => $warehouseId,
                 'type'               => StockMovementType::Release,
@@ -239,12 +219,12 @@ class StockService
             ]);
         }
 
-        $row->delete();
+        $this->stockReservationRepo->deleteReservation($row);
     }
 
     /**
-     * Bản đồ [variant_id => quantity] mà 1 phiên đang giữ, dùng để cộng ngược
-     * vào tồn khả bán khi hiển thị/validate cart (tránh phiên tự chặn chính mình).
+     * Bản đồ [variant_id => quantity] mà 1 phiên đang giữ — SUM qua mọi kho
+     * (một variant có thể được hold rải trên nhiều kho).
      *
      * @return array<int,int>
      */
@@ -254,25 +234,10 @@ class StockService
             return [];
         }
 
-        return StockReservation::where('holder', $holder)
-            ->pluck('quantity', 'product_variant_id')
-            ->map(fn ($q) => (int) $q)
-            ->all();
+        return $this->stockReservationRepo->holderReservedMap($holder);
     }
 
-    // =====================================================================
-    // ORDER DEDUCTION (guarded)
-    // =====================================================================
-
-    /**
-     * Trừ tồn thật cho 1 dòng đơn hàng — GUARD chống oversell.
-     *
-     * Phải được gọi BÊN TRONG transaction của việc tạo đơn: nếu ném
-     * InsufficientStockException thì cả đơn rollback.
-     *
-     * @param  array{product_variant_id?:int|null, id?:int|string, quantity:int, order_id?:int|null}  $item
-     */
-    public function deductForOrder(array $item, string $holder, ?int $userId): void
+    public function deductForOrder(array $item, string $sessionHolder, ?int $userId): void
     {
         $variantId = (int) ($item['product_variant_id'] ?? 0);
         $qty = (int) ($item['quantity'] ?? 0);
@@ -286,14 +251,9 @@ class StockService
             return;
         }
 
-        $warehouseId = $this->warehouseId();
+        $stocks = $this->lockSellableStocks($variantId);
 
-        $stock = ProductStock::where('product_variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId)
-            ->lockForUpdate()
-            ->first();
-
-        if (! $stock) {
+        if ($stocks->isEmpty()) {
             logError(sprintf(
                 'deductForOrder: no product_stock row for variant %d; stock not decremented',
                 $variantId,
@@ -302,87 +262,120 @@ class StockService
             return;
         }
 
-        $policy = $stock->policy();
+        $policy = $this->effectiveStockPolicy($stocks);
+
         if ($policy === StockPolicy::Untracked) {
-            $this->consumeHolderReservation($holder, $variantId, $warehouseId, $qty, (int) ($stock->on_hand ?? 0), $userId);
+            $this->consumeAllHolderReservations($sessionHolder, $variantId, $stocks);
 
             return;
         }
 
-        $onHand = (int) ($stock->on_hand ?? 0);
-        $newOnHand = $onHand - $qty;
+        $totalAvailable = $stocks->sum(fn (ProductStock $s) => max(0, (int) $s->on_hand));
 
         // GUARD: chặn oversell cho policy DENY khi cửa hàng bật kiểm tra tồn.
-        if ($newOnHand < 0 && $policy === StockPolicy::Deny && $this->stockCheckoutEnabled()) {
-            throw new InsufficientStockException($variantId, $qty, max(0, $onHand));
+        if ($qty > $totalAvailable && $policy === StockPolicy::Deny && $this->stockCheckoutEnabled()) {
+            throw new InsufficientStockException($variantId, $qty, max(0, $totalAvailable));
         }
 
-        // Nhả phần hold của chính phiên này (nếu có) đồng thời với việc trừ tồn.
-        $releasedReserved = $this->consumeHolderReservationQty($holder, $variantId, $warehouseId, $qty);
+        $holds = $this->stockReservationRepo->reservationsForVariant($sessionHolder, $variantId)
+            ->keyBy('warehouse_id');
 
+        // Kho có hold của phiên đứng trước, trong mỗi nhóm giữ nguyên priority.
+        $ordered = $stocks
+            ->sortBy(fn (ProductStock $s, int $i) => [$holds->has((int) $s->warehouse_id) ? 0 : 1, $i])
+            ->values();
+
+        $remaining = $qty;
+        foreach ($ordered as $stock) {
+            if ($remaining <= 0) {
+                break;
+            }
+            $take = min($remaining, max(0, (int) $stock->on_hand));
+            if ($take <= 0) {
+                continue;
+            }
+
+            $this->applyDeduction($stock, $take, $holds, $sessionHolder, $item, $userId, StockMovementType::Sale);
+            $remaining -= $take;
+        }
+
+        // Phần thiếu: backorder ghi âm vào kho mặc định (hoặc deny khi cửa hàng
+        // tắt kiểm tra tồn — giữ hành vi cũ: vẫn trừ, chấp nhận âm).
+        if ($remaining > 0) {
+            $target = $stocks->firstWhere('warehouse_id', $this->warehouseService->defaultId())
+                ?? $stocks->first();
+
+            $type = $policy === StockPolicy::Backorder
+                ? StockMovementType::SaleBackorder
+                : StockMovementType::Sale;
+
+            $this->applyDeduction($target, $remaining, $holds, $sessionHolder, $item, $userId, $type);
+        }
+    }
+
+    /**
+     * Trừ $take khỏi 1 row kho: dọn hold của phiên tại kho đó, cập nhật
+     * on_hand/reserved, ghi movement. Row đã được lock từ trước.
+     *
+     * @param  \Illuminate\Support\Collection<int, StockReservation>  $holds  keyBy warehouse_id
+     */
+    private function applyDeduction(
+        ProductStock $stock,
+        int $take,
+        $holds,
+        string $holder,
+        array $item,
+        ?int $userId,
+        StockMovementType $type,
+    ): void {
+        $warehouseId = (int) $stock->warehouse_id;
+
+        // Nhả TOÀN BỘ hold của phiên tại kho này (không chỉ min(held, take)) —
+        // hold tồn tại vì dòng đơn này; giữ phần dư là leak reserved vĩnh viễn.
+        $released = 0;
+        $hold = $holds->get($warehouseId);
+        if ($holder !== '' && $hold) {
+            $released = (int) $hold->quantity;
+            $this->stockReservationRepo->deleteReservation($hold);
+            $holds->forget($warehouseId);
+        }
+
+        $newOnHand = (int) $stock->on_hand - $take;
         $stock->on_hand = $newOnHand;
-        $stock->reserved = max(0, (int) ($stock->reserved ?? 0) - $releasedReserved);
+        $stock->reserved = max(0, (int) ($stock->reserved ?? 0) - $released);
         $stock->version = (int) ($stock->version ?? 0) + 1;
-        $stock->save();
+        $this->productStockRepo->save($stock);
 
-        $isBackorder = $newOnHand < 0 && $policy === StockPolicy::Backorder;
-
-        StockMovement::create([
-            'product_variant_id' => $variantId,
+        $this->stockMovementRepo->create([
+            'product_variant_id' => (int) $stock->product_variant_id,
             'warehouse_id'       => $warehouseId,
-            'type'               => $isBackorder ? StockMovementType::SaleBackorder : StockMovementType::Sale,
-            'quantity_change'    => -$qty,
+            'type'               => $type,
+            'quantity_change'    => -$take,
             'on_hand_after'      => $newOnHand,
             'reference_type'     => 'order',
             'reference_id'       => $item['order_id'] ?? null,
             'user_id'            => $userId ?: null,
-            'note'               => $isBackorder ? 'Sale exceeded on_hand — backorder backlog' : null,
+            'note'               => $type === StockMovementType::SaleBackorder
+                ? 'Sale exceeded on_hand — backorder backlog'
+                : null,
         ]);
     }
 
-    /**
-     * Xoá row hold của phiên cho variant (nếu có) và trả về lượng đã giữ để
-     * caller trừ khỏi product_stock.reserved. KHÔNG tự sửa reserved (caller làm).
-     */
-    private function consumeHolderReservationQty(string $holder, int $variantId, int $warehouseId, int $qty): int
+    private function consumeAllHolderReservations(string $holder, int $variantId, Collection $stocks): void
     {
         if ($holder === '') {
-            return 0;
-        }
-
-        $row = StockReservation::where('holder', $holder)
-            ->where('product_variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId)
-            ->first();
-
-        if (! $row) {
-            return 0;
-        }
-
-        $held = (int) $row->quantity;
-        $row->delete();
-
-        // Chỉ nhả tối đa bằng lượng thực trừ để reserved không lệch âm.
-        return min($held, max(0, $qty));
-    }
-
-    /**
-     * Dùng cho nhánh untracked: chỉ dọn hold (nếu lỡ có) mà không đụng on_hand.
-     */
-    private function consumeHolderReservation(string $holder, int $variantId, int $warehouseId, int $qty, int $onHand, ?int $userId): void
-    {
-        $released = $this->consumeHolderReservationQty($holder, $variantId, $warehouseId, $qty);
-        if ($released <= 0) {
             return;
         }
 
-        $stock = ProductStock::where('product_variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId)
-            ->lockForUpdate()
-            ->first();
-        if ($stock) {
-            $stock->reserved = max(0, (int) ($stock->reserved ?? 0) - $released);
-            $stock->save();
+        $holds = $this->stockReservationRepo->reservationsForVariant($holder, $variantId);
+
+        foreach ($holds as $hold) {
+            $stock = $stocks->firstWhere('warehouse_id', (int) $hold->warehouse_id);
+            if ($stock) {
+                $stock->reserved = max(0, (int) ($stock->reserved ?? 0) - (int) $hold->quantity);
+                $this->productStockRepo->save($stock);
+            }
+            $this->stockReservationRepo->deleteReservation($hold);
         }
     }
 }

@@ -4,10 +4,6 @@ namespace App\Http\Requests\Web;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Validate input cho save order. Thay cho OrderValidator->validateCreate cũ
- * (class validator legacy không còn tồn tại trong project).
- */
 class CheckoutSaveOrderRequest extends FormRequest
 {
     public function authorize(): bool

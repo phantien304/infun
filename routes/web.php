@@ -38,6 +38,8 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::post('consult-sign', 'CheckoutController@consultSign')->name('checkout.consultSign');
         Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder')->middleware('throttle:10,1');
         Route::get('success', 'CheckoutController@success')->name('checkout.success');
+        Route::get('processing', 'CheckoutController@processing')->name('checkout.processing')->withoutMiddleware(['cache_page']);
+        Route::get('status', 'CheckoutController@orderStatus')->name('checkout.status')->withoutMiddleware(['cache_page']);
         Route::get('shipping', 'CheckoutController@recalcTotals')->name('checkout.shipping');
         Route::post('payment/call-back', 'CheckoutController@paymentCallBack')->name('checkout.paymentCallBack')->withoutMiddleware(['cache_page']);
         Route::get('/', 'CheckoutController@index')->name('checkout.index');

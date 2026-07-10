@@ -458,7 +458,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             'manufacturer',
             'stockStatus',
             'productCategories.category.description',
-            'defaultVariant.productStock',
+            'defaultVariant.productStocks',
             'defaultVariant.productVariantSpecial',
         ];
     }
@@ -485,7 +485,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 ->orderBy('id', 'ASC'),
             'productVariants.productVariantAttributes.optionValue.description',
             'productVariants.productVariantAttributes.option.description',
-            'productVariants.productStock',
+            'productVariants.productStocks',
             'productVariants.description',
             'productVariants.productVariantSpecial',
         ]);

@@ -2,63 +2,44 @@
 
 namespace App\Services\Checkout;
 
-use App\Models\Entities\OrdersProduct;
-use App\Models\Entities\OrdersProductOption;
-use App\Models\Entities\OrdersTotal;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 use App\Services\Currency\CurrencyService;
 use App\Services\Stock\StockService;
-use Illuminate\Support\Facades\DB;
 
-/**
- * Build an order + write its sub-tables (orders_product, orders_product_option,
- * orders_total, coupon_history, voucher_history, user_reward) in a single
- * transaction.
- *
- * Subtract stock: post unify_simple_product_stock migration every cart line
- * carries a product_variant_id (default variants are created for simple
- * products), so subtractStock takes one path through product_stock guarded by
- * inventory_policy. Variants whose policy is BACKORDER are allowed to drive
- * on_hand negative — that negative is the "bán khống" backlog admins act on.
- * A legacy fallback to product.quantity exists for cart lines that pre-date
- * the migration; it will be removed once the legacy columns are dropped.
- */
 class CreateOrderService
 {
     public function __construct(
         protected OrderRepositoryInterface $orderRepo,
-        protected UserRewardRepositoryInterface $rewardRepo,
-        protected PromotionService $promotions,
-        protected StockService $stock,
+        protected UserRewardRepositoryInterface $userRewardRepo,
+        protected PromotionService $promotionService,
+        protected StockService $stockService,
         protected CurrencyService $currencyService,
     ) {
     }
 
-    public function create(CheckoutPromotions $ctx, array $params, array $totalData, int $total): int
+    public function create(CheckoutPromotions $promotions, array $params, array $totalData, int $total): int
     {
-        return DB::transaction(function () use ($ctx, $params, $totalData, $total) {
+        return $this->orderRepo->transaction(function () use ($promotions, $params, $totalData, $total) {
             $uniqid = strtoupper(uniqid());
 
-            $order = $this->orderRepo->upsertOrder($this->buildOrderRow($ctx, $params, $total, $uniqid));
-            $ctx->setOrderId($order->id);
+            $order = $this->orderRepo->upsertOrder($this->buildOrderRow($params, $total, $uniqid));
+            $promotions->setOrderId($order->id);
 
             $this->orderRepo->appendHistory($order->id, (int) getConfigDb('order_status_id'));
 
-            $this->writeOrderItems($ctx, $order->id);
+            $this->writeOrderItems($promotions, $order->id);
             $this->writeOrderTotals($order->id, $totalData);
-            $this->promotions->recordForOrder($ctx, $order->id, $total);
-            $this->writeUserReward($ctx);
+            $this->promotionService->recordForOrder($promotions, $order->id, $total);
+            $this->writeUserReward($promotions);
 
             return $order->id;
         });
     }
 
-    protected function buildOrderRow(CheckoutPromotions $ctx, array $params, int $total, string $uniqid): array
+    protected function buildOrderRow(array $params, int $total, string $uniqid): array
     {
         $shipping = (array) session()->get(getCoreConfig('session.cart_shipping'), []);
-        // Snapshot đồng đang chọn: total lưu theo ĐỒNG GỐC; currency_code/value/id
-        // đóng băng để hiển thị lại đơn đúng tỷ giá tại thời điểm mua.
         $currency = $this->currencyService->currentCurrency();
 
         return [
@@ -71,7 +52,7 @@ class CreateOrderService
             'email'             => $params['email'] ?? '',
             'telephone'         => $params['telephone'] ?? '',
             'address'           => $params['address'] ?? '',
-            'country_id'        => 230,
+            'country_id'        => getCoreConfig('zones.country_id_default'),
             'zone'              => $params['zone_name'] ?? '',
             'zone_id'           => $params['zone_id'] ?? null,
             'district'          => $params['district_name'] ?? '',
@@ -81,7 +62,7 @@ class CreateOrderService
             'payment_code'      => $params['payment_code'] ?? '',
             'carrier_code'      => $params['carrier_code'] ?? '',
             'comment'           => $params['comment'] ?? '',
-            'width_class_id'    => getConfigDb('config_length_class_id'),
+            'length_class_id'   => getConfigDb('config_length_class_id'),
             'width'             => $shipping['width'] ?? 0,
             'height'            => $shipping['height'] ?? 0,
             'length'            => $shipping['length'] ?? 0,
@@ -100,61 +81,59 @@ class CreateOrderService
         ];
     }
 
-    /**
-     * Write orders_product + orders_product_option for each line and
-     * decrement stock. Post-unify the stock path is a single branch
-     * through product_stock (see subtractStock); the order_id is forwarded
-     * so the audit row in stock_movement can point back to the order.
-     */
-    protected function writeOrderItems(CheckoutPromotions $ctx, int $orderId): void
+    protected function writeOrderItems(CheckoutPromotions $promotions, int $orderId): void
     {
-        foreach ($ctx->items as $item) {
+        foreach ($promotions->items as $item) {
             $this->subtractStock($item + ['order_id' => $orderId]);
 
-            // Cluster variant: cột product_variant_id link 1 row order ↔ 1
-            // variant cụ thể (migration 2026_05_31_000000). Cho phép NULL với
-            // simple product (has_variants = false) và row legacy trước migrate.
-            $orderProduct = OrdersProduct::create([
-                'order_id'           => $orderId,
-                'product_id'         => $item['id'],
-                'product_variant_id' => $item['product_variant_id'] ?? null,
-                'name'               => $item['name'].($item['variant_label'] ? ' ('.$item['variant_label'].')' : ''),
-                'model'              => $item['model'] ?? '',
-                'quantity'           => $item['quantity'],
-                'price'              => $item['price'],
-                'total'              => $item['total'],
-                'reward'             => $item['reward'] ?? 0,
-            ]);
-
-            foreach ((array) ($item['option'] ?? []) as $opt) {
-                // Schema `orders_product_option` thực tế KHÔNG có cột
-                // `product_id` (đã verify trên DB live) — trait CreateOrder
-                // cũ ghi sai sẽ throw "Unknown column". Chỉ ghi `order_product_id`.
-                OrdersProductOption::create([
-                    'order_id'                => $orderId,
-                    'order_product_id'        => $orderProduct->id,
-                    'product_option_id'       => $opt['option_id'] ?? null,
-                    'product_option_value_id' => $opt['product_option_value_id'] ?? null,
-                    'image'                   => $opt['image'] ?? '',
-                    'name'                    => $opt['name'] ?? '',
-                    'value'                   => $opt['value'] ?? '',
-                    'type'                    => $opt['type'] ?? '',
-                    'variation'               => $opt['variation'] ?? 2,
-                    'required'                => $opt['required'] ?? 0,
-                    'children'                => serialize($opt['child'] ?? []),
-                ]);
-            }
+            $this->orderRepo->createOrderItem(
+                $this->buildOrderProductRow($item, $orderId),
+                $this->buildOrderProductOptionRows($item),
+            );
         }
     }
 
+    protected function buildOrderProductRow(array $item, int $orderId): array
+    {
+        return [
+            'order_id'           => $orderId,
+            'product_id'         => $item['id'],
+            'product_variant_id' => $item['product_variant_id'] ?? null,
+            'name'               => $item['name'].($item['variant_label'] ? ' ('.$item['variant_label'].')' : ''),
+            'model'              => $item['model'] ?? '',
+            'quantity'           => $item['quantity'],
+            'price'              => $item['price'],
+            'total'              => $item['total'],
+            'reward'             => $item['reward'] ?? 0,
+        ];
+    }
+
     /**
-     * Trừ tồn cho 1 dòng đơn — uỷ quyền StockService::deductForOrder (lockForUpdate
-     * + GUARD chống oversell: ném InsufficientStockException để rollback cả đơn khi
-     * vượt tồn với policy DENY). Đồng thời nhả hold của phiên (holder = session id).
+     * @return array<int,array<string,mixed>>
      */
+    protected function buildOrderProductOptionRows(array $item): array
+    {
+        $rows = [];
+        foreach ((array) ($item['option'] ?? []) as $opt) {
+            $rows[] = [
+                'product_option_id'       => $opt['option_id'] ?? null,
+                'product_option_value_id' => $opt['product_option_value_id'] ?? null,
+                'image'                   => $opt['image'] ?? '',
+                'name'                    => $opt['name'] ?? '',
+                'value'                   => $opt['value'] ?? '',
+                'type'                    => $opt['type'] ?? '',
+                'variation'               => $opt['variation'] ?? 2,
+                'required'                => $opt['required'] ?? 0,
+                'children'                => serialize($opt['child'] ?? []),
+            ];
+        }
+
+        return $rows;
+    }
+
     protected function subtractStock(array $item): void
     {
-        $this->stock->deductForOrder(
+        $this->stockService->deductForOrder(
             $item,
             (string) session()->getId(),
             (int) getCurrentUserId() ?: null,
@@ -164,7 +143,7 @@ class CreateOrderService
     protected function writeOrderTotals(int $orderId, array $totalData): void
     {
         foreach ($totalData as $i => $row) {
-            OrdersTotal::create([
+            $this->orderRepo->createOrderTotal([
                 'order_id'   => $orderId,
                 'code'       => $row['code'],
                 'title'      => $row['title'],
@@ -180,6 +159,6 @@ class CreateOrderService
             return;
         }
         $points = (int) array_sum(array_column($ctx->items, 'reward'));
-        $this->rewardRepo->recordOrderReward((int) auth()->id(), $ctx->orderId, $points);
+        $this->userRewardRepo->recordOrderReward((int) auth()->id(), $ctx->orderId, $points);
     }
 }

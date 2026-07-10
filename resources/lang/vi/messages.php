@@ -126,6 +126,8 @@ return [
     'ErrorProductOrder' => 'Không có sản phẩm trong đơn hàng của bạn.',
     'ErrorMinimum' => 'Số lượng đặt tối thiểu cho %s là %s',
     'ErrorCreateOrder' => 'Opt, có lỗi đã xảy ra, bạn không thể tạo đơn hàng.',
+    'OrderProcessing' => 'Đơn hàng của bạn đang được xử lý, vui lòng không đóng trang hay bấm đặt hàng lại. Trang sẽ tự chuyển khi hoàn tất.',
+    'OrderProcessingTitle' => 'Đang xử lý đơn hàng...',
     'ErrorAction' => 'Opt, có lỗi đã xảy ra.',
     'ErrorValidation' => 'Dữ liệu không hợp lệ, vui lòng kiểm tra lại.',
     'ErrorSaveAction' => 'Opt, có lỗi đã xảy ra. Vui lòng kiểm tra lại.',

@@ -26,6 +26,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\ConfigDbService::class);
         $this->app->singleton(\App\Services\Measurement\LengthService::class);
         $this->app->singleton(\App\Services\Measurement\WeightService::class);
+        $this->app->singleton(\App\Services\Stock\WarehouseService::class);
     }
 
     public function boot(): void

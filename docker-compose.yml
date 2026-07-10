@@ -46,6 +46,47 @@ services:
       DB_PASSWORD: root
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # .env để predis cho Herd (PHP Windows không có ext redis);
+      # image này đã pecl install redis → override lên phpredis.
+      REDIS_CLIENT: phpredis
+      SCOUT_DRIVER: meilisearch
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_KEY: ""
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Queue worker — xử lý job async (mail đơn hàng, thông báo...).
+  # QUEUE_CONNECTION=redis trong .env; không có worker thì job chất đống.
+  # --max-time=3600: worker tự thoát mỗi giờ, restart policy kéo lại →
+  # tránh memory leak tích lũy trong process chạy dài.
+  # ──────────────────────────────────────────────────────────────────────
+  infun-queue:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: infun-queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=90 --max-time=3600
+    volumes:
+      - ./:/var/www/html
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: infun
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_CLIENT: phpredis
       SCOUT_DRIVER: meilisearch
       MEILISEARCH_HOST: http://meilisearch:7700
       MEILISEARCH_KEY: ""

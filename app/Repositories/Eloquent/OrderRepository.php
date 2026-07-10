@@ -5,6 +5,9 @@ namespace App\Repositories\Eloquent;
 use App\Models\Entities\Orders;
 use App\Models\Entities\OrdersCancel;
 use App\Models\Entities\OrdersHistory;
+use App\Models\Entities\OrdersProduct;
+use App\Models\Entities\OrdersProductOption;
+use App\Models\Entities\OrdersTotal;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use Carbon\Carbon;
@@ -101,6 +104,25 @@ class OrderRepository extends QueryableRepository implements OrderRepositoryInte
             'order_status_id' => $statusId,
             'user_id'         => $userId,
         ]);
+    }
+
+    public function createOrderItem(array $productData, array $optionsData): OrdersProduct
+    {
+        $orderProduct = OrdersProduct::create($productData);
+
+        foreach ($optionsData as $opt) {
+            OrdersProductOption::create($opt + [
+                'order_id'         => $orderProduct->order_id,
+                'order_product_id' => $orderProduct->id,
+            ]);
+        }
+
+        return $orderProduct;
+    }
+
+    public function createOrderTotal(array $data): OrdersTotal
+    {
+        return OrdersTotal::create($data);
     }
 
     public function ensureHistory(int $orderId, int $statusId): void

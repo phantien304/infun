@@ -24,6 +24,11 @@ class ProductStock extends Base
         return $this->belongsTo(ProductVariant::class, 'product_variant_id', 'id');
     }
 
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class, 'warehouse_id', 'id');
+    }
+
     public function policy(): StockPolicy
     {
         return $this->inventory_policy ?? StockPolicy::Deny;

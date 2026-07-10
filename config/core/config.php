@@ -97,6 +97,7 @@ return [
         'applied_gifts'    => 'checkout.applied_gifts',
         'applied_vouchers' => 'checkout.applied_vouchers',
         'checkout_idem'    => 'checkout.idempotency_key',
+        'checkout_pending' => 'checkout.pending_idem',
     ],
     'shipping' => [
         'default' => 'vtp'
@@ -154,6 +155,7 @@ return [
         'languages' => 'languages_',
         'length_classes' => 'length_classes',
         'weight_classes' => 'weight_classes',
+        'warehouses' => 'warehouses',
         'review' => [
             'tag_root'         => 'review_root',
             'tag_criteria'     => 'review_criteria',
@@ -248,7 +250,6 @@ return [
         'role_variant' => 1,
     ],
     'stock' => [
-        'default_warehouse_id' => 1,
         'reservation_ttl_minutes' => 6,
     ],
     'review' => [

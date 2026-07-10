@@ -220,9 +220,10 @@ class ProductOptionService
             }
             ksort($attributes);
 
-            $stock = $variant->productStock;
-            $available = $stock ? $stock->sellableQuantity() : 999;
-            $subtract = $stock ? (bool) $stock->subtract : false;
+            // Đa kho: tổng tồn khả bán qua mọi kho sellable, không chỉ kho mặc định.
+            $hasStock = $variant->hasSellableStock();
+            $available = $hasStock ? $variant->sellableQuantityTotal() : 999;
+            $subtract = (bool) ($variant->effectiveStockRow()?->subtract ?? false);
 
             [$effectivePrice, $strikePrice, $special] = $this->resolveVariantPricing($variant);
 
@@ -240,7 +241,7 @@ class ProductOptionService
                 'is_default'      => (bool) $variant->is_default,
                 'available'       => $available,
                 'subtract'        => $subtract,
-                'has_stock'       => $stock !== null,
+                'has_stock'       => $hasStock,
                 'label'           => $variant->description?->label,
                 'note'            => $variant->description?->note,
             ];
@@ -268,8 +269,6 @@ class ProductOptionService
         }
         ksort($attributes);
 
-        $stock = $default->productStock;
-
         [$effectivePrice, $strikePrice, $special] = $this->resolveVariantPricing($default);
 
         return [
@@ -281,7 +280,7 @@ class ProductOptionService
             'special'         => $special,
             'image'           => $default->image,
             'attributes'      => $attributes,
-            'available'       => $stock ? $stock->sellableQuantity() : 0,
+            'available'       => $default->hasSellableStock() ? $default->sellableQuantityTotal() : 0,
             'sku'             => $default->sku,
             'label'           => $default->description?->label,
             'note'            => $default->description?->note,

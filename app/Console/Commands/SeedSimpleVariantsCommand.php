@@ -46,7 +46,7 @@ class SeedSimpleVariantsCommand extends Command
     {
         $chunk    = max(500, (int) $this->option('chunk'));
         $policy   = (StockPolicy::fromName($this->option('policy')) ?? StockPolicy::Deny)->value;
-        $warehouseId = (int) (getCoreConfig('stock.default_warehouse_id') ?? 1);
+        $warehouseId = (int) (getConfigDb('config_warehouse_id') ?: 1);
 
         // Đếm trước để biết khối lượng + cho progress bar.
         $remaining = (int) DB::table('product as p')

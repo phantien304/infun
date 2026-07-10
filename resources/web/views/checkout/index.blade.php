@@ -52,6 +52,9 @@
                     @if (session()->has('failed'))
                         <div class="alert alert-danger">{!! session()->get('failed') !!}</div>
                     @endif
+                    @if (session()->has('info'))
+                        <div class="alert alert-warning">{!! session()->get('info') !!}</div>
+                    @endif
                     @if (filled($error))
                         <div class="alert alert-danger">{!! $error !!}</div>
                     @endif

@@ -964,6 +964,24 @@ build totals). Lang: `messages.checkout.reward.*`.
 - **Job quét expires_at**: balance query đã tự loại điểm hết hạn, job chỉ cần
   nếu muốn ghi row EXPIRE tường minh cho user xem lịch sử.
 
+## Hệ Affiliate — Phase 1 (DB/models/repos) DONE 2026-07-10
+
+Kế hoạch đầy đủ + business đã chốt: xem `AFFILIATE-PLAN.md`. Tóm tắt:
+- Migration `2026_07_10_000001_create_affiliate_tables.php`: 7 bảng
+  (affiliate, affiliate_link — short link `/l/{slug}`, affiliate_click —
+  click_token kiểu uls_trackid Shopee, affiliate_conversion — ledger hoa hồng
+  1 đơn/1 affiliate, affiliate_payout, affiliate_coupon — coupon riêng KOL,
+  affiliate_commission_rule — % theo category). orders DROP
+  tracking/commission/marketing_id (vestigial OpenCart), affiliate_id thành
+  FK SET NULL. Seed 6 `config_affiliate_*`.
+- Enums AffiliateStatus / AffiliateConversionStatus / AffiliatePayoutStatus;
+  7 models; repos Affiliate / AffiliateLink / AffiliateConversion (idempotent,
+  sẵn approve/reject cho observer Phase 3 — pattern giống reward).
+- CHÚ Ý kiểu FK: user.id BIGINT UNSIGNED, coupon/category/orders.id INT
+  SIGNED → PK affiliate INT SIGNED.
+- Phase 2-6 (tracking middleware, conversion, portal, admin/payout,
+  anti-fraud) CHƯA làm — theo AFFILIATE-PLAN.md mục 3.
+
 ## Schema `product_image` cluster (refactor 2026-06-03)
 
 Bảng cũ chỉ có `id, product_id, image, sort_order, timestamps` — không đủ cho

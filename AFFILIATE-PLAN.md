@@ -47,9 +47,24 @@ affiliate (
     created_at, updated_at
 )
 
+affiliate_link (                        -- link rút gọn kiểu s.shopee.vn (xem mục 2.4)
+    id INT PK AUTO,
+    affiliate_id INT FK CASCADE,
+    slug VARCHAR(10) UNIQUE,            -- /l/{slug}, random base62 8 ký tự
+    destination_url VARCHAR(512),       -- URL đích trong site (validate cùng domain!)
+    product_id INT NULL,                -- deep link SP (để report top SP theo KOL)
+    sub_id VARCHAR(64) NULL,            -- KOL tự đặt để tách kênh (bio IG / TikTok...)
+    clicks_count INT DEFAULT 0,         -- aggregate cache
+    created_at, updated_at
+)
+
 affiliate_click (
     id BIGINT PK AUTO,
     affiliate_id INT FK CASCADE,
+    affiliate_link_id INT NULL FK,      -- NULL nếu click từ ?ref= trực tiếp
+    click_token VARCHAR(16) UNIQUE,     -- random token gắn lên URL đích (uls_trackid
+                                        -- của Shopee) — khóa join click ↔ conversion
+    sub_id VARCHAR(64) NULL,            -- copy từ link lúc click (link sửa sau không lệch data)
     session_id VARCHAR(64),             -- match session checkout
     ip VARCHAR(45), user_agent VARCHAR(255),
     landing_url VARCHAR(512), referrer VARCHAR(512),
@@ -96,6 +111,37 @@ affiliate_coupon (                      -- map coupon riêng của KOL
 Phase sau (không làm ngay): `commission_rule` (override % theo
 category/product — như product_reward override earn rate).
 
+### 2.4. Link rút gọn + auto-UTM (cơ chế kiểu Shopee)
+
+Shopee sinh link dạng `s.shopee.vn/xxx` → 302 redirect sang URL đích kèm:
+`uls_trackid=...&utm_source=an_<affiliate>&utm_medium=affiliates&utm_campaign=id_<link>&utm_term=<click_token>&utm_content=<sub_id>`.
+Hai giá trị của cơ chế này, ta làm tương tự:
+
+1. **Click log server-side tại redirect** — route `GET /l/{slug}`:
+   lookup `affiliate_link` (cache theo slug) → insert `affiliate_click`
+   (sinh `click_token` random) → set cookie `aff_ref` → 302 sang
+   `destination_url` với params tự gắn:
+   ```
+   ?aff=<affiliate.code>&aff_click=<click_token>
+   &utm_source=aff_<affiliate.code>&utm_medium=affiliates
+   &utm_campaign=link_<slug>&utm_content=<sub_id>
+   ```
+   Click được ghi TRƯỚC khi landing load → không phụ thuộc JS/cookie
+   phía trang đích; UTM chuẩn để GA/analytics tự bắt.
+2. **Token trên URL thay vì chỉ cookie** — middleware `TrackAffiliateRef`
+   ở landing đọc `aff_click` token → chỉ set/refresh cookie (KHÔNG log
+   click lần 2 — đã log ở redirect). Attribution lúc checkout ưu tiên:
+   coupon KOL > cookie {click_token}. Token là khóa join chính xác
+   click → conversion (kể cả khi cookie bị xóa giữa chừng, còn token
+   trong session).
+3. **Sub-id cho KOL** — `utm_content` để KOL tự tách kênh của họ
+   (bio IG / TikTok / group Zalo); copy vào `affiliate_click.sub_id`
+   lúc click để report breakdown cho KOL trong dashboard.
+
+Lưu ý bảo mật: `destination_url` phải validate **cùng domain** khi tạo link
+(chặn open-redirect); slug random base62 (không đoán được); route redirect
+throttle theo IP.
+
 ### 2.2. Dọn cột `orders`
 
 - `affiliate_id` — GIỮ, thành FK thật -> `affiliate.id` (đúng mục đích gốc).
@@ -119,20 +165,23 @@ category/product — như product_reward override earn rate).
 ## 3. Các phase triển khai
 
 ### Phase 1 — Database + Models + Enums (~1 ngày)
-Migration 5 bảng + sửa orders + seed settings (+ flush schema cache như
-migration reward). Models: Affiliate, AffiliateClick, AffiliateConversion,
-AffiliatePayout. Enums: `AffiliateStatus`, `ConversionStatus` (theo convention
-`App\Enums`). Repository + interface theo pattern QueryableRepository.
+Migration 6 bảng + sửa orders + seed settings (+ flush schema cache như
+migration reward). Models: Affiliate, AffiliateLink, AffiliateClick,
+AffiliateConversion, AffiliatePayout. Enums: `AffiliateStatus`,
+`ConversionStatus` (theo convention `App\Enums`). Repository + interface
+theo pattern QueryableRepository.
 
-### Phase 2 — Click tracking + Attribution (~1.5 ngày)
-- **Middleware** `TrackAffiliateRef` (nhóm web): thấy `?ref=CODE` hợp lệ
-  (affiliate active) → insert `affiliate_click` + set cookie first-party
-  `aff_ref` = {code, click_id} TTL theo config. Last-click: ghi đè cookie cũ.
-  Throttle: cùng session + affiliate trong 30 phút không ghi click mới
-  (chống spam log).
+### Phase 2 — Short link + Click tracking + Attribution (~2 ngày)
+- **Route redirect** `GET /l/{slug}` (withoutMiddleware cache_page, throttle):
+  log click + sinh click_token + set cookie + 302 kèm auto-UTM (mục 2.4).
+- **Middleware** `TrackAffiliateRef` (nhóm web): đọc `aff_click=TOKEN`
+  (từ redirect) hoặc `?ref=CODE` trực tiếp (link tay, không qua shortener —
+  trường hợp này mới insert click) → set cookie first-party `aff_ref`
+  TTL theo config. Last-click: ghi đè cookie cũ. Throttle: cùng session +
+  affiliate trong 30 phút không ghi click mới (chống spam log).
 - **AffiliateAttributionService**: `resolve(): ?Attribution` — ưu tiên
   (1) coupon của KOL trong `session.applied_coupons` qua `affiliate_coupon`,
-  (2) cookie `aff_ref` còn hạn. Trả affiliate_id + click_id/coupon_code.
+  (2) cookie `aff_ref` {click_token} còn hạn. Trả affiliate_id + click_id/coupon_code.
 - Self-referral: attribution.user_id === affiliate.user_id → bỏ qua.
 
 ### Phase 3 — Conversion + Lifecycle (~1 ngày)
@@ -151,8 +200,10 @@ Account section (tái dùng layout account như trang Điểm thưởng):
   (hoặc auto theo config).
 - Dashboard: tổng click / conversion / commission theo trạng thái, biểu đồ
   theo ngày, bảng conversion phân trang.
-- Link generator: nhập URL sản phẩm → ra link `?ref=CODE`; hiện coupon
-  được cấp. Copy button.
+- Link generator (kiểu Shopee): dán URL bất kỳ của site (hoặc chọn SP)
+  + sub_id tùy chọn → tạo `affiliate_link` → trả short link `/l/{slug}`.
+  Copy button + QR. Bảng link đã tạo kèm clicks_count, breakdown theo sub_id.
+  Hiện coupon được cấp.
 
 ### Phase 5 — Admin CMS (~2 ngày)
 - Duyệt/suspend affiliate, chỉnh commission_rate riêng, gán coupon cho KOL.
@@ -169,12 +220,47 @@ Account section (tái dùng layout account như trang Điểm thưởng):
 - Unit tests: attribution precedence (coupon > cookie), self-referral,
   idempotency conversion, lifecycle approve/reject.
 
-## 4. Điểm cần chốt trước khi code (business)
+## 4. Business ĐÃ CHỐT (2026-07-10)
 
-1. Commission tính trên giá trị nào: sau discount trước ship (đề xuất) hay subtotal?
-2. % mặc định bao nhiêu, có phân theo ngành hàng ngay từ đầu không (→ cần commission_rule sớm)?
-3. Cookie window 30 ngày OK? Hold period 7 ngày OK?
-4. Payout thủ công chuyển khoản (đề xuất đợt đầu) hay tích hợp cổng chi hộ?
-5. KOL có coupon riêng ngay đợt đầu không (Phase 2 coupon-attribution phụ thuộc)?
+1. Commission tính trên: **sau discount, TRƯỚC ship**.
+2. % admin chỉnh được (setting), **có phân theo ngành hàng** →
+   `affiliate_commission_rule` làm ngay từ Phase 1. Precedence:
+   affiliate.commission_rate > rule theo category của item > config global.
+   Tính theo TỪNG item trong đơn (Phase 3).
+3. Cookie window **30 ngày, last-click** — link KOL khác click sau override.
+4. Payout: **chuyển khoản trước** (payment_info JSON chứa được cả bank lẫn
+   ZaloPay — tích hợp chi hộ ZaloPay sau, checkout đã có sẵn liên kết).
+5. **Có coupon riêng cho KOL** — affiliate_coupon từ Phase 1.
+6. Short link: **domain chính `site.vn/l/{slug}`**.
 
-**Tổng ước lượng: ~8-9 ngày dev** (Phase 1-4 là lõi ~5.5 ngày, Phase 5-6 hoàn thiện).
+**Tổng ước lượng: ~9-10 ngày dev** (Phase 1-4 là lõi ~6 ngày, Phase 5-6 hoàn thiện).
+
+## 5. Tiến độ
+
+### Phase 1 — DONE 2026-07-10
+
+Migration `2026_07_10_000001_create_affiliate_tables.php`:
+- 7 bảng: affiliate, affiliate_link, affiliate_click, affiliate_conversion,
+  affiliate_payout, affiliate_coupon, affiliate_commission_rule. Kiểu FK khớp
+  legacy: user.id BIGINT UNSIGNED, coupon/category/orders.id INT SIGNED →
+  PK affiliate dùng INT SIGNED (orders.affiliate_id int(11) FK được).
+- orders: DROP tracking/commission/marketing_id; affiliate_id → FK
+  `fk_orders_affiliate` SET NULL (dọn 0/orphan về NULL trước).
+- Seed 6 setting (mục 2.3) + flush cache setting + schema cache orders.
+- Enums: `AffiliateStatus` (Pending/Active/Suspended + canTrack()),
+  `AffiliateConversionStatus` (Pending/Approved/Rejected/Paid + isPayable()),
+  `AffiliatePayoutStatus` (Pending/Paid/Cancelled).
+- Models đủ 7 theo Base conventions (AffiliateClick timestamps=false
+  append-only như StockMovement — created_at set tay khi insert;
+  AffiliateCoupon composite PK như ProductReward; Affiliate casts
+  payment_info=array).
+- Repositories (binding auto theo convention AppServiceProvider):
+  `AffiliateRepository` (findActiveByCode / findByUserId /
+  findActiveByCouponCode / register — sinh code 8 ký tự unique, auto-approve
+  theo config), `AffiliateLinkRepository` (findBySlug / createLink slug
+  base62 8 ký tự / getListForAffiliate), `AffiliateConversionRepository`
+  (recordConversion nhận DTO `App\Data\Affiliate\AffiliateConversionData`
+  — idempotent theo order_id / approveForOrder / rejectForOrder — sẵn cho
+  observer Phase 3).
+
+### Phase 2-6 — chưa làm (xem mục 3)

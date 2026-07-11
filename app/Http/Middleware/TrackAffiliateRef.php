@@ -41,7 +41,8 @@ class TrackAffiliateRef
 
     protected function track(Request $request): void
     {
-        $token = (string) $request->query((string) getCoreConfig('affiliate.param_click'), '');
+        // Query param là input hostile: ?aff_click[]=x trả array → chỉ nhận string.
+        $token = $this->stringQuery($request, (string) getCoreConfig('affiliate.param_click'));
         if ($token !== '') {
             $click = $this->affiliateClickRepo->findValidByToken(
                 $token,
@@ -54,7 +55,7 @@ class TrackAffiliateRef
             return;
         }
 
-        $code = (string) $request->query((string) getCoreConfig('affiliate.param_ref'), '');
+        $code = $this->stringQuery($request, (string) getCoreConfig('affiliate.param_ref'));
         if ($code === '' || strlen($code) > 32) {
             return;
         }
@@ -76,7 +77,17 @@ class TrackAffiliateRef
             );
         }
 
-        $this->queueCookie((string) $click->click_token);
+        // null = chạm cap click/ngày (anti-fraud) → bỏ track, page vẫn load.
+        if ($click) {
+            $this->queueCookie((string) $click->click_token);
+        }
+    }
+
+    protected function stringQuery(Request $request, string $key): string
+    {
+        $value = $request->query($key);
+
+        return is_string($value) ? $value : '';
     }
 
     protected function queueCookie(string $token): void

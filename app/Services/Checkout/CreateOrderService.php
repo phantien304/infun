@@ -4,6 +4,7 @@ namespace App\Services\Checkout;
 
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
+use App\Services\Affiliate\AffiliateConversionService;
 use App\Services\Currency\CurrencyService;
 use App\Services\Stock\StockService;
 
@@ -15,6 +16,7 @@ class CreateOrderService
         protected PromotionService $promotionService,
         protected StockService $stockService,
         protected CurrencyService $currencyService,
+        protected AffiliateConversionService $affiliateConversion,
     ) {
     }
 
@@ -33,6 +35,7 @@ class CreateOrderService
             $this->promotionService->recordForOrder($promotions, $order->id, $total);
             $this->writeUserReward($promotions);
             $this->writeRewardRedeem($order->id, $totalData);
+            $this->writeAffiliateConversion($order->id, $promotions, $totalData);
 
             return $order->id;
         });
@@ -174,6 +177,21 @@ class CreateOrderService
 
                 return;
             }
+        }
+    }
+
+    /**
+     * Hoa hồng affiliate (Phase 3): attribution + tính + ghi conversion
+     * PENDING nằm trong AffiliateConversionService. Lỗi tracking KHÔNG được
+     * phá flow đặt hàng → nuốt exception + logError (đơn vẫn tạo bình thường,
+     * mất 1 conversion còn hơn mất 1 đơn).
+     */
+    protected function writeAffiliateConversion(int $orderId, CheckoutPromotions $promotions, array $totalData): void
+    {
+        try {
+            $this->affiliateConversion->record($orderId, $promotions->items, $totalData);
+        } catch (\Throwable $e) {
+            logError('writeAffiliateConversion: '.$e->getMessage(), ['order_id' => $orderId]);
         }
     }
 }

@@ -49,6 +49,12 @@
             </a>
         </li>
         <li class="nav-item">
+            <a href="{{ route('account.affiliate') }}" title="Tiếp thị liên kết"
+                class="nav-link @if (request()->routeIs('account.affiliate', 'account.affiliate.links')) active @endif">
+                <i class="fas fa-share-alt mr-10"></i>Tiếp thị liên kết
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="{{ route('account.newsletter') }}" title="Đăng ký nhận tin khuyến mãi"
                 class="nav-link @if (request()->routeIs('account.newsletter')) active @endif">
                 <i class="fas fa-newspaper mr-10"></i>Đăng ký nhận tin khuyến mãi

@@ -14,6 +14,18 @@ class CachePage
         'api/*',
     ];
 
+    /**
+     * Param tracking (affiliate/UTM/ads) bị loại khỏi cache key: giá trị unique
+     * per-visitor (aff_click token...) mà giữ trong key thì mỗi click short link
+     * tạo 1 bản cache 24h (rác store) và khách affiliate luôn MISS.
+     * Nội dung trang không phụ thuộc các param này nên strip là an toàn.
+     */
+    protected $ignoredQueryParams = [
+        'aff', 'aff_click', 'ref',
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+        'gclid', 'fbclid',
+    ];
+
     public function handle($request, Closure $next)
     {
         if (!$request->isMethod('get') || auth()->check()) {
@@ -37,7 +49,7 @@ class CachePage
             (string) getCoreConfig('currency.cookie', 'currency'),
             (string) getCoreConfig('currency.base_code', 'VND'),
         ));
-        $key = 'page_cache_' . md5($request->fullUrl() . '_' . $device . '_' . $locale . '_' . $currency);
+        $key = 'page_cache_' . md5($this->normalizedUrl($request) . '_' . $device . '_' . $locale . '_' . $currency);
 
         if ($cachedContent = $store->get($key)) {
             return response($cachedContent)
@@ -55,6 +67,19 @@ class CachePage
         }
 
         return $response->header('X-Cache', 'MISS');
+    }
+
+    /** URL làm cache key: bỏ param tracking, sort param còn lại (ổn định thứ tự). */
+    protected function normalizedUrl($request): string
+    {
+        $query = $request->query();
+        if (! is_array($query)) {
+            $query = [];
+        }
+        $query = array_diff_key($query, array_flip($this->ignoredQueryParams));
+        ksort($query);
+
+        return $request->url() . (empty($query) ? '' : '?' . http_build_query($query));
     }
 
     protected function shouldCache($response)

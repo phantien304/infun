@@ -19,3 +19,15 @@ Schedule::command('stock:release-expired')
     ->withoutOverlapping()
     ->runInBackground()
     ->description('Nhả hold tồn kho hết hạn (chống giữ tồn ảo khi flash sale)');
+
+Schedule::command('affiliate:prune-clicks')
+    ->dailyAt('02:10')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->description('Prune affiliate_click cũ hơn retention (mặc định 90 ngày)');
+
+Schedule::command('affiliate:health-check')
+    ->dailyAt('08:00')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->description('Cảnh báo affiliate CR bất thường / click spam (chỉ log, không tự khóa)');

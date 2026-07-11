@@ -82,7 +82,18 @@ return [
         'cookie'                 => 'aff_ref',      // chứa click_token (kiểu uls_trackid Shopee)
         'param_ref'              => 'ref',          // ?ref=CODE — link tay không qua shortener
         'param_click'            => 'aff_click',    // token gắn bởi redirect /l/{slug}
-        'click_throttle_minutes' => 30,             // cùng session + affiliate không log click mới
+        'click_throttle_minutes' => 30,             // cùng session + affiliate + link không log click mới
+        // Anti-fraud (Phase 6):
+        'dedupe_minutes'         => 10,             // cùng affiliate+link+IP+UA trong X phút → tái dùng click cũ (chặn bot xóa cookie/session)
+        'max_clicks_per_day'     => 2000,           // cap click/ngày/affiliate — vượt thì bỏ log (vẫn redirect); 0 = không cap
+        'max_links'              => 200,            // cap số short link / affiliate (chống spam bảng); 0 = không cap
+        'click_retention_days'   => 90,             // prune affiliate_click cũ hơn (conversion giữ snapshot đủ đối soát)
+        'health'                 => [
+            'window_days'     => 7,                 // cửa sổ tính CR cho affiliate:health-check
+            'min_clicks'      => 50,                // dưới ngưỡng này bỏ qua (mẫu quá nhỏ)
+            'max_cr_percent'  => 15,                // CR > 15% → nghi coupon/self-referral abuse
+            'spam_clicks'     => 500,               // click ≥ ngưỡng mà 0 conversion → nghi click spam
+        ],
     ],
     'cookie' => [
         'time' => 1051200,

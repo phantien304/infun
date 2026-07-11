@@ -98,6 +98,12 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
             Route::any('orders', 'AccountController@orders')->name('account.orders');
             Route::any('orders/{id?}', 'AccountController@detailOrder')->name('account.detailOrder');
             Route::get('rewards', 'AccountController@rewards')->name('account.rewards');
+            Route::prefix('affiliate')->group(function () {
+                Route::get('/', 'AffiliateAccountController@index')->name('account.affiliate');
+                Route::post('register', 'AffiliateAccountController@register')->name('account.affiliate.register');
+                Route::get('links', 'AffiliateAccountController@links')->name('account.affiliate.links');
+                Route::post('links', 'AffiliateAccountController@createLink')->name('account.affiliate.createLink')->middleware('throttle:20,1');
+            });
             Route::any('newsletter', 'AccountController@newsletter')->name('account.newsletter');
             Route::any('logout', 'AccountController@logout')->name('account.logout');
         });

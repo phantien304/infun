@@ -14,4 +14,7 @@ interface AffiliateLinkRepositoryInterface extends BaseRepositoryInterface
     public function createLink(int $affiliateId, string $destinationUrl, ?int $productId = null, ?string $subId = null): AffiliateLink;
 
     public function getListForAffiliate(int $affiliateId, int $perPage = 20): \Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+    /** Tổng số link đã tạo của affiliate — cap affiliate.max_links (Phase 6). */
+    public function countForAffiliate(int $affiliateId): int;
 }

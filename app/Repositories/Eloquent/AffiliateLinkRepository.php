@@ -43,6 +43,11 @@ class AffiliateLinkRepository extends QueryableRepository implements AffiliateLi
             ->paginate($perPage);
     }
 
+    public function countForAffiliate(int $affiliateId): int
+    {
+        return (int) $this->resetModel()->where('affiliate_id', $affiliateId)->count();
+    }
+
     /** Slug base62 8 ký tự — không đoán được, retry khi trùng. */
     protected function generateUniqueSlug(): string
     {

@@ -28,19 +28,30 @@ class AffiliateClickData extends Data
     ) {
     }
 
-    /** Dựng phần request-context chung (ip/UA/referrer/session) từ request hiện tại. */
+    /**
+     * Dựng phần request-context chung (ip/UA/referrer/session) từ request
+     * hiện tại. Query param là input hostile: `?utm_source[]=x` trả array
+     * (TypeError vào ?string), giá trị dài quá varchar(64) nổ QueryException
+     * — cả hai đều làm 500 route redirect → guard is_string + truncate.
+     */
     public static function fromRequest(int $affiliateId): self
     {
+        $q = static function (string $key): ?string {
+            $v = request()->query($key);
+
+            return is_string($v) && $v !== '' ? mb_substr($v, 0, 64) : null;
+        };
+
         return new self(
             affiliateId: $affiliateId,
             sessionId: (string) session()->getId(),
-            ip: (string) request()->server('REMOTE_ADDR', ''),
+            ip: mb_substr((string) getIpVisitor(), 0, 45), // helper chung: CF / X-Forwarded-For aware
             userAgent: mb_substr((string) request()->server('HTTP_USER_AGENT', ''), 0, 255),
             landingUrl: mb_substr((string) request()->fullUrl(), 0, 512),
             referrer: mb_substr((string) request()->server('HTTP_REFERER', ''), 0, 512) ?: null,
-            utmSource: request()->query('utm_source'),
-            utmMedium: request()->query('utm_medium'),
-            utmCampaign: request()->query('utm_campaign'),
+            utmSource: $q('utm_source'),
+            utmMedium: $q('utm_medium'),
+            utmCampaign: $q('utm_campaign'),
         );
     }
 }

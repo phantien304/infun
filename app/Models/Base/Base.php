@@ -131,6 +131,35 @@ class Base extends Model
         return parent::fill($attributes);
     }
 
+    /**
+     * Giữ json cast idempotent với vòng refill của save() bên trên
+     * (setRawAttributes([])->fill($attrs)): giá trị đã encode ở lần fill
+     * trước quay lại dưới dạng chuỗi JSON — nếu encode tiếp sẽ thành
+     * double-encoded trong DB (bug bắt được 2026-07-11 ở affiliate.payment_info,
+     * xem AFFILIATE-PLAN.md). Chuỗi JSON hợp lệ → gán thẳng, không encode lại.
+     */
+    public function setAttribute($key, $value)
+    {
+        if (is_string($value) && $value !== '' && $this->isJsonCastable($key) && $this->isValidJsonString($value)) {
+            $this->attributes[$key] = $value;
+
+            return $this;
+        }
+
+        return parent::setAttribute($key, $value);
+    }
+
+    protected function isValidJsonString(string $value): bool
+    {
+        if (function_exists('json_validate')) {
+            return json_validate($value);
+        }
+
+        json_decode($value);
+
+        return json_last_error() === JSON_ERROR_NONE;
+    }
+
     public function hasAttribute($key)
     {
         return array_key_exists($key, $this->getAttributes());
@@ -186,6 +215,12 @@ class Base extends Model
                 $nextId = $statement[0]->nextval;
                 break;
             case 'sqlite':
+                // sqlite chỉ dùng trong test suite (:memory:). Trước đây bỏ
+                // trống → mọi insert không truyền id đều nhận 1 → UNIQUE
+                // violation từ row thứ 2. MAX(key)+1 đủ cho test đơn luồng.
+                $key = $this->getPrimaryKeyAutoIncrement() ?: $this->getKeyName();
+                $max = $this->getConnection()->table($table)->max($key);
+                $nextId = ((int) $max) + 1;
                 break;
             case 'sqlsrv':
                 break;

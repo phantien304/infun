@@ -988,8 +988,15 @@ open-redirect); middleware `TrackAffiliateRef` append web group
 ghi đè cookie, exception nuốt + logError); `AffiliateAttributionService`
 (Services/Affiliate — coupon KOL > cookie token, chặn self-referral, trả
 `AffiliateAttribution`); core config `affiliate.*` (cookie/params/throttle).
-- Phase 3-6 (conversion khi tạo đơn + observer, portal, admin/payout,
-  anti-fraud) CHƯA làm — theo AFFILIATE-PLAN.md mục 3.
+**Phase 3 (conversion) DONE 2026-07-10**: `AffiliateConversionService`
+(base = totalData sub_total + dòng âm coupon/reward/voucher — sau discount
+TRƯỚC ship; rate per-item: KOL flat > category rule max > global; ghi
+conversion PENDING + set orders.affiliate_id qua query-builder không fire
+observer); gọi từ `CreateOrderService::writeAffiliateConversion` (try/catch —
+không phá đặt hàng); `OrderAffiliateObserver` (approve khi complete, reject
+khi cancel, mirror OrderRewardObserver).
+- Phase 4-6 (portal affiliate trong account, admin/payout, anti-fraud)
+  CHƯA làm — theo AFFILIATE-PLAN.md mục 3.
 
 ## Schema `product_image` cluster (refactor 2026-06-03)
 

@@ -57,13 +57,18 @@ class AffiliateRepository extends QueryableRepository implements AffiliateReposi
 
         $auto = (int) getConfigDb('config_affiliate_auto_approve') === 1;
 
-        return Affiliate::create([
-            'user_id'      => $userId,
-            'code'         => $this->generateUniqueCode(),
-            'status'       => ($auto ? AffiliateStatus::Active : AffiliateStatus::Pending)->value,
-            'payment_info' => $paymentInfo ?: null,
-            'approved_at'  => $auto ? now() : null,
-        ]);
+        try {
+            return Affiliate::create([
+                'user_id'      => $userId,
+                'code'         => $this->generateUniqueCode(),
+                'status'       => ($auto ? AffiliateStatus::Active : AffiliateStatus::Pending)->value,
+                'payment_info' => $paymentInfo ?: null,
+                'approved_at'  => $auto ? now() : null,
+            ]);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Race double-submit: request song song đã tạo trước → dùng row đó.
+            return $this->findByUserId($userId) ?? throw $e;
+        }
     }
 
     /** Mã ref 8 ký tự alphanumeric lowercase, retry khi trùng (xác suất cực thấp). */

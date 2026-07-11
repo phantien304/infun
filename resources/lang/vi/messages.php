@@ -237,7 +237,15 @@ return [
             'newsletter' => [
                 'title' => 'Đăng ký nhận tin khuyến mãi',
                 'description' => 'Đăng ký nhận tin khuyến mãi',
-            ]
+            ],
+            'rewards' => [
+                'title' => 'Điểm thưởng',
+                'description' => 'Điểm thưởng',
+            ],
+            'affiliate' => [
+                'title' => 'Tiếp thị liên kết',
+                'description' => 'Chương trình tiếp thị liên kết - kiếm hoa hồng khi giới thiệu sản phẩm',
+            ],
         ],
         'auth' => [
             'login' => [
@@ -310,6 +318,23 @@ return [
         'account_orders_newsletter' => 'Đăng ký nhận tin khuyến mãi',
         'account_order_detail' => 'Chi tiết đơn hàng',
         'account_repayment' => 'Thanh toán lại',
+        'account_affiliate' => 'Tiếp thị liên kết',
+    ],
+    'affiliate' => [
+        // Đăng ký
+        'register_active' => 'Đăng ký thành công! Tài khoản affiliate của bạn đã được kích hoạt.',
+        'register_pending' => 'Đăng ký thành công! Chúng tôi sẽ duyệt hồ sơ của bạn trong thời gian sớm nhất.',
+        'error_agree' => 'Bạn cần đồng ý điều khoản chương trình affiliate',
+        'error_bank_name' => 'Vui lòng nhập tên ngân hàng',
+        'error_bank_account' => 'Vui lòng nhập số tài khoản hợp lệ (chỉ gồm chữ số)',
+        'error_bank_holder' => 'Vui lòng nhập tên chủ tài khoản',
+        'error_zalopay_phone' => 'Số điện thoại ZaloPay không hợp lệ',
+        // Link generator
+        'link_created' => 'Tạo link thành công! Copy link rút gọn bên dưới để chia sẻ.',
+        'link_invalid_domain' => 'URL không hợp lệ: chỉ nhận link trong website này (không nhận link ngoài, trang tài khoản hoặc thanh toán).',
+        'link_limit' => 'Bạn đã đạt giới hạn :max link. Vui lòng dùng lại các link đã tạo (có thể tách kênh bằng Sub ID).',
+        'error_url' => 'Vui lòng dán URL cần rút gọn (tối đa 512 ký tự)',
+        'error_sub_id' => 'Sub ID chỉ gồm chữ, số, gạch ngang/gạch dưới (tối đa 64 ký tự)',
     ],
     'account' => [
         'menu_left' => [

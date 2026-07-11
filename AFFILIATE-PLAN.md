@@ -290,4 +290,180 @@ Migration `2026_07_10_000001_create_affiliate_tables.php`:
   context ip/UA/UTM), AffiliateAttribution. Repo mới AffiliateClickRepository
   (recordClick + aggregate, findRecent throttle, findValidByToken).
 
-### Phase 3-6 — chưa làm (xem mục 3)
+### Phase 3 — DONE 2026-07-10
+
+- **AffiliateConversionService** (app/Services/Affiliate) — `record(orderId,
+  items, totalData)`:
+  - Base = đọc từ totalData (sub_total + các dòng âm coupon:/reward/voucher:)
+    → luôn khớp orders_total; KHÔNG gồm ship/coupon_freeship/gifts. Đúng chốt
+    "sau discount, TRƯỚC ship".
+  - Rate per-item: affiliate.commission_rate (flat cả đơn) >
+    affiliate_commission_rule theo category của SP (nhiều category có rule →
+    lấy CAO NHẤT) > config_affiliate_commission_rate. Discount phân bổ tỷ lệ
+    (factor = base/subtotal). commission_rate lưu = rate hiệu dụng
+    (commission/base×100, 2dp) để audit.
+  - Ghi conversion PENDING (DTO AffiliateConversionData, idempotent) + set
+    `orders.affiliate_id` bằng query-builder update (không fire observer).
+- **CreateOrderService::writeAffiliateConversion** — gọi trong transaction
+  create(), wrap try/catch + logError: lỗi tracking không phá flow đặt hàng.
+- **OrderAffiliateObserver** (đăng ký AppServiceProvider, chạy cạnh
+  OrderRewardObserver): status ∈ order_complete_status_all → approveForOrder
+  (Pending→Approved + approved_at, hold_days tính từ đây); status =
+  order_cancel_status_id → rejectForOrder (Pending/Approved→Rejected,
+  không đụng Paid).
+
+### Review Phase 1-3 (2026-07-11) — 3 fix đã áp
+
+- **CachePage**: strip param tracking (aff/aff_click/ref/utm_*/gclid/fbclid)
+  khỏi cache key + sort query — hết rác cache per-click, khách affiliate HIT
+  cache chung (`normalizedUrl()`).
+- **IP click log**: `getIpVisitor()` (CF / X-Forwarded-For aware) thay
+  REMOTE_ADDR — chuẩn bị cho dedupe anti-fraud Phase 6.
+- **Throttle click per-link**: `findRecent(..., ?int $linkId)` — link khác
+  của cùng KOL log riêng, clicks_count/sub_id per-link không lệch;
+  `?ref=` trực tiếp match whereNull(affiliate_link_id).
+
+### Phase 4 — DONE 2026-07-11
+
+- **AffiliatePortalService** (app/Services/Affiliate): dashboard() gom stat
+  theo status + chartSeries 30 ngày (labels đủ ngày, trống = 0); createLink()
+  validate destination NGAY LÚC TẠO — `normalizeDestination()` chuẩn về path
+  tương đối, chỉ nhận cùng host app.url, chặn /l/ (loop) + /account/ +
+  /checkout/ + /api/, chặn scheme lạ; `detectProductId()` bắt `-p{id}`
+  (buildUrl convention) để lưu deep-link SP.
+- **Repos mở rộng**: AffiliateConversionRepository (getListForAffiliate,
+  getStatusTotals group by status, countByDay), AffiliateClickRepository
+  (countByDay, countBySubId — breakdown kênh KOL).
+- **AffiliateAccountController** + routes `account/affiliate` (nhóm auth):
+  index (4 trạng thái → 4 view: disabled/register/status/dashboard),
+  register (POST, AffiliateRegisterRequest: điều khoản accepted + bank info
+  → payment_info JSON, auto/pending theo config), links (generator + bảng),
+  createLink (POST, throttle 20/1m).
+- **Views** resources/web/views/account/affiliate/: register (stat intro +
+  form bank + điều khoản tóm tắt), status (pending/suspended), dashboard
+  (stat cards 4 ô, Chart.js line 30 ngày click+đơn, coupon KOL copy được,
+  bảng conversion phân trang, nguồn = coupon/link), links (form tạo + ref
+  URL chung + bảng link với copy/QR modal + breakdown sub_id). Chart.js
+  4.4.3 + qrcodejs CDN (đã verify URL sống); copy dùng navigator.clipboard
+  + fallback execCommand. Menu account thêm "Tiếp thị liên kết".
+- **i18n**: messages.affiliate.*, breadcrumbs.account_affiliate,
+  seo.account.affiliate (+ bổ sung seo.account.rewards còn thiếu từ trước).
+
+### Phase 5 — SKIPPED (TODO, quyết định 2026-07-11)
+
+Bỏ qua đợt này vì CMS React (infun_cms) chưa có order management. Việc cần
+làm khi quay lại:
+
+- [ ] CMS: duyệt/suspend affiliate, chỉnh commission_rate riêng, gán coupon
+      cho KOL (bảng affiliate_coupon), CRUD affiliate_commission_rule.
+- [ ] CMS: báo cáo top affiliate, conversion theo kỳ, đối soát click→order.
+- [ ] Payout: nút "chốt kỳ" — gom conversion APPROVED đã qua
+      `config_affiliate_hold_days` (tính từ approved_at), đạt
+      `config_affiliate_min_payout` → tạo affiliate_payout + set conversion
+      PAID (payout_id). Export CSV chuyển khoản.
+- [ ] Tạm thời có thể chạy artisan command chốt kỳ (chưa viết — cân nhắc
+      `affiliate:close-period {period?}` khi cần).
+- [ ] Admin hiện vẫn thao tác tay được qua DB: duyệt = set
+      affiliate.status=1 + approved_at.
+
+### Phase 6 — DONE 2026-07-11 (anti-fraud + tests; làm trước Phase 5)
+
+- **Anti-fraud đặt TRONG `recordClick`** (mọi caller tự được bảo vệ, trả
+  `?AffiliateClick`):
+  1. Dedupe cùng (affiliate, link, IP, UA) trong `affiliate.dedupe_minutes`
+     (10') → tái dùng click cũ — chặn bot xóa cookie/session bơm click
+     (dedupe không phụ thuộc session, scope per-link khớp fix review).
+  2. Cap `affiliate.max_clicks_per_day` (2000, 0 = tắt) → trả null: caller
+     bỏ track nhưng VẪN redirect/load page (controller vẫn gắn UTM cho
+     analytics, chỉ bỏ cookie + aff_click token).
+- **Commands** (schedule trong routes/console.php):
+  - `affiliate:prune-clicks` (daily 02:10) — xóa click >
+    `affiliate.click_retention_days` (90) theo chunk; từ chối chạy nếu
+    retention < cookie window (phá attribution).
+  - `affiliate:health-check` (daily 08:00) — cảnh báo (console + logError,
+    KHÔNG tự khóa): CR > `health.max_cr_percent` (15%, mẫu ≥ 50 click) nghi
+    coupon/self-referral abuse; ≥ 500 click 0 đơn nghi click spam; ≥ 5 đơn
+    toàn coupon 0 click thì nhắc liếc nguồn mã. Ngưỡng ở core config
+    `affiliate.health.*`.
+- **Tests** (sqlite :memory:, tự dựng schema, fake ConfigDbService — pattern
+  StockOversellTest; PHP không có trong sandbox dev nên CHƯA chạy, cần
+  `php artisan test` trên máy thật):
+  - `tests/Feature/Affiliate/AffiliateAttributionTest` — coupon > cookie,
+    cookie fallback (+rate riêng), token quá hạn, suspended, self-referral
+    (chặn cả coupon lẫn cookie, có control case; ép web-context bằng
+    reflection vì getCurrentUserId trả null khi runningInConsole), hệ tắt.
+  - `tests/Feature/Affiliate/AffiliateConversionLifecycleTest` — idempotent
+    theo order_id, commission ≤ 0 không ghi, Pending→Approved (+approved_at,
+    gọi lặp vô hại), Pending/Approved→Rejected, Paid bất khả xâm,
+    Rejected không approve lại được.
+  - `tests/Feature/Affiliate/AffiliateClickAntiFraudTest` — dedupe IP+UA
+    xuyên session, IP khác vẫn log, dedupe scope per-link, cap/ngày,
+    cap=0 không giới hạn, findRecent throttle theo (session, link).
+  - `tests/Unit/AffiliateDestinationTest` — normalizeDestination (cùng
+    domain, chặn open-redirect///scheme lạ/loop /l//private, không dính oan
+    slug tương tự) + detectProductId theo convention buildUrl.
+  - Fix kèm theo ở `Base::getNextInsertId()`: case sqlite bỏ trống → mọi
+    insert không truyền id nhận 1 → UNIQUE violation từ row thứ 2 (lý do
+    StockOversellTest trước đây phải dùng id tường minh). Bổ sung
+    MAX(key)+1 cho sqlite — chỉ ảnh hưởng test, MySQL giữ nguyên.
+
+### Hardening 2026-07-11 (rà lần 2 sau khi test suite xanh)
+
+Bug tiềm ẩn đã fix:
+1. **500 trên route redirect với query hostile** — `/l/{slug}?utm_source[]=x`
+   → `request()->query()` trả array → TypeError vào DTO ?string; utm dài
+   > 64 ký tự → QueryException (cột varchar 64). Controller KHÔNG wrap
+   try/catch (khác middleware) nên nổ 500 thật. Fix:
+   `AffiliateClickData::fromRequest` guard is_string + truncate 64;
+   `TrackAffiliateRef::stringQuery()` tương tự.
+2. **Fragment nuốt params** — destination legacy có `#section`: params gắn
+   sau fragment bị browser coi là fragment → mất aff_click/UTM.
+   `safeDestination` strip `#...` trước khi validate.
+3. **Race đăng ký** — double-submit song song vượt qua findByUserId → UNIQUE
+   user_id nổ 500. `register()` catch UniqueConstraintViolationException →
+   trả row đã tạo.
+4. **Cap số link/affiliate** — `affiliate.max_links` (200, 0 = tắt) +
+   `countForAffiliate`; throttle route chỉ chặn theo phút, không chặn spam
+   bảng dài hạn. Message `messages.affiliate.link_limit`.
+
+Test bổ sung:
+- `AffiliateConversionServiceTest` — TIỀN NONG end-to-end: base sau
+  discount trước ship (reward/voucher trừ, coupon_freeship/shipping không),
+  precedence rate KOL > rule category (max) > global, phân bổ discount theo
+  factor, snapshot + orders.affiliate_id, coupon attribution ghi
+  coupon_code, không attribution không ghi, gọi lặp không dup.
+- `AffiliatePortalTest` — đăng ký pending/auto-approve/idempotent, tạo link
+  + detect product_id, chặn domain lạ, cap max_links, chartSeries đủ 30
+  ngày (ngày trống = 0) + stat cards.
+- `CachePageKeyTest` — key bỏ param tracking, sort ổn định, khách affiliate
+  và khách thường chung key.
+(Schema test thêm orders / product_category / affiliate_commission_rule.)
+
+### Fix 2026-07-11 (test suite bắt được — round 2)
+
+5. **Double json-encode `payment_info` (bug PRODUCTION, test bắt được)** —
+   `Base::save()` refill raw attributes (`setRawAttributes([])->fill($attrs)`)
+   → cast `array` encode LẦN 2 → DB lưu `"\"{\\\"bank_name\\\"...}\""`, đọc
+   ra string thay vì array (Phase 5 export payout sẽ hỏng). Fix: bỏ cast,
+   dùng accessor/mutator idempotent `Affiliate::paymentInfo()` (set: array
+   mới encode, string giữ nguyên; get: decode + tự sửa data cũ double-encoded).
+   ⚠️ Audit codebase-wide (2026-07-11): CHỈ affiliate.payment_info dính —
+   không model Entities nào khác có cast array/json/object/collection,
+   không classic mutator set*Attribute, không encrypted/hashed trên Base
+   (password hash ở service; App\Models\User skeleton không dùng, không
+   extends Base). Enum/datetime/decimal cast idempotent với refill → an toàn.
+   **Fix central chống tái phát**: `Base::setAttribute()` gán thẳng chuỗi
+   JSON hợp lệ cho cột json-castable (không encode lại khi refill) +
+   regression test `tests/Feature/BaseJsonCastTest` (probe model ẩn danh:
+   create, update-lại, set array mới, null). Model tương lai dùng json cast
+   sẽ không dính nữa.
+   Data hiện có: bảng affiliate tạo 2026-07-10 (dump 25/06 chưa có) — nếu
+   môi trường dev đã có row đăng ký, check & sửa:
+   `SELECT id FROM affiliate WHERE payment_info LIKE '"%';`
+   `UPDATE affiliate SET payment_info = JSON_UNQUOTE(payment_info) WHERE payment_info LIKE '"%';`
+   (accessor cũng đã tự decode data cũ khi đọc).
+6. Schema test `orders` thiếu `deleted_at`/`timestamps` — Orders dùng
+   SoftDeletes (global scope) và update qua model query tự touch
+   updated_at. Đã bổ sung + assertion round-trip DB cho payment_info.
+
+### Còn lại: Phase 5 (TODO ở trên).

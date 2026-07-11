@@ -46,6 +46,7 @@ class AffiliateRedirectController extends Controller
             (int) $affiliate->id,
             (string) session()->getId(),
             (int) getCoreConfig('affiliate.click_throttle_minutes', 30),
+            (int) $link->id, // throttle per-link: link khác của cùng KOL vẫn log riêng
         );
 
         if (! $click) {
@@ -60,21 +61,25 @@ class AffiliateRedirectController extends Controller
             $click = $this->clickRepo->recordClick($data);
         }
 
-        Cookie::queue(
-            getCoreConfig('affiliate.cookie'),
-            (string) $click->click_token,
-            (int) getConfigDb('config_affiliate_cookie_days', 30) * 24 * 60,
-        );
-
         $params = [
-            'aff'                                   => $affiliate->code,
-            getCoreConfig('affiliate.param_click')  => $click->click_token,
-            'utm_source'                            => 'aff_'.$affiliate->code,
-            'utm_medium'                            => 'affiliates',
-            'utm_campaign'                          => 'link_'.$link->slug,
+            'aff'          => $affiliate->code,
+            'utm_source'   => 'aff_'.$affiliate->code,
+            'utm_medium'   => 'affiliates',
+            'utm_campaign' => 'link_'.$link->slug,
         ];
         if (filled($link->sub_id)) {
             $params['utm_content'] = $link->sub_id;
+        }
+
+        // null = chạm cap click/ngày (anti-fraud Phase 6): vẫn redirect kèm
+        // UTM cho analytics, nhưng không cookie / không aff_click token.
+        if ($click) {
+            Cookie::queue(
+                getCoreConfig('affiliate.cookie'),
+                (string) $click->click_token,
+                (int) getConfigDb('config_affiliate_cookie_days', 30) * 24 * 60,
+            );
+            $params[getCoreConfig('affiliate.param_click')] = $click->click_token;
         }
 
         $glue = str_contains($destination, '?') ? '&' : '?';
@@ -85,6 +90,10 @@ class AffiliateRedirectController extends Controller
     /** Chỉ chấp nhận destination cùng host với app (hoặc path tương đối). */
     protected function safeDestination(string $url): string
     {
+        // Bỏ #fragment (data cũ/sửa tay): params gắn sau fragment sẽ bị
+        // browser coi là một phần fragment → mất aff_click/UTM.
+        $url = strtok($url, '#') ?: '';
+
         if ($url === '') {
             return '/';
         }

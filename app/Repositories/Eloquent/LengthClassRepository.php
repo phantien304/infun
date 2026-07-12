@@ -30,4 +30,9 @@ class LengthClassRepository extends QueryableRepository implements LengthClassRe
     {
         $this->forgetCache(setting('cache.length_classes'), perLocale: false);
     }
+
+    public function getAll(): Collection
+    {
+        return $this->resetModel()->query()->get();
+    }
 }

@@ -149,7 +149,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     protected function baseQuery(): Builder
     {
-        $query = $this->model->newQuery()->select('product.*');
+        $query = $this->resetModel()->newQuery()->select('product.*');
 
         $sort    = ltrim((string) request()->input('sort', ''), '-');
         $keyword = trim((string) request()->input('filter.keyword', ''));
@@ -441,7 +441,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 
     protected function cardQuery(): Builder
     {
-        return $this->cardScope($this->model->newQuery())
+        return $this->cardScope($this->resetModel()->newQuery())
             ->select('product.*')
             ->with($this->cardRelations());
     }

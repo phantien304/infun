@@ -3,17 +3,8 @@
 namespace App\Http\Controllers\Api\Cms;
 
 use App\Http\Controllers\Controller;
-use App\Models\Entities\Attribute;
-use App\Models\Entities\Category;
-use App\Models\Entities\Filter;
-use App\Models\Entities\LengthClass;
-use App\Models\Entities\Manufacturer;
-use App\Models\Entities\Option;
-use App\Models\Entities\StockStatus;
-use App\Models\Entities\TaxClass;
-use App\Models\Entities\UserGroup;
-use App\Models\Entities\WeightClass;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class ResourceController extends Controller
 {
@@ -25,11 +16,11 @@ class ResourceController extends Controller
 
         return response()->json([
             'data' => [
-                'manufacture'  => $this->simple(Manufacturer::query()),
-                'category'     => Category::with('description')->get()
+                'manufacture'  => $this->simple($this->manufacturerRepo->getAll()),
+                'category'     => $this->categoryRepo->listWithDescription()
                     ->map(fn ($c) => ['id' => $c->id, 'title' => $c->description?->title ?? $c->title])
                     ->values(),
-                'filter'       => Filter::with(['description', 'filterValues.description'])->get()
+                'filter'       => $this->filterRepo->listWithValues()
                     ->map(fn ($f) => [
                         'id'            => $f->id,
                         'name'          => $f->description?->name ?? $f->name,
@@ -38,7 +29,7 @@ class ResourceController extends Controller
                             'name' => $v->description?->name ?? $v->name,
                         ])->values(),
                     ])->values(),
-                'attribute'    => Attribute::with(['description', 'attributeValues.description'])->get()
+                'attribute'    => $this->attributeRepo->listWithValues()
                     ->map(fn ($a) => [
                         'id'               => $a->id,
                         'name'             => $a->description?->name ?? $a->name,
@@ -47,7 +38,7 @@ class ResourceController extends Controller
                             'name' => $v->description?->name ?? $v->name,
                         ])->values(),
                     ])->values(),
-                'option'       => Option::with(['description', 'optionValues.description'])->get()
+                'option'       => $this->optionRepo->listWithValues()
                     ->map(fn ($o) => [
                         'id'            => $o->id,
                         'name'          => $o->description?->name ?? $o->name,
@@ -57,31 +48,30 @@ class ResourceController extends Controller
                             'name' => $v->description?->name ?? $v->name,
                         ])->values(),
                     ])->values(),
-                'stock_status' => $this->simple(StockStatus::with('description'), true),
-                'length_class' => $this->titled(LengthClass::query()),
-                'weight_class' => $this->titled(WeightClass::query()),
-                'tax_class'    => $this->titled(TaxClass::query()),
-                'user_group'   => UserGroup::with('description')->get()
+                'stock_status' => $this->simple($this->stockStatusRepo->listWithDescription()),
+                'length_class' => $this->titled($this->lengthClassRepo->getAll()),
+                'weight_class' => $this->titled($this->weightClassRepo->getAll()),
+                'tax_class'    => $this->titled($this->taxClassRepo->getAll()),
+                'user_group'   => $this->userGroupRepo->listWithDescription()
                     ->map(fn ($g) => ['id' => $g->id, 'name' => $g->description?->name ?? $g->name])
                     ->values(),
             ],
         ]);
     }
 
-    /** {id, name} — model có cột name hoặc description?->name. */
-    private function simple($query, bool $withDesc = false)
+    /** {id, name} — nhan Collection da eager-load (description?->name hoac name). */
+    private function simple(Collection $items): Collection
     {
-        $items = $withDesc ? $query->get() : $query->get();
         return $items->map(fn ($m) => [
             'id'   => $m->id,
             'name' => $m->description?->name ?? $m->name ?? null,
         ])->values();
     }
 
-    /** {id, title} — class cân/độ dài/thuế (description?->title hoặc cột title). */
-    private function titled($query)
+    /** {id, title} — nhan Collection da eager-load (description?->title hoac title). */
+    private function titled(Collection $items): Collection
     {
-        return $query->get()->map(fn ($m) => [
+        return $items->map(fn ($m) => [
             'id'    => $m->id,
             'title' => $m->description?->title ?? $m->title ?? null,
         ])->values();

@@ -11,15 +11,17 @@ use Illuminate\Database\Eloquent\Collection;
 class BlogCategoryRepository extends QueryableRepository implements BlogCategoryRepositoryInterface
 {
     use CacheableRepository;
+
     public function model(): string
     {
         return BlogCategory::class;
     }
+
     public function listAllCached(): Collection
     {
         return $this->rememberCache(
             getCoreConfig('cache.blog_categories'),
-            fn() => $this->listAll()
+            fn () => $this->listAll()
         );
     }
 
@@ -33,5 +35,10 @@ class BlogCategoryRepository extends QueryableRepository implements BlogCategory
         return [
             'description'
         ];
+    }
+
+    public function findWithDescription(int|string $id): ?BlogCategory
+    {
+        return $this->resetModel()->with('description')->find($id);
     }
 }

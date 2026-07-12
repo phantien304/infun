@@ -66,7 +66,7 @@ class BlogRepository extends QueryableRepository implements BlogRepositoryInterf
 
     protected function baseQuery(): Builder
     {
-        $query = $this->model->newQuery();
+        $query = $this->resetModel()->newQuery();
         $query->select('blog.*')
             ->leftJoin('blog_description', function ($join) {
                 $join->on('blog_description.blog_id', '=', 'blog.id')

@@ -26,4 +26,6 @@ interface CategoryRepositoryInterface extends BaseRepositoryInterface
     public function restoreByIds(array $ids): int;
 
     public function restoreById(int $id): ?Category;
+
+    public function listWithDescription(): \Illuminate\Support\Collection;
 }

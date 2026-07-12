@@ -15,9 +15,10 @@ class MenuRepository extends QueryableRepository implements MenuRepositoryInterf
     {
         return Menu::class;
     }
+
     public function getMenuByPosition($position = 'top')
     {
-        return $this->model
+        return $this->resetModel()
             ->where('position', $position)
             ->with([
                 'menuValues.description'

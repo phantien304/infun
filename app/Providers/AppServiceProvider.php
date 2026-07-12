@@ -23,9 +23,9 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Helpers\ChannelWriter();
         });
         $this->app->singleton(\App\Services\Currency\CurrencyService::class);
-        $this->app->singleton(\App\Services\ConfigDbService::class);
         $this->app->singleton(\App\Services\Measurement\LengthService::class);
         $this->app->singleton(\App\Services\Measurement\WeightService::class);
+        $this->app->singleton(\App\Services\ConfigDbService::class);
         $this->app->singleton(\App\Services\Stock\WarehouseService::class);
     }
 
@@ -148,7 +148,7 @@ class AppServiceProvider extends ServiceProvider
             $implementation = Str::replaceFirst('Interface', '', $implementation);
 
             if (class_exists($implementation) && !Str::contains($interface, 'BaseRepository')) {
-                $this->app->singleton($interface, $implementation);
+                $this->app->scoped($interface, $implementation);
             }
         }
     }

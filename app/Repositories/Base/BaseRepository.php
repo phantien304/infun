@@ -43,7 +43,7 @@ abstract class BaseRepository implements BaseRepositoryInterface
 
     public function paginate($limit = 15)
     {
-        return $this->model->paginate($limit);
+        return $this->resetModel()->paginate($limit);
     }
 
     public function getParams()

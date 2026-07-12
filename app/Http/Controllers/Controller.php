@@ -9,13 +9,22 @@ use App\Data\Output\ZoneDTO;
 use App\Events\BaseEvent;
 use App\Http\Supports\BuildsSeoMeta;
 use App\Http\Supports\MenusClient;
+use App\Repositories\Interfaces\AttributeRepositoryInterface;
 use App\Repositories\Interfaces\CategoryRepositoryInterface;
+use App\Repositories\Interfaces\DistrictRepositoryInterface;
 use App\Repositories\Interfaces\FilterRepositoryInterface;
 use App\Repositories\Interfaces\LanguageRepositoryInterface;
 use App\Repositories\Interfaces\ManufacturerRepositoryInterface;
 use App\Repositories\Interfaces\MenuRepositoryInterface;
 use App\Repositories\Interfaces\MenuValueRepositoryInterface;
 use App\Repositories\Interfaces\ProductRepositoryInterface;
+use App\Repositories\Interfaces\LengthClassRepositoryInterface;
+use App\Repositories\Interfaces\OptionRepositoryInterface;
+use App\Repositories\Interfaces\StockStatusRepositoryInterface;
+use App\Repositories\Interfaces\TaxClassRepositoryInterface;
+use App\Repositories\Interfaces\UserGroupRepositoryInterface;
+use App\Repositories\Interfaces\WardRepositoryInterface;
+use App\Repositories\Interfaces\WeightClassRepositoryInterface;
 use App\Repositories\Interfaces\ZoneRepositoryInterface;
 use App\Services\Currency\CurrencyService;
 use Illuminate\Container\Container;
@@ -41,6 +50,15 @@ abstract class Controller
             'productRepo'      => ProductRepositoryInterface::class,
             'languageRepo'     => LanguageRepositoryInterface::class,
             'currencyService'  => CurrencyService::class,
+            'districtRepo'     => DistrictRepositoryInterface::class,
+            'wardRepo'         => WardRepositoryInterface::class,
+            'attributeRepo'    => AttributeRepositoryInterface::class,
+            'optionRepo'       => OptionRepositoryInterface::class,
+            'stockStatusRepo'  => StockStatusRepositoryInterface::class,
+            'taxClassRepo'     => TaxClassRepositoryInterface::class,
+            'userGroupRepo'    => UserGroupRepositoryInterface::class,
+            'lengthClassRepo'  => LengthClassRepositoryInterface::class,
+            'weightClassRepo'  => WeightClassRepositoryInterface::class,
         ];
     }
 

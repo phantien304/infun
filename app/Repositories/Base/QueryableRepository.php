@@ -45,7 +45,7 @@ abstract class QueryableRepository extends BaseRepository
 
     protected function baseQuery(): Builder
     {
-        return $this->model->newQuery();
+        return $this->resetModel()->newQuery();
     }
 
     protected function beforeBuildForList(Builder $query): Builder

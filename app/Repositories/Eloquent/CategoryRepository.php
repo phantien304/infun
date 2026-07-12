@@ -84,7 +84,7 @@ class CategoryRepository extends QueryableRepository implements CategoryReposito
 
     public function getForCms(int $id): ?Category
     {
-        return Category::withTrashed()->with('descriptions')->find($id);
+        return $this->resetModel()->withTrashed()->with('descriptions')->find($id);
     }
 
     public function saveFromCms(?Category $category, array $data): Category
@@ -128,19 +128,24 @@ class CategoryRepository extends QueryableRepository implements CategoryReposito
 
     public function deleteByIds(array $ids): int
     {
-        return Category::whereIn('id', $ids)->delete();
+        return $this->resetModel()->whereIn('id', $ids)->delete();
     }
 
     public function restoreByIds(array $ids): int
     {
-        return Category::withTrashed()->whereIn('id', $ids)->restore();
+        return $this->resetModel()->withTrashed()->whereIn('id', $ids)->restore();
     }
 
     public function restoreById(int $id): ?Category
     {
-        $category = Category::withTrashed()->find($id);
+        $category = $this->resetModel()->withTrashed()->find($id);
         $category?->restore();
 
         return $category?->load('descriptions');
+    }
+
+    public function listWithDescription(): Collection
+    {
+        return $this->resetModel()->with('description')->get();
     }
 }

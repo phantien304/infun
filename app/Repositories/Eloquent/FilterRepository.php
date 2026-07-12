@@ -40,4 +40,9 @@ class FilterRepository extends QueryableRepository implements FilterRepositoryIn
             'filterValues.description'
         ];
     }
+
+    public function listWithValues(): \Illuminate\Support\Collection
+    {
+        return $this->resetModel()->with(['description', 'filterValues.description'])->get();
+    }
 }

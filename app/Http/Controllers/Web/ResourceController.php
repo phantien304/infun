@@ -3,8 +3,6 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Models\Entities\District;
-use App\Models\Entities\Ward;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
 
@@ -29,11 +27,7 @@ class ResourceController extends Controller
             return respondSuccess([]);
         }
 
-        $rows = District::query()
-            ->where('zone_id', $zoneId)
-            ->with('description')
-            ->orderBy('id')
-            ->get()
+        $rows = $this->districtRepo->listByZone($zoneId)
             ->map(fn ($district) => [
                 'id'   => (int) $district->id,
                 'name' => (string) ($district->description->name ?? ''),
@@ -50,11 +44,7 @@ class ResourceController extends Controller
             return respondSuccess([]);
         }
 
-        $rows = Ward::query()
-            ->where('district_id', $districtId)
-            ->with('description')
-            ->orderBy('id')
-            ->get()
+        $rows = $this->wardRepo->listByDistrict($districtId)
             ->map(fn ($ward) => [
                 'id'   => (int) $ward->id,
                 'name' => (string) ($ward->description->name ?? ''),

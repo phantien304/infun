@@ -20,7 +20,7 @@ class ZoneRepository extends QueryableRepository implements ZoneRepositoryInterf
 
     protected function baseQuery(): Builder
     {
-        return $this->model->newQuery()
+        return $this->resetModel()->newQuery()
             ->where('country_id', getCoreConfig('zones.country_id_default'));
     }
 

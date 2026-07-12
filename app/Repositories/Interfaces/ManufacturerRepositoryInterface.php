@@ -19,4 +19,6 @@ interface ManufacturerRepositoryInterface extends BaseRepositoryInterface
      * Returns null when the id is invalid or the row was soft-deleted.
      */
     public function getManufacturerDetail(int $id): ?Manufacturer;
+
+    public function getAll(): \Illuminate\Support\Collection;
 }

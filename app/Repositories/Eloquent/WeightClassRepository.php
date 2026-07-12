@@ -30,4 +30,9 @@ class WeightClassRepository extends QueryableRepository implements WeightClassRe
     {
         $this->forgetCache(setting('cache.weight_classes'), perLocale: false);
     }
+
+    public function getAll(): Collection
+    {
+        return $this->resetModel()->query()->get();
+    }
 }

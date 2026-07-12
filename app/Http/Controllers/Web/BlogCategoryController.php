@@ -8,7 +8,6 @@ use App\Data\Output\BlogTagDTO;
 use App\Data\Output\ProductDTO;
 use App\Data\Output\StoreReviewDTO;
 use App\Http\Controllers\Controller;
-use App\Models\Entities\BlogCategory;
 use App\Repositories\Interfaces\BlogCategoryRepositoryInterface;
 use App\Repositories\Interfaces\BlogRepositoryInterface;
 use App\Repositories\Interfaces\BlogTagRepositoryInterface;
@@ -30,9 +29,7 @@ class BlogCategoryController extends Controller
 
     public function index($id = '')
     {
-        $category = BlogCategory::with([
-            'description',
-        ])->find($id);
+        $category = $this->blogCategoryRepo->findWithDescription($id);
 
         if (! $category || ! $category->description) {
             return redirect()->route('error.404');

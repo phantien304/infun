@@ -8,4 +8,6 @@ use Illuminate\Database\Eloquent\Collection;
 interface BlogCategoryRepositoryInterface extends BaseRepositoryInterface
 {
     public function listAllCached(): Collection;
+
+    public function findWithDescription(int|string $id): ?\App\Models\Entities\BlogCategory;
 }

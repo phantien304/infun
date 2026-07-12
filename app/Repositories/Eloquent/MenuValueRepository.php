@@ -12,10 +12,11 @@ class MenuValueRepository extends QueryableRepository implements MenuValueReposi
     {
         return MenuValue::class;
     }
+
     public function getListMenuValueByMenuId($menuId)
     {
         $this->resetModel();
-        return $this->model
+        return $this->resetModel()
             ->where('menu_id', $menuId)
             ->leftJoin('menu_value_description', 'menu_value_description.menu_value_id', '=', 'menu_value.id')
             ->languageCode('menu_value_description')

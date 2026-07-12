@@ -31,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->optimizes('repository:cache', 'repository:clear', 'repositories');
         $this->registerViewNamespaces();
         $this->registerRouteMacros();
         $this->logSql();
@@ -135,21 +136,44 @@ class AppServiceProvider extends ServiceProvider
 
     protected function registerRepository()
     {
-        $interfacePath = app_path('Repositories/Interfaces');
-        if (!File::isDirectory($interfacePath)) {
-            return;
+        $path = static::repositoryCachePath();
+        $bindings = is_file($path) ? require $path : static::discoverRepositoryBindings();
+
+        foreach ($bindings as $interface => $implementation) {
+            $this->app->singleton($interface, $implementation);
+        }
+    }
+
+    public static function repositoryCachePath(): string
+    {
+        return base_path('bootstrap/cache/repositories.php');
+    }
+
+    public static function discoverRepositoryBindings(): array
+    {
+        $dir = app_path('Repositories/Interfaces');
+        if (! File::isDirectory($dir)) {
+            return [];
         }
 
-        $files = File::allFiles($interfacePath);
-        foreach ($files as $file) {
+        $bindings = [];
+        foreach (File::allFiles($dir) as $file) {
             $interface = 'App\\Repositories\\Interfaces\\' . $file->getBasename('.php');
+            if (Str::contains($interface, 'BaseRepository')) {
+                continue;
+            }
 
-            $implementation = Str::replaceFirst('Interfaces', 'Eloquent', $interface);
-            $implementation = Str::replaceFirst('Interface', '', $implementation);
+            $implementation = Str::replaceFirst(
+                'Interface',
+                '',
+                Str::replaceFirst('Interfaces', 'Eloquent', $interface),
+            );
 
-            if (class_exists($implementation) && !Str::contains($interface, 'BaseRepository')) {
-                $this->app->scoped($interface, $implementation);
+            if (interface_exists($interface) && class_exists($implementation)) {
+                $bindings[$interface] = $implementation;
             }
         }
+
+        return $bindings;
     }
 }

@@ -5,6 +5,7 @@ namespace App\Repositories\Eloquent;
 use App\Models\Entities\Coupon;
 use App\Models\Entities\CouponHistory;
 use App\Models\Entities\ProductCategory;
+use App\Models\Entities\UserCoupon;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
@@ -86,6 +87,121 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
             ->groupBy('coupon_id')
             ->pluck('aggregate', 'coupon_id')
             ->map(fn ($count) => (int) $count)
+            ->all();
+    }
+
+    // === Write-side + reads port từ CouponService (KM used_count / history / saved / category) ===
+
+    public function existsById(int $couponId): bool
+    {
+        return $this->resetModel()->newQuery()->where('id', $couponId)->exists();
+    }
+
+    public function isActiveForUserGroup(int $couponId, ?int $userGroupId): bool
+    {
+        return $this->resetModel()
+            ->newQuery()
+            ->where('id', $couponId)
+            ->active()
+            ->forUserGroupOrPublic($userGroupId)
+            ->exists();
+    }
+
+    public function saveForUser(int $userId, int $couponId): void
+    {
+        UserCoupon::query()->updateOrInsert(
+            ['user_id' => $userId, 'coupon_id' => $couponId],
+            ['saved_at' => now()],
+        );
+    }
+
+    public function unsaveForUser(int $userId, int $couponId): bool
+    {
+        return UserCoupon::query()
+            ->where('user_id', $userId)
+            ->where('coupon_id', $couponId)
+            ->delete() > 0;
+    }
+
+    public function recordAppliedHistory(int $couponId, ?int $userId, int $amount, int $status): int
+    {
+        return (int) CouponHistory::query()->insertGetId([
+            'coupon_id'  => $couponId,
+            'order_id'   => null,
+            'user_id'    => $userId,
+            'amount'     => $amount,
+            'status'     => $status,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    public function recordUsedHistory(int $couponId, int $orderId, ?int $userId, int $amount, int $status): void
+    {
+        CouponHistory::create([
+            'coupon_id' => $couponId,
+            'order_id'  => $orderId,
+            'user_id'   => $userId,
+            'amount'    => $amount,
+            'status'    => $status,
+        ]);
+    }
+
+    public function incrementUsedCount(int $couponId, int $by = 1): void
+    {
+        DB::table('coupon')->where('id', $couponId)->increment('used_count', $by);
+    }
+
+    public function decrementUsedCount(int $couponId, int $by): void
+    {
+        DB::table('coupon')
+            ->where('id', $couponId)
+            ->where('used_count', '>=', $by)
+            ->decrement('used_count', $by);
+    }
+
+    public function historyForOrderByStatus(int $orderId, int $status): Collection
+    {
+        return CouponHistory::query()
+            ->where('order_id', $orderId)
+            ->where('status', $status)
+            ->get(['id', 'coupon_id']);
+    }
+
+    public function markHistoryStatus(array $ids, int $status): void
+    {
+        if (empty($ids)) {
+            return;
+        }
+        CouponHistory::query()
+            ->whereIn('id', $ids)
+            ->update(['status' => $status, 'updated_at' => now()]);
+    }
+
+    public function categoryIdsForProducts(array $productIds): array
+    {
+        if (empty($productIds)) {
+            return [];
+        }
+        return ProductCategory::query()
+            ->whereIn('product_id', $productIds)
+            ->pluck('category_id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function productIdsInCategories(array $productIds, array $categoryIds): array
+    {
+        if (empty($productIds) || empty($categoryIds)) {
+            return [];
+        }
+        return ProductCategory::query()
+            ->whereIn('product_id', $productIds)
+            ->whereIn('category_id', $categoryIds)
+            ->pluck('product_id')
+            ->unique()
+            ->values()
             ->all();
     }
 

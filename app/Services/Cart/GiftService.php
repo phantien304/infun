@@ -4,10 +4,8 @@ namespace App\Services\Cart;
 
 use App\Data\Output\GiftDTO;
 use App\Models\Entities\Gift;
-use App\Models\Entities\OrderGift;
 use App\Repositories\Interfaces\GiftRepositoryInterface;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class GiftService
 {
@@ -258,8 +256,6 @@ class GiftService
                 continue;
             }
 
-            // Re-validate điều kiện kích hoạt + lựa chọn tại thời điểm đặt hàng: chống
-            // trường hợp user đủ điều kiện nhận quà rồi giảm giỏ xuống dưới ngưỡng.
             if ($this->validateTrigger($gift, $cartSubtotal, $cartProductIds) !== null
                 || $this->validatePicks($gift, $itemIds) !== null) {
                 continue;
@@ -272,36 +268,29 @@ class GiftService
                 if (! isset($itemQtys[$itemId])) {
                     continue;
                 }
-                OrderGift::query()->insertOrIgnore([
-                    'order_id'     => $orderId,
-                    'gift_id'      => $giftId,
-                    'gift_item_id' => $itemId,
-                    'quantity'     => (int) $itemQtys[$itemId],
-                    'created_at'   => now(),
-                    'updated_at'   => now(),
-                ]);
+                $this->giftRepo->insertOrderGiftItem(
+                    $orderId,
+                    $giftId,
+                    $itemId,
+                    (int) $itemQtys[$itemId],
+                );
             }
 
-            DB::table('gift')->where('id', $giftId)->increment('used_count');
+            $this->giftRepo->incrementUsedCount($giftId);
         }
     }
 
     public function revertOrderGifts(int $orderId): void
     {
-        $gifts = OrderGift::query()
-            ->forOrder($orderId)
-            ->get(['gift_id']);
+        $gifts = $this->giftRepo->orderGiftGiftIds($orderId);
         if ($gifts->isEmpty()) {
             return;
         }
 
         foreach ($gifts->groupBy('gift_id') as $giftId => $rows) {
-            DB::table('gift')
-                ->where('id', (int) $giftId)
-                ->where('used_count', '>=', 1)
-                ->decrement('used_count');
+            $this->giftRepo->decrementUsedCount((int) $giftId);
         }
 
-        OrderGift::query()->forOrder($orderId)->delete();
+        $this->giftRepo->deleteOrderGifts($orderId);
     }
 }

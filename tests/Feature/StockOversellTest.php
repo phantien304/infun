@@ -33,10 +33,12 @@ class StockOversellTest extends TestCase
 
         // Bật kiểm tra tồn (config_stock_checkout = 1) mà không cần bảng settings.
         $this->app->bind(ConfigDbService::class, function () {
-            return new class extends ConfigDbService {
-                public function __construct() {}
+            return new class () extends ConfigDbService {
+                public function __construct()
+                {
+                }
 
-                public function getConfig()
+                public function getConfigs()
                 {
                     return ['config_stock_checkout' => 1];
                 }

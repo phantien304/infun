@@ -8,30 +8,30 @@ use Illuminate\Support\Collection;
 
 interface VoucherRepositoryInterface extends BaseRepositoryInterface
 {
-    /**
-     * [Legacy] Resolve voucher code thành mảng — giữ backward compat cho
-     * caller cũ. Code mới gọi `findByCode` + `VoucherService::validate`.
-     */
+
     public function resolveVoucher(?string $code): array;
 
     public function findByCode(string $code): ?Voucher;
 
-    /**
-     * Batch lookup nhiều code trong 1 query (tránh N+1 ở resolveApplied).
-     * Trả Collection keyBy 'code' để caller `->get($code)`.
-     *
-     * @param  array<int, string>  $codes
-     * @return Collection<string, Voucher>
-     */
     public function findByCodes(array $codes): Collection;
 
-    /**
-     * Voucher gắn cho user (gửi tới email) — Shopee "Voucher của tôi" tab.
-     * Trả CẢ expired/fully_used để hiển thị state, service filter khi áp.
-     *
-     * @return Collection<int, Voucher>
-     */
     public function listForEmail(string $email): Collection;
+
+    public function recordHistory(int $voucherId, int $orderId, ?int $userId, int $amount, int $status): void;
+
+    public function historyForOrderByStatus(int $orderId, int $status): Collection;
+
+    public function historyForOrderByStatuses(int $orderId, array $statuses): Collection;
+
+    public function markHistoryStatus(array $ids, int $status): void;
+
+    public function incrementRedeemed(int $voucherId, float $amount): void;
+
+    public function decrementRedeemed(int $voucherId, float $amount): void;
+
+    public function markFullyUsed(array $voucherIds, int $activeStatus, int $fullyUsedStatus): void;
+
+    public function reactivateVouchers(array $voucherIds, int $fullyUsedStatus, int $activeStatus): void;
 
     public function flushCache(): void;
 }

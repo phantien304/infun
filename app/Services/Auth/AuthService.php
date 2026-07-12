@@ -11,7 +11,6 @@ use App\Repositories\Interfaces\UserRepositoryInterface;
 use App\Repositories\Interfaces\UserResetPasswordRepositoryInterface;
 use App\Services\Account\WishlistService;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class AuthService
@@ -23,8 +22,6 @@ class AuthService
         protected WishlistService $wishlistService,
     ) {
     }
-
-    // ===== Login =======================================================
 
     public function login(string $email, string $password, bool $remember = true): bool
     {
@@ -48,7 +45,7 @@ class AuthService
         $email = (string) $data['email'];
         $code = $this->generateToken();
 
-        $user = DB::transaction(function () use ($data, $email, $code) {
+        $user = $this->userRepo->transaction(function () use ($data, $email, $code) {
             $user = $this->userRepo->createUser([
                 'email'        => $email,
                 'confirm_code' => $code,
@@ -73,15 +70,13 @@ class AuthService
         return $user;
     }
 
-    // ===== Social login ===============================================
-
     public function handleSocialUser(string $provider, object $socialUser): User
     {
         $email = (string) $socialUser->getEmail();
         $user = $this->userRepo->findByEmail($email);
 
         if (! $user) {
-            $user = DB::transaction(fn () => $this->userRepo->createUser([
+            $user = $this->userRepo->transaction(fn () => $this->userRepo->createUser([
                 'full_name'     => (string) ($socialUser->getName() ?? ''),
                 'email'         => $email,
                 'avatar'        => (string) ($socialUser->getAvatar() ?? ''),
@@ -98,8 +93,6 @@ class AuthService
 
         return $user;
     }
-
-    // ===== Forgot / reset password ====================================
 
     public function sendResetLink(string $email): bool
     {
@@ -123,7 +116,7 @@ class AuthService
 
     public function resetPassword(string $email, string $password): ?User
     {
-        $user = DB::transaction(fn () => $this->userRepo->updatePasswordByEmail($email, $password));
+        $user = $this->userRepo->transaction(fn () => $this->userRepo->updatePasswordByEmail($email, $password));
         if ($user) {
             $this->resetRepo->deleteForEmail($email);
         }
@@ -143,7 +136,7 @@ class AuthService
             return true;
         }
 
-        DB::transaction(fn () => $this->userRepo->markConfirmed($user));
+        $this->userRepo->transaction(fn () => $this->userRepo->markConfirmed($user));
         dispatch(new AuthenticatedEmailJob($email));
 
         return true;

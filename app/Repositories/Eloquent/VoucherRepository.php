@@ -4,6 +4,7 @@ namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\Orders;
 use App\Models\Entities\Voucher;
+use App\Models\Entities\VoucherHistory;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
@@ -58,6 +59,82 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->with(['voucherTheme'])
             ->orderByDesc('id')
             ->get();
+    }
+
+    // === Write-side port từ VoucherService (history + balance/status) ===
+
+    public function recordHistory(int $voucherId, int $orderId, ?int $userId, int $amount, int $status): void
+    {
+        VoucherHistory::create([
+            'voucher_id' => $voucherId,
+            'order_id'   => $orderId,
+            'user_id'    => $userId,
+            'amount'     => $amount,
+            'status'     => $status,
+        ]);
+    }
+
+    public function historyForOrderByStatus(int $orderId, int $status): Collection
+    {
+        return VoucherHistory::query()
+            ->forOrder($orderId)
+            ->where('status', $status)
+            ->get(['id', 'voucher_id', 'amount']);
+    }
+
+    public function historyForOrderByStatuses(int $orderId, array $statuses): Collection
+    {
+        return VoucherHistory::query()
+            ->forOrder($orderId)
+            ->whereIn('status', $statuses)
+            ->get(['id', 'voucher_id', 'amount', 'status']);
+    }
+
+    public function markHistoryStatus(array $ids, int $status): void
+    {
+        if (empty($ids)) {
+            return;
+        }
+        VoucherHistory::query()
+            ->whereIn('id', $ids)
+            ->update(['status' => $status, 'updated_at' => now()]);
+    }
+
+    public function incrementRedeemed(int $voucherId, float $amount): void
+    {
+        DB::table('voucher')->where('id', $voucherId)->increment('redeemed_balance', $amount);
+    }
+
+    public function decrementRedeemed(int $voucherId, float $amount): void
+    {
+        DB::table('voucher')
+            ->where('id', $voucherId)
+            ->where('redeemed_balance', '>=', $amount)
+            ->decrement('redeemed_balance', $amount);
+    }
+
+    public function markFullyUsed(array $voucherIds, int $activeStatus, int $fullyUsedStatus): void
+    {
+        if (empty($voucherIds)) {
+            return;
+        }
+        DB::table('voucher')
+            ->whereIn('id', $voucherIds)
+            ->where('status', $activeStatus)
+            ->whereColumn('redeemed_balance', '>=', 'amount')
+            ->update(['status' => $fullyUsedStatus]);
+    }
+
+    public function reactivateVouchers(array $voucherIds, int $fullyUsedStatus, int $activeStatus): void
+    {
+        if (empty($voucherIds)) {
+            return;
+        }
+        DB::table('voucher')
+            ->whereIn('id', $voucherIds)
+            ->where('status', $fullyUsedStatus)
+            ->whereColumn('redeemed_balance', '<', 'amount')
+            ->update(['status' => $activeStatus]);
     }
 
     public function flushCache(): void

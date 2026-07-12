@@ -75,6 +75,17 @@ class UserRepository extends QueryableRepository implements UserRepositoryInterf
         return $user;
     }
 
+    public function updatePasswordById(int $id, string $plainPassword): ?User
+    {
+        $user = $this->resetModel()->where('id', $id)->lockForUpdate()->first();
+        if (! $user) {
+            return null;
+        }
+        $user->fill(['password' => Hash::make($plainPassword)])->save();
+
+        return $user;
+    }
+
     public function getProfile(int $id): ?User
     {
         return $this->resetModel()

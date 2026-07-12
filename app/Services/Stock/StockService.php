@@ -129,7 +129,7 @@ class StockService
                 $this->stockMovementRepo->create([
                     'product_variant_id' => $variantId,
                     'warehouse_id'       => $warehouseId,
-                    'type'               => $reservedDelta > 0 ? StockMovementType::Reserve : StockMovementType::Release,
+                    'type'               => $reservedDelta > 0 ? StockMovementType::Reserve->value : StockMovementType::Release->value,
                     'quantity_change'    => $reservedDelta,
                     'on_hand_after'      => (int) $stock->on_hand,
                     'reference_type'     => 'reservation',
@@ -209,7 +209,7 @@ class StockService
             $this->stockMovementRepo->create([
                 'product_variant_id' => $variantId,
                 'warehouse_id'       => $warehouseId,
-                'type'               => StockMovementType::Release,
+                'type'               => StockMovementType::Release->value,
                 'quantity_change'    => $qty,
                 'on_hand_after'      => $onHand,
                 'reference_type'     => 'reservation',
@@ -222,12 +222,6 @@ class StockService
         $this->stockReservationRepo->deleteReservation($row);
     }
 
-    /**
-     * Bản đồ [variant_id => quantity] mà 1 phiên đang giữ — SUM qua mọi kho
-     * (một variant có thể được hold rải trên nhiều kho).
-     *
-     * @return array<int,int>
-     */
     public function holderReservedMap(string $holder): array
     {
         if ($holder === '') {

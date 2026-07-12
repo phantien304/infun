@@ -8,15 +8,19 @@ use Illuminate\Support\Collection;
 
 interface GiftRepositoryInterface extends BaseRepositoryInterface
 {
-    /**
-     * Tất cả gift active hiện tại (is_active + window + quota chưa hết).
-     * KHÔNG check trigger ở đây — service layer sẽ filter theo cart.
-     *
-     * @return Collection<int, Gift>
-     */
     public function listActive(): Collection;
 
     public function findActiveById(int $giftId): ?Gift;
+
+    public function insertOrderGiftItem(int $orderId, int $giftId, int $giftItemId, int $quantity): void;
+
+    public function incrementUsedCount(int $giftId, int $by = 1): void;
+
+    public function decrementUsedCount(int $giftId): void;
+
+    public function orderGiftGiftIds(int $orderId): Collection;
+
+    public function deleteOrderGifts(int $orderId): void;
 
     public function flushCache(): void;
 }

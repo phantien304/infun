@@ -4,12 +4,8 @@ namespace App\Services\Cart;
 
 use App\Data\Output\CouponDTO;
 use App\Models\Entities\Coupon;
-use App\Models\Entities\CouponHistory;
-use App\Models\Entities\ProductCategory;
-use App\Models\Entities\UserCoupon;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class CouponService
 {
@@ -18,7 +14,6 @@ class CouponService
     ) {
     }
 
-    /** Cache CartCouponContext trong 1 request: applyCodes + listForCart dùng chung, tránh resolve category 2 lần. */
     private array $cartContextCache = [];
 
     public function listForCart(array $cartItems, int $cartSubtotal, bool $contextHasShipping = true): Collection
@@ -171,11 +166,7 @@ class CouponService
                 continue;
             }
 
-            $activeQuery = Coupon::query()
-                ->where('id', $coupon->id)
-                ->active()
-                ->forUserGroupOrPublic($userGroupId);
-            if (! $activeQuery->exists()) {
+            if (! $this->couponRepo->isActiveForUserGroup((int) $coupon->id, $userGroupId)) {
                 $errors[] = sprintf(trans('messages.checkout.coupon.inactive'), $code);
                 continue;
             }
@@ -221,37 +212,39 @@ class CouponService
 
     public function save(int $userId, int $couponId): bool
     {
-        $exists = Coupon::query()->where('id', $couponId)->exists();
-        if (! $exists) {
+        if (! $this->couponRepo->existsById($couponId)) {
             return false;
         }
 
-        UserCoupon::query()->updateOrInsert(
-            ['user_id' => $userId, 'coupon_id' => $couponId],
-            ['saved_at' => now()],
-        );
+        $this->couponRepo->saveForUser($userId, $couponId);
         return true;
     }
 
     public function unsave(int $userId, int $couponId): bool
     {
-        return UserCoupon::query()
-            ->where('user_id', $userId)
-            ->where('coupon_id', $couponId)
-            ->delete() > 0;
+        return $this->couponRepo->unsaveForUser($userId, $couponId);
     }
 
     public function recordApplied(int $couponId, ?int $userId, int $amount): int
     {
-        return (int) CouponHistory::query()->insertGetId([
-            'coupon_id'  => $couponId,
-            'order_id'   => null,
-            'user_id'    => $userId,
-            'amount'     => $amount,
-            'status'     => (int) getCoreConfig('coupon.history_status.applied'),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        return $this->couponRepo->recordAppliedHistory(
+            $couponId,
+            $userId,
+            $amount,
+            (int) getCoreConfig('coupon.history_status.applied'),
+        );
+    }
+
+    public function recordUsedForOrder(int $couponId, int $orderId, ?int $userId, int $amount): void
+    {
+        $this->couponRepo->recordUsedHistory(
+            $couponId,
+            $orderId,
+            $userId,
+            $amount,
+            (int) getCoreConfig('coupon.history_status.used'),
+        );
+        $this->couponRepo->incrementUsedCount($couponId);
     }
 
     public function revertOrderCoupons(int $orderId): void
@@ -259,24 +252,15 @@ class CouponService
         $statusUsed = (int) getCoreConfig('coupon.history_status.used');
         $statusCancelled = (int) getCoreConfig('coupon.history_status.cancelled');
 
-        $toRevert = CouponHistory::query()
-            ->where('order_id', $orderId)
-            ->where('status', $statusUsed)
-            ->get(['id', 'coupon_id']);
-
+        $toRevert = $this->couponRepo->historyForOrderByStatus($orderId, $statusUsed);
         if ($toRevert->isEmpty()) {
             return;
         }
 
-        CouponHistory::query()
-            ->whereIn('id', $toRevert->pluck('id')->all())
-            ->update(['status' => $statusCancelled, 'updated_at' => now()]);
+        $this->couponRepo->markHistoryStatus($toRevert->pluck('id')->all(), $statusCancelled);
 
         foreach ($toRevert->groupBy('coupon_id') as $couponId => $rows) {
-            DB::table('coupon')
-                ->where('id', (int) $couponId)
-                ->where('used_count', '>=', $rows->count())
-                ->decrement('used_count', $rows->count());
+            $this->couponRepo->decrementUsedCount((int) $couponId, $rows->count());
         }
     }
 
@@ -314,28 +298,11 @@ class CouponService
 
     private function resolveCartCategoryIds(array $productIds): array
     {
-        if (empty($productIds)) {
-            return [];
-        }
-        return ProductCategory::query()
-            ->whereIn('product_id', $productIds)
-            ->pluck('category_id')
-            ->unique()
-            ->values()
-            ->all();
+        return $this->couponRepo->categoryIdsForProducts($productIds);
     }
 
     private function productIdsInCategories(array $productIds, array $categoryIds): array
     {
-        if (empty($productIds) || empty($categoryIds)) {
-            return [];
-        }
-        return ProductCategory::query()
-            ->whereIn('product_id', $productIds)
-            ->whereIn('category_id', $categoryIds)
-            ->pluck('product_id')
-            ->unique()
-            ->values()
-            ->all();
+        return $this->couponRepo->productIdsInCategories($productIds, $categoryIds);
     }
 }

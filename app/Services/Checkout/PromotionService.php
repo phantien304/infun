@@ -2,11 +2,9 @@
 
 namespace App\Services\Checkout;
 
-use App\Models\Entities\CouponHistory;
 use App\Services\Cart\CouponService;
 use App\Services\Cart\GiftService;
 use App\Services\Cart\VoucherService;
-use Illuminate\Support\Facades\DB;
 
 class PromotionService
 {
@@ -75,21 +73,16 @@ class PromotionService
             return;
         }
 
-        $statusUsed = (int) getCoreConfig('coupon.history_status.used');
         $userId = (int) getCurrentUserId() ?: null;
 
         foreach ($ctx->appliedCoupons as $entry) {
             $coupon = $entry['coupon'];
-            CouponHistory::create([
-                'coupon_id' => (int) $coupon->id,
-                'order_id'  => $orderId,
-                'user_id'   => $userId,
-                'amount'    => (int) $entry['discount'],
-                'status'    => $statusUsed,
-            ]);
-            DB::table('coupon')
-                ->where('id', $coupon->id)
-                ->increment('used_count');
+            $this->couponService->recordUsedForOrder(
+                (int) $coupon->id,
+                $orderId,
+                $userId,
+                (int) $entry['discount'],
+            );
         }
     }
 }

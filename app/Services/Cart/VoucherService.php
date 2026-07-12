@@ -4,11 +4,9 @@ namespace App\Services\Cart;
 
 use App\Data\Output\VoucherDTO;
 use App\Models\Entities\Voucher;
-use App\Models\Entities\VoucherHistory;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class VoucherService
 {
@@ -150,13 +148,13 @@ class VoucherService
             if ($entry['amount'] <= 0) {
                 continue;
             }
-            VoucherHistory::create([
-                'voucher_id' => (int) $entry['voucher']->id,
-                'order_id'   => $orderId,
-                'user_id'    => $userId,
-                'amount'     => (int) $entry['amount'],
-                'status'     => $statusApplied,
-            ]);
+            $this->voucherRepo->recordHistory(
+                (int) $entry['voucher']->id,
+                $orderId,
+                $userId,
+                (int) $entry['amount'],
+                $statusApplied,
+            );
         }
     }
 
@@ -165,72 +163,51 @@ class VoucherService
         $statusApplied = (int) getCoreConfig('voucher.history_status.applied');
         $statusConfirmed = (int) getCoreConfig('voucher.history_status.confirmed');
 
-        $rows = VoucherHistory::query()
-            ->forOrder($orderId)
-            ->where('status', $statusApplied)
-            ->get(['id', 'voucher_id', 'amount']);
+        $rows = $this->voucherRepo->historyForOrderByStatus($orderId, $statusApplied);
         if ($rows->isEmpty()) {
             return;
         }
 
-        VoucherHistory::query()
-            ->whereIn('id', $rows->pluck('id')->all())
-            ->update(['status' => $statusConfirmed, 'updated_at' => now()]);
+        $this->voucherRepo->markHistoryStatus($rows->pluck('id')->all(), $statusConfirmed);
 
         foreach ($rows as $row) {
-            DB::table('voucher')
-                ->where('id', (int) $row->voucher_id)
-                ->increment('redeemed_balance', (float) $row->amount);
+            $this->voucherRepo->incrementRedeemed((int) $row->voucher_id, (float) $row->amount);
         }
 
         $statusActive = (int) getCoreConfig('voucher.status.active');
         $statusFullyUsed = (int) getCoreConfig('voucher.status.fully_used');
-        DB::table('voucher')
-            ->whereIn('id', $rows->pluck('voucher_id')->unique()->all())
-            ->where('status', $statusActive)
-            ->whereColumn('redeemed_balance', '>=', 'amount')
-            ->update(['status' => $statusFullyUsed]);
+        $this->voucherRepo->markFullyUsed(
+            $rows->pluck('voucher_id')->unique()->all(),
+            $statusActive,
+            $statusFullyUsed,
+        );
     }
 
-    /**
-     * Order cancel: flip history applied/confirmed → refunded + decrement
-     * redeemed_balance + flip voucher back active (nếu trước đó fully_used).
-     */
     public function revertOrderVouchers(int $orderId): void
     {
         $statusConfirmed = (int) getCoreConfig('voucher.history_status.confirmed');
         $statusRefunded = (int) getCoreConfig('voucher.history_status.refunded');
 
-        $rows = VoucherHistory::query()
-            ->forOrder($orderId)
-            ->whereIn('status', [
-                (int) getCoreConfig('voucher.history_status.applied'),
-                $statusConfirmed,
-            ])
-            ->get(['id', 'voucher_id', 'amount', 'status']);
+        $rows = $this->voucherRepo->historyForOrderByStatuses($orderId, [
+            (int) getCoreConfig('voucher.history_status.applied'),
+            $statusConfirmed,
+        ]);
         if ($rows->isEmpty()) {
             return;
         }
 
-        VoucherHistory::query()
-            ->whereIn('id', $rows->pluck('id')->all())
-            ->update(['status' => $statusRefunded, 'updated_at' => now()]);
+        $this->voucherRepo->markHistoryStatus($rows->pluck('id')->all(), $statusRefunded);
 
-        // Decrement balance CHỈ rows trước đó confirmed (applied chưa cộng).
         foreach ($rows->where('status', $statusConfirmed) as $row) {
-            DB::table('voucher')
-                ->where('id', (int) $row->voucher_id)
-                ->where('redeemed_balance', '>=', (float) $row->amount)
-                ->decrement('redeemed_balance', (float) $row->amount);
+            $this->voucherRepo->decrementRedeemed((int) $row->voucher_id, (float) $row->amount);
         }
 
-        // Reactive voucher nếu trước đó fully_used.
         $statusActive = (int) getCoreConfig('voucher.status.active');
         $statusFullyUsed = (int) getCoreConfig('voucher.status.fully_used');
-        DB::table('voucher')
-            ->whereIn('id', $rows->pluck('voucher_id')->unique()->all())
-            ->where('status', $statusFullyUsed)
-            ->whereColumn('redeemed_balance', '<', 'amount')
-            ->update(['status' => $statusActive]);
+        $this->voucherRepo->reactivateVouchers(
+            $rows->pluck('voucher_id')->unique()->all(),
+            $statusFullyUsed,
+            $statusActive,
+        );
     }
 }

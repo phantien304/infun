@@ -36,4 +36,13 @@ class ProductStockRepository extends QueryableRepository implements ProductStock
     {
         $stock->save();
     }
+
+    public function updateOnHand(int $variantId, int $onHand): void
+    {
+        $stock = ProductStock::where('product_variant_id', $variantId)->first();
+        if ($stock) {
+            $stock->on_hand = $onHand;
+            $stock->save();
+        }
+    }
 }

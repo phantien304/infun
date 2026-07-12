@@ -13,18 +13,8 @@ interface ProductRepositoryInterface extends BaseRepositoryInterface
 
     public function getProductDetail(int $id): ?Product;
 
-    /**
-     * Lấy product theo id, BẮT BUỘC is_review = 1 (admin cho phép user
-     * gửi đánh giá). Dùng cho luồng review (ReviewController::saveReview).
-     * Trả null nếu product không tồn tại hoặc admin tắt review.
-     */
     public function findReviewableProduct(int $id): ?Product;
 
-    /**
-     * Tìm product hợp lệ để thêm vào giỏ (tồn tại + is_add_cart + dateAvailable),
-     * eager-load description. Dùng cho CheckoutController::addToCart. Trả null
-     * nếu không thoả.
-     */
     public function findAddableToCart(int $id): ?Product;
 
     public function incrementViewed(int $id): void;
@@ -44,4 +34,6 @@ interface ProductRepositoryInterface extends BaseRepositoryInterface
     public function getSortMenu(): array;
 
     public function getPerPageMenu(): array;
+
+    public function flushProductCache(int $id): void;
 }

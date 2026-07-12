@@ -18,7 +18,7 @@ class ProductCategoryRepository extends QueryableRepository implements ProductCa
         if (empty($productIds)) {
             return [];
         }
-        return ProductCategory::query()
+        return $this->resetModel()->query()
             ->whereIn('product_id', $productIds)
             ->pluck('category_id')
             ->unique()
@@ -31,12 +31,27 @@ class ProductCategoryRepository extends QueryableRepository implements ProductCa
         if (empty($productIds) || empty($categoryIds)) {
             return [];
         }
-        return ProductCategory::query()
+        return $this->resetModel()
             ->whereIn('product_id', $productIds)
             ->whereIn('category_id', $categoryIds)
             ->pluck('product_id')
             ->unique()
             ->values()
             ->all();
+    }
+
+    public function syncForProduct(int $productId, array $items): void
+    {
+        $this->resetModel()->where('product_id', $productId)->delete();
+        foreach ($items as $it) {
+            $cid = (int) ($it['id'] ?? $it['category_id'] ?? 0);
+            if (! $cid) {
+                continue;
+            }
+            $row = new ProductCategory();
+            $row->product_id  = $productId;
+            $row->category_id = $cid;
+            $row->save();
+        }
     }
 }

@@ -13,4 +13,6 @@ interface ProductStockRepositoryInterface extends BaseRepositoryInterface
     public function lockStock(int $variantId, int $warehouseId): ?ProductStock;
 
     public function save(ProductStock $stock): void;
+
+    public function updateOnHand(int $variantId, int $onHand): void;
 }

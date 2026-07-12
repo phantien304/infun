@@ -4,7 +4,6 @@ namespace App\Repositories\Eloquent;
 
 use App\Models\Entities\Orders;
 use App\Models\Entities\Voucher;
-use App\Models\Entities\VoucherHistory;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
@@ -61,44 +60,7 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->get();
     }
 
-    // === Write-side port từ VoucherService (history + balance/status) ===
-
-    public function recordHistory(int $voucherId, int $orderId, ?int $userId, int $amount, int $status): void
-    {
-        VoucherHistory::create([
-            'voucher_id' => $voucherId,
-            'order_id'   => $orderId,
-            'user_id'    => $userId,
-            'amount'     => $amount,
-            'status'     => $status,
-        ]);
-    }
-
-    public function historyForOrderByStatus(int $orderId, int $status): Collection
-    {
-        return VoucherHistory::query()
-            ->forOrder($orderId)
-            ->where('status', $status)
-            ->get(['id', 'voucher_id', 'amount']);
-    }
-
-    public function historyForOrderByStatuses(int $orderId, array $statuses): Collection
-    {
-        return VoucherHistory::query()
-            ->forOrder($orderId)
-            ->whereIn('status', $statuses)
-            ->get(['id', 'voucher_id', 'amount', 'status']);
-    }
-
-    public function markHistoryStatus(array $ids, int $status): void
-    {
-        if (empty($ids)) {
-            return;
-        }
-        VoucherHistory::query()
-            ->whereIn('id', $ids)
-            ->update(['status' => $status, 'updated_at' => now()]);
-    }
+    // === Write-side (balance/status) port từ VoucherService ===
 
     public function incrementRedeemed(int $voucherId, float $amount): void
     {

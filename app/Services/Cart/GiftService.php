@@ -5,12 +5,14 @@ namespace App\Services\Cart;
 use App\Data\Output\GiftDTO;
 use App\Models\Entities\Gift;
 use App\Repositories\Interfaces\GiftRepositoryInterface;
+use App\Repositories\Interfaces\OrderGiftRepositoryInterface;
 use Illuminate\Support\Collection;
 
 class GiftService
 {
     public function __construct(
         protected GiftRepositoryInterface $giftRepo,
+        protected OrderGiftRepositoryInterface $orderGiftRepo,
     ) {
     }
 
@@ -268,7 +270,7 @@ class GiftService
                 if (! isset($itemQtys[$itemId])) {
                     continue;
                 }
-                $this->giftRepo->insertOrderGiftItem(
+                $this->orderGiftRepo->insertItem(
                     $orderId,
                     $giftId,
                     $itemId,
@@ -282,7 +284,7 @@ class GiftService
 
     public function revertOrderGifts(int $orderId): void
     {
-        $gifts = $this->giftRepo->orderGiftGiftIds($orderId);
+        $gifts = $this->orderGiftRepo->giftIdsForOrder($orderId);
         if ($gifts->isEmpty()) {
             return;
         }
@@ -291,6 +293,6 @@ class GiftService
             $this->giftRepo->decrementUsedCount((int) $giftId);
         }
 
-        $this->giftRepo->deleteOrderGifts($orderId);
+        $this->orderGiftRepo->deleteForOrder($orderId);
     }
 }

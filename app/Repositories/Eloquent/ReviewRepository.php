@@ -95,7 +95,7 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
 
     protected function baseQuery(): Builder
     {
-        return Review::query()->approved();
+        return $this->resetModel()->query()->approved();
     }
 
     public function listForProduct(int $productId, ?Request $request = null): LengthAwarePaginator
@@ -174,10 +174,30 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
 
     public function hasReviewedFromOrder(int $userId, int $productId): bool
     {
-        return Review::where('user_id', $userId)
+        return $this->resetModel()->where('user_id', $userId)
             ->where('product_id', $productId)
             ->whereNotNull('order_id')
             ->exists();
+    }
+
+    public function createReview(array $data): Review
+    {
+        return $this->resetModel()->create($data);
+    }
+
+    public function updateMediaCount(Review $review, int $count): void
+    {
+        $review->update(['media_count' => $count]);
+    }
+
+    public function lockReview(int $reviewId): Review
+    {
+        return $this->resetModel()->lockForUpdate()->findOrFail($reviewId);
+    }
+
+    public function saveReview(Review $review): void
+    {
+        $review->save();
     }
 
     public function forgetProductCache(int $productId): void

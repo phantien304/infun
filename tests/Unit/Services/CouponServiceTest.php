@@ -3,7 +3,10 @@
 namespace Tests\Unit\Services;
 
 use App\Models\Entities\Coupon;
+use App\Repositories\Interfaces\CouponHistoryRepositoryInterface;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
+use App\Repositories\Interfaces\ProductCategoryRepositoryInterface;
+use App\Repositories\Interfaces\UserCouponRepositoryInterface;
 use App\Services\Cart\CartCouponContext;
 use App\Services\Cart\CouponService;
 use App\Services\ConfigDbService;
@@ -47,7 +50,12 @@ class CouponServiceTest extends TestCase
     protected function service(): CouponService
     {
         // validateForCart không gọi repo vì test luôn truyền usedByUser tường minh.
-        return new CouponService(Mockery::mock(CouponRepositoryInterface::class));
+        return new CouponService(
+            Mockery::mock(CouponRepositoryInterface::class),
+            Mockery::mock(CouponHistoryRepositoryInterface::class),
+            Mockery::mock(UserCouponRepositoryInterface::class),
+            Mockery::mock(ProductCategoryRepositoryInterface::class),
+        );
     }
 
     protected function makeCoupon(array $attrs = [], array $relations = []): Coupon

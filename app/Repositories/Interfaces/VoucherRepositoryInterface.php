@@ -17,14 +17,6 @@ interface VoucherRepositoryInterface extends BaseRepositoryInterface
 
     public function listForEmail(string $email): Collection;
 
-    public function recordHistory(int $voucherId, int $orderId, ?int $userId, int $amount, int $status): void;
-
-    public function historyForOrderByStatus(int $orderId, int $status): Collection;
-
-    public function historyForOrderByStatuses(int $orderId, array $statuses): Collection;
-
-    public function markHistoryStatus(array $ids, int $status): void;
-
     public function incrementRedeemed(int $voucherId, float $amount): void;
 
     public function decrementRedeemed(int $voucherId, float $amount): void;

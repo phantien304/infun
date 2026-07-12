@@ -4,20 +4,28 @@ namespace App\Services\Review;
 
 use App\Helpers\Facades\MyStorage;
 use App\Models\Entities\Review;
-use App\Models\Entities\ReviewCriteria;
-use App\Models\Entities\ReviewHelpful;
 use App\Models\Entities\ReviewMedia;
 use App\Models\Entities\ReviewReport;
-use App\Models\Entities\ReviewTag;
+use App\Repositories\Interfaces\ReviewCriteriaRepositoryInterface;
+use App\Repositories\Interfaces\ReviewHelpfulRepositoryInterface;
+use App\Repositories\Interfaces\ReviewMediaRepositoryInterface;
+use App\Repositories\Interfaces\ReviewRatingRepositoryInterface;
+use App\Repositories\Interfaces\ReviewReportRepositoryInterface;
 use App\Repositories\Interfaces\ReviewRepositoryInterface;
+use App\Repositories\Interfaces\ReviewTagRepositoryInterface;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ReviewService
 {
     public function __construct(
         protected ReviewRepositoryInterface $reviewRepo,
+        protected ReviewCriteriaRepositoryInterface $reviewCriteriaRepo,
+        protected ReviewRatingRepositoryInterface $reviewRatingRepo,
+        protected ReviewTagRepositoryInterface $reviewTagRepo,
+        protected ReviewMediaRepositoryInterface $reviewMediaRepo,
+        protected ReviewHelpfulRepositoryInterface $reviewHelpfulRepo,
+        protected ReviewReportRepositoryInterface $reviewReportRepo,
     ) {
     }
 
@@ -48,7 +56,7 @@ class ReviewService
             throw new \DomainException(trans('messages.review.already_submitted'));
         }
 
-        return DB::transaction(function () use ($data, $productId, $userId, $orderId) {
+        return $this->reviewRepo->transaction(function () use ($data, $productId, $userId, $orderId) {
             $ratingInput = $data['rating'] ?? null;
             $isMultiCriteria = is_array($ratingInput);
             $overallRating = $isMultiCriteria
@@ -57,7 +65,7 @@ class ReviewService
 
             $overallRating = max(1, min(5, $overallRating));
 
-            $review = Review::create([
+            $review = $this->reviewRepo->createReview([
                 'product_id'         => $productId,
                 'product_variant_id' => $data['product_variant_id'] ?? null,
                 'order_id'           => $orderId,
@@ -97,9 +105,7 @@ class ReviewService
     protected function attachCriteriaRatings(int $reviewId, array $ratingByCode): void
     {
         $codes = array_keys($ratingByCode);
-        $criteriaMap = ReviewCriteria::active()
-            ->whereIn('code', $codes)
-            ->pluck('id', 'code');
+        $criteriaMap = $this->reviewCriteriaRepo->idsByCodes($codes);
 
         $rows = [];
         $now = now();
@@ -123,15 +129,13 @@ class ReviewService
         }
 
         if (! empty($rows)) {
-            DB::table('review_rating')->insert($rows);
+            $this->reviewRatingRepo->insert($rows);
         }
     }
 
     protected function attachTags(int $reviewId, array $tagCodes): void
     {
-        $tagIds = ReviewTag::active()
-            ->whereIn('code', $tagCodes)
-            ->pluck('id');
+        $tagIds = $this->reviewTagRepo->idsByCodes($tagCodes);
 
         if ($tagIds->isEmpty()) {
             return;
@@ -144,8 +148,8 @@ class ReviewService
             'created_at'    => $now,
         ])->all();
 
-        DB::table('review_tag_pivot')->insertOrIgnore($rows);
-        ReviewTag::whereIn('id', $tagIds)->increment('usage_count');
+        $this->reviewTagRepo->insertPivots($rows);
+        $this->reviewTagRepo->incrementUsage($tagIds->all());
     }
 
     protected function attachMedia(Review $review, array $files): void
@@ -205,8 +209,8 @@ class ReviewService
         }
 
         if (! empty($rows)) {
-            DB::table('review_media')->insert($rows);
-            $review->update(['media_count' => $imageCount + $videoCount]);
+            $this->reviewMediaRepo->insert($rows);
+            $this->reviewRepo->updateMediaCount($review, $imageCount + $videoCount);
         }
     }
 
@@ -214,28 +218,10 @@ class ReviewService
     {
         $voteType = max(-1, min(1, $voteType));
 
-        return DB::transaction(function () use ($reviewId, $userId, $voteType) {
-            $review = Review::lockForUpdate()->findOrFail($reviewId);
+        return $this->reviewRepo->transaction(function () use ($reviewId, $userId, $voteType) {
+            $review = $this->reviewRepo->lockReview($reviewId);
 
-            $existing = ReviewHelpful::where('review_id', $reviewId)
-                ->where('user_id', $userId)
-                ->lockForUpdate()
-                ->first();
-
-            $oldVote = $existing?->vote_type ?? 0;
-
-            if ($existing) {
-                $existing->vote_type = $voteType;
-                $existing->ip = getIpVisitor();
-                $existing->save();
-            } else {
-                ReviewHelpful::create([
-                    'review_id' => $reviewId,
-                    'user_id'   => $userId,
-                    'vote_type' => $voteType,
-                    'ip'        => getIpVisitor(),
-                ]);
-            }
+            $oldVote = $this->reviewHelpfulRepo->upsertVote($reviewId, $userId, $voteType, getIpVisitor());
 
             $deltaHelpful   = ($voteType === 1 ? 1 : 0) - ($oldVote === 1 ? 1 : 0);
             $deltaUnhelpful = ($voteType === -1 ? 1 : 0) - ($oldVote === -1 ? 1 : 0);
@@ -247,7 +233,7 @@ class ReviewService
                 $review->unhelpful_count = max(0, $review->unhelpful_count + $deltaUnhelpful);
             }
             if ($deltaHelpful !== 0 || $deltaUnhelpful !== 0) {
-                $review->save();
+                $this->reviewRepo->saveReview($review);
             }
 
             return [
@@ -260,13 +246,12 @@ class ReviewService
 
     public function report(int $reviewId, int $userId, string $reasonCode, ?string $description = null): ReviewReport
     {
-        return ReviewReport::updateOrCreate(
-            ['review_id' => $reviewId, 'reported_by' => $userId],
-            [
-                'reason_code' => $reasonCode,
-                'description' => $description,
-                'status'      => getCoreConfig('review.status.pending'),
-            ],
+        return $this->reviewReportRepo->upsertReport(
+            $reviewId,
+            $userId,
+            $reasonCode,
+            $description,
+            getCoreConfig('review.status.pending'),
         );
     }
 }

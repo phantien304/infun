@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services;
 
 use App\Models\Entities\Voucher;
+use App\Repositories\Interfaces\VoucherHistoryRepositoryInterface;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
 use App\Services\Cart\VoucherService;
 use Illuminate\Support\Carbon;
@@ -27,7 +28,10 @@ class VoucherServiceTest extends TestCase
     protected function service(): VoucherService
     {
         // validate không gọi repo.
-        return new VoucherService(Mockery::mock(VoucherRepositoryInterface::class));
+        return new VoucherService(
+            Mockery::mock(VoucherRepositoryInterface::class),
+            Mockery::mock(VoucherHistoryRepositoryInterface::class),
+        );
     }
 
     protected function makeVoucher(array $attrs = []): Voucher

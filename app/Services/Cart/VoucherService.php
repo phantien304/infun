@@ -4,6 +4,7 @@ namespace App\Services\Cart;
 
 use App\Data\Output\VoucherDTO;
 use App\Models\Entities\Voucher;
+use App\Repositories\Interfaces\VoucherHistoryRepositoryInterface;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -12,6 +13,7 @@ class VoucherService
 {
     public function __construct(
         protected VoucherRepositoryInterface $voucherRepo,
+        protected VoucherHistoryRepositoryInterface $voucherHistoryRepo,
     ) {
     }
 
@@ -148,7 +150,7 @@ class VoucherService
             if ($entry['amount'] <= 0) {
                 continue;
             }
-            $this->voucherRepo->recordHistory(
+            $this->voucherHistoryRepo->record(
                 (int) $entry['voucher']->id,
                 $orderId,
                 $userId,
@@ -163,12 +165,12 @@ class VoucherService
         $statusApplied = (int) getCoreConfig('voucher.history_status.applied');
         $statusConfirmed = (int) getCoreConfig('voucher.history_status.confirmed');
 
-        $rows = $this->voucherRepo->historyForOrderByStatus($orderId, $statusApplied);
+        $rows = $this->voucherHistoryRepo->forOrderByStatus($orderId, $statusApplied);
         if ($rows->isEmpty()) {
             return;
         }
 
-        $this->voucherRepo->markHistoryStatus($rows->pluck('id')->all(), $statusConfirmed);
+        $this->voucherHistoryRepo->markStatus($rows->pluck('id')->all(), $statusConfirmed);
 
         foreach ($rows as $row) {
             $this->voucherRepo->incrementRedeemed((int) $row->voucher_id, (float) $row->amount);
@@ -188,7 +190,7 @@ class VoucherService
         $statusConfirmed = (int) getCoreConfig('voucher.history_status.confirmed');
         $statusRefunded = (int) getCoreConfig('voucher.history_status.refunded');
 
-        $rows = $this->voucherRepo->historyForOrderByStatuses($orderId, [
+        $rows = $this->voucherHistoryRepo->forOrderByStatuses($orderId, [
             (int) getCoreConfig('voucher.history_status.applied'),
             $statusConfirmed,
         ]);
@@ -196,7 +198,7 @@ class VoucherService
             return;
         }
 
-        $this->voucherRepo->markHistoryStatus($rows->pluck('id')->all(), $statusRefunded);
+        $this->voucherHistoryRepo->markStatus($rows->pluck('id')->all(), $statusRefunded);
 
         foreach ($rows->where('status', $statusConfirmed) as $row) {
             $this->voucherRepo->decrementRedeemed((int) $row->voucher_id, (float) $row->amount);

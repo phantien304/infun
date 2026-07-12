@@ -12,15 +12,12 @@ interface GiftRepositoryInterface extends BaseRepositoryInterface
 
     public function findActiveById(int $giftId): ?Gift;
 
-    public function insertOrderGiftItem(int $orderId, int $giftId, int $giftItemId, int $quantity): void;
 
     public function incrementUsedCount(int $giftId, int $by = 1): void;
 
     public function decrementUsedCount(int $giftId): void;
 
-    public function orderGiftGiftIds(int $orderId): Collection;
 
-    public function deleteOrderGifts(int $orderId): void;
 
     public function flushCache(): void;
 }

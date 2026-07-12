@@ -4,13 +4,19 @@ namespace App\Services\Cart;
 
 use App\Data\Output\CouponDTO;
 use App\Models\Entities\Coupon;
+use App\Repositories\Interfaces\CouponHistoryRepositoryInterface;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
+use App\Repositories\Interfaces\ProductCategoryRepositoryInterface;
+use App\Repositories\Interfaces\UserCouponRepositoryInterface;
 use Illuminate\Support\Collection;
 
 class CouponService
 {
     public function __construct(
         protected CouponRepositoryInterface $couponRepo,
+        protected CouponHistoryRepositoryInterface $couponHistoryRepo,
+        protected UserCouponRepositoryInterface $userCouponRepo,
+        protected ProductCategoryRepositoryInterface $productCategoryRepo,
     ) {
     }
 
@@ -27,7 +33,7 @@ class CouponService
             : [];
 
         $usedByUserMap = $userId
-            ? $this->couponRepo->countUsedByUserForCoupons($userId, $coupons->pluck('id')->all())
+            ? $this->couponHistoryRepo->countUsedByUserForCoupons($userId, $coupons->pluck('id')->all())
             : [];
 
         $cartContext = $this->buildCartContext($cartItems, $cartSubtotal, $userId, $contextHasShipping);
@@ -76,7 +82,7 @@ class CouponService
         }
 
         if ($cartContext->userId !== null && $coupon->uses_customer !== null) {
-            $used = $usedByUser ?? $this->couponRepo->countUsedByUser($cartContext->userId, (int) $coupon->id);
+            $used = $usedByUser ?? $this->couponHistoryRepo->countUsedByUser($cartContext->userId, (int) $coupon->id);
             if ($used >= (int) $coupon->uses_customer) {
                 return trans('messages.checkout.coupon.used_up_user');
             }
@@ -216,18 +222,18 @@ class CouponService
             return false;
         }
 
-        $this->couponRepo->saveForUser($userId, $couponId);
+        $this->userCouponRepo->saveForUser($userId, $couponId);
         return true;
     }
 
     public function unsave(int $userId, int $couponId): bool
     {
-        return $this->couponRepo->unsaveForUser($userId, $couponId);
+        return $this->userCouponRepo->unsaveForUser($userId, $couponId);
     }
 
     public function recordApplied(int $couponId, ?int $userId, int $amount): int
     {
-        return $this->couponRepo->recordAppliedHistory(
+        return $this->couponHistoryRepo->recordApplied(
             $couponId,
             $userId,
             $amount,
@@ -237,7 +243,7 @@ class CouponService
 
     public function recordUsedForOrder(int $couponId, int $orderId, ?int $userId, int $amount): void
     {
-        $this->couponRepo->recordUsedHistory(
+        $this->couponHistoryRepo->recordUsed(
             $couponId,
             $orderId,
             $userId,
@@ -252,12 +258,12 @@ class CouponService
         $statusUsed = (int) getCoreConfig('coupon.history_status.used');
         $statusCancelled = (int) getCoreConfig('coupon.history_status.cancelled');
 
-        $toRevert = $this->couponRepo->historyForOrderByStatus($orderId, $statusUsed);
+        $toRevert = $this->couponHistoryRepo->forOrderByStatus($orderId, $statusUsed);
         if ($toRevert->isEmpty()) {
             return;
         }
 
-        $this->couponRepo->markHistoryStatus($toRevert->pluck('id')->all(), $statusCancelled);
+        $this->couponHistoryRepo->markStatus($toRevert->pluck('id')->all(), $statusCancelled);
 
         foreach ($toRevert->groupBy('coupon_id') as $couponId => $rows) {
             $this->couponRepo->decrementUsedCount((int) $couponId, $rows->count());
@@ -298,11 +304,11 @@ class CouponService
 
     private function resolveCartCategoryIds(array $productIds): array
     {
-        return $this->couponRepo->categoryIdsForProducts($productIds);
+        return $this->productCategoryRepo->categoryIdsForProducts($productIds);
     }
 
     private function productIdsInCategories(array $productIds, array $categoryIds): array
     {
-        return $this->couponRepo->productIdsInCategories($productIds, $categoryIds);
+        return $this->productCategoryRepo->productIdsInCategories($productIds, $categoryIds);
     }
 }

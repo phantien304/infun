@@ -4,6 +4,7 @@ namespace Tests\Unit\Services;
 
 use App\Models\Entities\Gift;
 use App\Repositories\Interfaces\GiftRepositoryInterface;
+use App\Repositories\Interfaces\OrderGiftRepositoryInterface;
 use App\Services\Cart\GiftService;
 use App\Services\ConfigDbService;
 use Illuminate\Support\Collection;
@@ -45,7 +46,10 @@ class GiftServiceTest extends TestCase
 
     protected function service(): GiftService
     {
-        return new GiftService(Mockery::mock(GiftRepositoryInterface::class));
+        return new GiftService(
+            Mockery::mock(GiftRepositoryInterface::class),
+            Mockery::mock(OrderGiftRepositoryInterface::class),
+        );
     }
 
     protected function makeGift(array $attrs = [], array $relations = []): Gift

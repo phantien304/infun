@@ -35,7 +35,7 @@ class StockService
 
     private function lockSellableStocks(int $variantId): Collection
     {
-        $ids = $this->warehouseService->sellableIds();
+        $ids = $this->warehouseService->sellableWarehouseIds();
 
         $productStocks = $this->productStockRepo->lockSellableStocks($variantId, $ids);
 

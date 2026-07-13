@@ -64,7 +64,7 @@ class StockReserveDeductTest extends TestCase
             {
             }
 
-            public function sellableIds(): array
+            public function sellableWarehouseIds(): array
             {
                 return [1, 2];
             }

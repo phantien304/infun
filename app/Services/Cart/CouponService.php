@@ -3,6 +3,7 @@
 namespace App\Services\Cart;
 
 use App\Data\Output\CouponDTO;
+use App\Enums\CouponHistoryStatus;
 use App\Models\Entities\Coupon;
 use App\Repositories\Interfaces\CouponHistoryRepositoryInterface;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
@@ -237,7 +238,7 @@ class CouponService
             $couponId,
             $userId,
             $amount,
-            (int) getCoreConfig('coupon.history_status.applied'),
+            CouponHistoryStatus::Applied,
         );
     }
 
@@ -248,22 +249,19 @@ class CouponService
             $orderId,
             $userId,
             $amount,
-            (int) getCoreConfig('coupon.history_status.used'),
+            CouponHistoryStatus::Used,
         );
         $this->couponRepo->incrementUsedCount($couponId);
     }
 
     public function revertOrderCoupons(int $orderId): void
     {
-        $statusUsed = (int) getCoreConfig('coupon.history_status.used');
-        $statusCancelled = (int) getCoreConfig('coupon.history_status.cancelled');
-
-        $toRevert = $this->couponHistoryRepo->forOrderByStatus($orderId, $statusUsed);
+        $toRevert = $this->couponHistoryRepo->forOrderByStatus($orderId, CouponHistoryStatus::Used);
         if ($toRevert->isEmpty()) {
             return;
         }
 
-        $this->couponHistoryRepo->markStatus($toRevert->pluck('id')->all(), $statusCancelled);
+        $this->couponHistoryRepo->markStatus($toRevert->pluck('id')->all(), CouponHistoryStatus::Cancelled);
 
         foreach ($toRevert->groupBy('coupon_id') as $couponId => $rows) {
             $this->couponRepo->decrementUsedCount((int) $couponId, $rows->count());

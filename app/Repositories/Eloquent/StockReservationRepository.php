@@ -6,6 +6,7 @@ use App\Models\Entities\StockReservation;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\StockReservationRepositoryInterface;
+use App\Services\Stock\WarehouseService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -44,6 +45,7 @@ class StockReservationRepository extends QueryableRepository implements StockRes
     public function holderReservedMap(string $holder): array
     {
         return $this->resetModel()->where('holder', $holder)
+            ->whereIn('warehouse_id', app(WarehouseService::class)->sellableWarehouseIds())
             ->selectRaw('product_variant_id, SUM(quantity) AS total_quantity')
             ->groupBy('product_variant_id')
             ->pluck('total_quantity', 'product_variant_id')

@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Eloquent;
 
+use App\Enums\CouponHistoryStatus;
 use App\Models\Entities\CouponHistory;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\CouponHistoryRepositoryInterface;
@@ -40,45 +41,45 @@ class CouponHistoryRepository extends QueryableRepository implements CouponHisto
             ->all();
     }
 
-    public function recordApplied(int $couponId, ?int $userId, int $amount, int $status): int
+    public function recordApplied(int $couponId, ?int $userId, int $amount, CouponHistoryStatus $status): int
     {
         return (int) $this->resetModel()->insertGetId([
             'coupon_id'  => $couponId,
             'order_id'   => null,
             'user_id'    => $userId,
             'amount'     => $amount,
-            'status'     => $status,
+            'status'     => $status->value,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
     }
 
-    public function recordUsed(int $couponId, int $orderId, ?int $userId, int $amount, int $status): void
+    public function recordUsed(int $couponId, int $orderId, ?int $userId, int $amount, CouponHistoryStatus $status): void
     {
         $this->resetModel()->create([
             'coupon_id' => $couponId,
             'order_id'  => $orderId,
             'user_id'   => $userId,
             'amount'    => $amount,
-            'status'    => $status,
+            'status'    => $status->value,
         ]);
     }
 
-    public function forOrderByStatus(int $orderId, int $status): Collection
+    public function forOrderByStatus(int $orderId, CouponHistoryStatus $status): Collection
     {
         return $this->resetModel()->query()
             ->where('order_id', $orderId)
-            ->where('status', $status)
+            ->where('status', $status->value)
             ->get(['id', 'coupon_id']);
     }
 
-    public function markStatus(array $ids, int $status): void
+    public function markStatus(array $ids, CouponHistoryStatus $status): void
     {
         if (empty($ids)) {
             return;
         }
         $this->resetModel()->query()
             ->whereIn('id', $ids)
-            ->update(['status' => $status, 'updated_at' => now()]);
+            ->update(['status' => $status->value, 'updated_at' => now()]);
     }
 }

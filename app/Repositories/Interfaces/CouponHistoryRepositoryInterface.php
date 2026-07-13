@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Interfaces;
 
+use App\Enums\CouponHistoryStatus;
 use App\Repositories\Base\BaseRepositoryInterface;
 use Illuminate\Support\Collection;
 
@@ -11,11 +12,11 @@ interface CouponHistoryRepositoryInterface extends BaseRepositoryInterface
 
     public function countUsedByUserForCoupons(int $userId, array $couponIds): array;
 
-    public function recordApplied(int $couponId, ?int $userId, int $amount, int $status): int;
+    public function recordApplied(int $couponId, ?int $userId, int $amount, CouponHistoryStatus $status): int;
 
-    public function recordUsed(int $couponId, int $orderId, ?int $userId, int $amount, int $status): void;
+    public function recordUsed(int $couponId, int $orderId, ?int $userId, int $amount, CouponHistoryStatus $status): void;
 
-    public function forOrderByStatus(int $orderId, int $status): Collection;
+    public function forOrderByStatus(int $orderId, CouponHistoryStatus $status): Collection;
 
-    public function markStatus(array $ids, int $status): void;
+    public function markStatus(array $ids, CouponHistoryStatus $status): void;
 }

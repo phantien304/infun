@@ -158,13 +158,13 @@ class CheckoutController extends Controller
             return respondNotFound(trans('messages.ErrorNotFoundProduct'));
         }
 
-        $result = $this->cartService->tryAdd([
+        $resultAddCart = $this->cartService->tryAdd([
             'quantity' => $params['quantity'] ?? 1,
             'option'   => $params['option'] ?? [],
         ], $product);
 
-        if (! ($result['ok'] ?? false)) {
-            return respondUnprocessable($this->buildAddToCartError($product, $result));
+        if (! ($resultAddCart['ok'] ?? false)) {
+            return respondUnprocessable($this->buildAddToCartError($product, $resultAddCart));
         }
         $this->syncCartHeader();
 
@@ -185,16 +185,16 @@ class CheckoutController extends Controller
         ], trans('messages.SuccessAddCart'));
     }
 
-    protected function buildAddToCartError($product, array $result): string
+    protected function buildAddToCartError($product, array $resultAddCart): string
     {
-        if (! empty($result['variant_error'])) {
+        if (! empty($resultAddCart['variant_error'])) {
             return trans('messages.ErrorVariantNotFound');
         }
 
         $name = $product->description->name ?? '';
-        $available = (int) ($result['available'] ?? 0);
-        $totalInCart = (int) ($result['total_in_cart'] ?? 0);
-        $quantity = (int) ($result['quantity'] ?? 0);
+        $available = (int) ($resultAddCart['available'] ?? 0);
+        $totalInCart = (int) ($resultAddCart['total_in_cart'] ?? 0);
+        $quantity = (int) ($resultAddCart['quantity'] ?? 0);
         $totalWanted = $totalInCart + $quantity;
 
         if ($available <= 0) {

@@ -34,18 +34,6 @@ class CartService
     ) {
     }
 
-    protected function ownReserved(?int $variantId): int
-    {
-        if (! $variantId) {
-            return 0;
-        }
-        if ($this->holderReservedMap === null) {
-            $this->holderReservedMap = $this->stockService->holderReservedMap((string) session()->getId());
-        }
-
-        return (int) ($this->holderReservedMap[$variantId] ?? 0);
-    }
-
     public function tryAdd(array $payload, Product $product): array
     {
         $productId = (int) $product->id;
@@ -86,15 +74,14 @@ class CartService
         return ['ok' => true, 'variant_id' => $variantId, 'quantity' => $quantity];
     }
 
-    /** Các row tồn thuộc kho sellable của variant (fallback default variant). */
-    protected function sellableStocks(Product $product, ?ProductVariant $variant): Collection
+    protected function sellableProductStocks(Product $product, ?ProductVariant $variant): Collection
     {
         $rows = $variant?->productStocks ?? $product->defaultVariant?->productStocks;
         if (! ($rows instanceof Collection)) {
             return collect();
         }
 
-        return $rows->whereIn('warehouse_id', $this->warehouseService->sellableIds());
+        return $rows->whereIn('warehouse_id', $this->warehouseService->sellableWarehouseIds());
     }
 
     protected function effectivePolicy(Collection $stocks): StockPolicy
@@ -105,20 +92,32 @@ class CartService
         return $row?->policy() ?? StockPolicy::Deny;
     }
 
-    protected function resolveQuantityAvailable(Product $product, ?ProductVariant $variant): int
+    protected function ownReserved(?int $variantId): int
     {
-        $stocks = $this->sellableStocks($product, $variant);
+        if (! $variantId) {
+            return 0;
+        }
+        if ($this->holderReservedMap === null) {
+            $this->holderReservedMap = $this->stockService->holderReservedMap((string) session()->getId());
+        }
 
-        if ($stocks->isEmpty()) {
+        return (int) ($this->holderReservedMap[$variantId] ?? 0);
+    }
+
+    protected function resolveQuantityAvailable(Product $product, ?ProductVariant $productVariant): int
+    {
+        $productStocks = $this->sellableProductStocks($product, $productVariant);
+
+        if ($productStocks->isEmpty()) {
             return 0;
         }
 
-        if ($this->effectivePolicy($stocks)->bypassesStockCheck()) {
+        if ($this->effectivePolicy($productStocks)->bypassesStockCheck()) {
             return PHP_INT_MAX;
         }
 
-        $variantId = $variant?->id ?? $product->defaultVariant?->id;
-        $available = (int) $stocks->sum(fn (ProductStock $s) => $s->sellableQuantity());
+        $variantId = $productVariant?->id ?? $product->defaultVariant?->id;
+        $available = (int) $productStocks->sum(fn (ProductStock $s) => $s->sellableQuantity());
 
         return max(0, $available + $this->ownReserved($variantId ? (int) $variantId : null));
     }
@@ -478,18 +477,18 @@ class CartService
             return true;
         }
 
-        $stocks = $this->sellableStocks($product, $variant);
+        $productStocks = $this->sellableProductStocks($product, $variant);
 
-        if ($stocks->isEmpty()) {
+        if ($productStocks->isEmpty()) {
             return false;
         }
 
-        if ($this->effectivePolicy($stocks)->bypassesStockCheck()) {
+        if ($this->effectivePolicy($productStocks)->bypassesStockCheck()) {
             return true;
         }
 
         $variantId = $variant?->id ?? $product->defaultVariant?->id;
-        $available = (int) $stocks->sum(fn (ProductStock $s) => $s->sellableQuantity())
+        $available = (int) $productStocks->sum(fn (ProductStock $s) => $s->sellableQuantity())
             + $this->ownReserved($variantId ? (int) $variantId : null);
 
         return $available >= $quantity;

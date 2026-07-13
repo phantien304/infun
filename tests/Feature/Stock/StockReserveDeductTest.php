@@ -156,7 +156,7 @@ class StockReserveDeductTest extends TestCase
         $this->bindConfig(stockCheckout: 0);
         $this->seedStock(1, variantId: 1, warehouseId: 1, onHand: 1);
 
-        $res = $this->stock->reserveCart(
+        $res = $this->stock->reserveCheckout(
             [['product_variant_id' => 1, 'quantity' => 5, 'name' => 'SP']],
             'holderA',
             null,
@@ -169,7 +169,7 @@ class StockReserveDeductTest extends TestCase
     public function test_reserve_variant_khong_co_row_ton_van_ok(): void
     {
         // variant 99 không có product_stock -> reserveOne trả ok (không tracking).
-        $res = $this->stock->reserveCart(
+        $res = $this->stock->reserveCheckout(
             [['product_variant_id' => 99, 'quantity' => 3, 'name' => 'SP']],
             'holderA',
             null,
@@ -182,7 +182,7 @@ class StockReserveDeductTest extends TestCase
     {
         $this->seedStock(1, variantId: 1, warehouseId: 1, onHand: 1, policy: 1); // BACKORDER
 
-        $res = $this->stock->reserveCart(
+        $res = $this->stock->reserveCheckout(
             [['product_variant_id' => 1, 'quantity' => 10, 'name' => 'SP']],
             'holderA',
             null,
@@ -197,7 +197,7 @@ class StockReserveDeductTest extends TestCase
         $this->seedStock(1, variantId: 1, warehouseId: 1, onHand: 2, policy: 0);
         $this->seedStock(2, variantId: 1, warehouseId: 2, onHand: 3, policy: 0);
 
-        $res = $this->stock->reserveCart(
+        $res = $this->stock->reserveCheckout(
             [['product_variant_id' => 1, 'quantity' => 4, 'name' => 'SP']],
             'holderA',
             null,

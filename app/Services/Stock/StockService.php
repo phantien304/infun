@@ -52,7 +52,7 @@ class StockService
         return $row?->policy() ?? StockPolicy::Deny;
     }
 
-    public function reserveCart(array $items, string $sessionHolder, ?int $userId): array
+    public function reserveCheckout(array $items, string $sessionHolder, ?int $userId): array
     {
         if (! $this->stockCheckoutEnabled()) {
             return ['ok' => true];

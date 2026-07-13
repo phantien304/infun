@@ -2,13 +2,13 @@
 
 namespace App\Services\Checkout;
 
-use App\Helpers\ZaloPay;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
+use App\Services\Payment\ZaloPayService;
 
 class CheckoutPaymentService
 {
     public function __construct(
-        protected ZaloPay $zaloPay,
+        protected ZaloPayService $zaloPay,
         protected OrderRepositoryInterface $orderRepo,
     ) {
     }

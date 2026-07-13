@@ -53,11 +53,11 @@ class CheckoutController extends Controller
         $this->setBreadcrumb(['text' => trans('messages.breadcrumbs.checkout'), 'href' => route('checkout.index'), 'separator' => true]);
         $this->processMetaSeo('buildForSeoBySetting', 'seo_title_checkout', 'seo_description_checkout');
 
-        $appliedPromotions = $this->buildAppliedPromotions(hasShipping: true);
-        [$error, $items] = $this->validateCart($appliedPromotions);
+        $promotions = $this->buildAppliedPromotions(hasShipping: true);
+        [$error, $items] = $this->validateCart($promotions);
 
         if ($error === '' && ! empty($items)) {
-            $reserve = $this->reserveCart($items);
+            $reserve = $this->reserveCheckout($items);
             if (! ($reserve['ok'] ?? true)) {
                 $failed = $reserve['failed'] ?? [];
                 $error = sprintf(trans('messages.ErrorStockProduct'), (string) ($failed['name'] ?? ''));
@@ -65,10 +65,10 @@ class CheckoutController extends Controller
         }
 
         $this->syncCartHeader($items);
-        [$totalData, $total] = $this->totalService->build($appliedPromotions, withShipping: true);
+        [$totalData, $total] = $this->totalService->build($promotions, withShipping: true);
 
         $userEmail = auth()->check() ? (string) auth()->user()->email : '';
-        $promo = $this->promotionService->viewData($appliedPromotions, (int) $this->cartService->getSubtotal(), $userEmail, hasShipping: true);
+        $promo = $this->promotionService->viewData($promotions, (int) $this->cartService->getSubtotal(), $userEmail, hasShipping: true);
 
         return $this->render('web::checkout.index', [
             'carriers'           => $this->carrierRepo->listAllCached(),
@@ -236,13 +236,13 @@ class CheckoutController extends Controller
 
     public function saveOrder(CheckoutSaveOrderRequest $request)
     {
-        $ctx = $this->buildAppliedPromotions();
-        [$error, $items] = $this->validateCart($ctx);
+        $promotions = $this->buildAppliedPromotions();
+        [$error, $items] = $this->validateCart($promotions);
         if ($error !== '' || empty($items)) {
             return redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
         }
 
-        [$totalData, $total] = $this->totalService->build($ctx, withShipping: true);
+        [$totalData, $total] = $this->totalService->build($promotions, withShipping: true);
 
         $sessionId = (string) session()->getId();
         $idemKey = (string) $request->input('idempotency_key', '');
@@ -263,7 +263,7 @@ class CheckoutController extends Controller
             $params = $request->validated();
             $params['idempotency_key'] = $idemKeyMd5;
 
-            $orderId = $this->createOrderService->create($ctx, $params, $totalData, $total);
+            $orderId = $this->createOrderService->create($promotions, $params, $totalData, $total);
 
             Cache::put($idemCacheKey, $orderId, now()->addSeconds(60));
 
@@ -422,9 +422,9 @@ class CheckoutController extends Controller
         return md5(implode('|', $parts).'#'.$total);
     }
 
-    protected function reserveCart(array $items): array
+    protected function reserveCheckout(array $items): array
     {
-        return $this->stockService->reserveCart(
+        return $this->stockService->reserveCheckout(
             $items,
             (string) session()->getId(),
             (int) getCurrentUserId() ?: null,

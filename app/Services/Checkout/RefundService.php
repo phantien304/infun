@@ -2,13 +2,13 @@
 
 namespace App\Services\Checkout;
 
-use App\Helpers\ZaloPay;
 use App\Models\Entities\Orders;
+use App\Services\Payment\ZaloPayService;
 
 class RefundService
 {
     public function __construct(
-        protected ZaloPay $zaloPay,
+        protected ZaloPayService $zaloPay,
     ) {
     }
 

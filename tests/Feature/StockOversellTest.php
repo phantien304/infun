@@ -178,7 +178,7 @@ class StockOversellTest extends TestCase
     {
         $this->seedStock(variantId: 1, onHand: 1, policy: 0);
 
-        $ok = $this->stock->reserveCart(
+        $ok = $this->stock->reserveCheckout(
             [['product_variant_id' => 1, 'quantity' => 1, 'name' => 'SP']],
             'holderA',
             null,
@@ -187,7 +187,7 @@ class StockOversellTest extends TestCase
         $this->assertSame(1, $this->reserved(1));
 
         // Người khác không giữ được nữa.
-        $fail = $this->stock->reserveCart(
+        $fail = $this->stock->reserveCheckout(
             [['product_variant_id' => 1, 'quantity' => 1, 'name' => 'SP']],
             'holderB',
             null,
@@ -204,8 +204,8 @@ class StockOversellTest extends TestCase
     {
         $this->seedStock(variantId: 1, onHand: 5, policy: 0);
 
-        $this->stock->reserveCart([['product_variant_id' => 1, 'quantity' => 2, 'name' => 'SP']], 'holderA', null);
-        $this->stock->reserveCart([['product_variant_id' => 1, 'quantity' => 2, 'name' => 'SP']], 'holderA', null);
+        $this->stock->reserveCheckout([['product_variant_id' => 1, 'quantity' => 2, 'name' => 'SP']], 'holderA', null);
+        $this->stock->reserveCheckout([['product_variant_id' => 1, 'quantity' => 2, 'name' => 'SP']], 'holderA', null);
 
         // Giữ lại trang không cộng dồn: reserved vẫn = 2, chỉ 1 row hold.
         $this->assertSame(2, $this->reserved(1));
@@ -215,7 +215,7 @@ class StockOversellTest extends TestCase
     public function test_order_consumes_hold_keeping_stock_consistent(): void
     {
         $this->seedStock(variantId: 1, onHand: 1, policy: 0);
-        $this->stock->reserveCart([['product_variant_id' => 1, 'quantity' => 1, 'name' => 'SP']], 'holderA', null);
+        $this->stock->reserveCheckout([['product_variant_id' => 1, 'quantity' => 1, 'name' => 'SP']], 'holderA', null);
         $this->assertSame(1, $this->reserved(1));
 
         DB::transaction(function () {
@@ -234,7 +234,7 @@ class StockOversellTest extends TestCase
     public function test_release_expired_restores_sellable(): void
     {
         $this->seedStock(variantId: 1, onHand: 5, policy: 0);
-        $this->stock->reserveCart([['product_variant_id' => 1, 'quantity' => 3, 'name' => 'SP']], 'holderA', null);
+        $this->stock->reserveCheckout([['product_variant_id' => 1, 'quantity' => 3, 'name' => 'SP']], 'holderA', null);
         $this->assertSame(3, $this->reserved(1));
 
         // Ép hết hạn rồi chạy dọn.

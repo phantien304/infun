@@ -8,7 +8,7 @@ use App\Services\Payment\ZaloPayService;
 class CheckoutPaymentService
 {
     public function __construct(
-        protected ZaloPayService $zaloPay,
+        protected ZaloPayService $zaloPayService,
         protected OrderRepositoryInterface $orderRepo,
     ) {
     }
@@ -33,7 +33,7 @@ class CheckoutPaymentService
             $data['embed_data'] = ['bankgroup' => 'CC', 'redirecturl' => route('checkout.success')];
         }
 
-        return $this->zaloPay->buildOrderData($data);
+        return $this->zaloPayService->buildOrderData($data);
     }
 
     public function buildRepaymentPayload(array $orderData): array
@@ -54,7 +54,7 @@ class CheckoutPaymentService
             ];
         }
 
-        return $this->zaloPay->buildOrderData($data);
+        return $this->zaloPayService->buildOrderData($data);
     }
 
     public function startPayment(int $orderId, array $payload): string
@@ -68,14 +68,14 @@ class CheckoutPaymentService
             'order_status_id' => getConfigDb('order_payment_waiting_status_id'),
         ]);
 
-        $response = $this->zaloPay->createOrder($payload);
+        $response = $this->zaloPayService->createOrder($payload);
 
         return (int) ($response['return_code'] ?? 0) === 1 ? (string) ($response['order_url'] ?? '') : '';
     }
 
     public function processRedirect(array $params, string $appTransId): void
     {
-        if (! $this->zaloPay->verifyRedirect($params)) {
+        if (! $this->zaloPayService->verifyRedirect($params)) {
             return;
         }
 
@@ -84,7 +84,7 @@ class CheckoutPaymentService
             return;
         }
 
-        $status = $this->zaloPay->getOrderStatus($appTransId);
+        $status = $this->zaloPayService->getOrderStatus($appTransId);
         $code = (int) ($status['return_code'] ?? 0);
 
         if ($code === 1) {
@@ -108,7 +108,7 @@ class CheckoutPaymentService
     public function processCallback(string $rawBody): void
     {
         $params = json_decode($rawBody, true) ?: [];
-        $result = $this->zaloPay->verifyCallback($params);
+        $result = $this->zaloPayService->verifyCallback($params);
         if ((int) ($result['return_code'] ?? 0) !== 1) {
             return;
         }

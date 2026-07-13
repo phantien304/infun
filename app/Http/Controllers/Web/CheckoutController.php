@@ -15,7 +15,7 @@ use App\Repositories\Interfaces\CarrierRepositoryInterface;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\PaymentRepositoryInterface;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
-use App\Services\CartService;
+use App\Services\Cart\CartService;
 use App\Services\Checkout\CheckoutPaymentService;
 use App\Services\Checkout\CheckoutPromotions;
 use App\Services\Checkout\CheckoutTotalService;

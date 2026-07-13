@@ -8,7 +8,7 @@ use App\Services\Payment\ZaloPayService;
 class RefundService
 {
     public function __construct(
-        protected ZaloPayService $zaloPay,
+        protected ZaloPayService $zaloPayService,
     ) {
     }
 
@@ -19,12 +19,12 @@ class RefundService
 
     public function refund(Orders $order, string $description): array
     {
-        $payload = $this->zaloPay->buildRefundData([
+        $payload = $this->zaloPayService->buildRefundData([
             'zp_trans_id' => $order->zp_trans_id,
             'amount'      => (int) $order->total,
             'description' => $description,
         ]);
-        $response = $this->zaloPay->refund($payload);
+        $response = $this->zaloPayService->refund($payload);
 
         if (empty($response) || (int) ($response['return_code'] ?? 0) === 2) {
             return [false, null];
@@ -38,7 +38,7 @@ class RefundService
         if (! filled($mRefundId)) {
             return 'none';
         }
-        $response = $this->zaloPay->getRefundStatus($mRefundId);
+        $response = $this->zaloPayService->getRefundStatus($mRefundId);
         $code = (int) ($response['return_code'] ?? 0);
 
         return match ($code) {

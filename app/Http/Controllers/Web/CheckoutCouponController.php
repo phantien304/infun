@@ -2,11 +2,10 @@
 
 namespace App\Http\Controllers\Web;
 
-use App\Data\Output\CouponDTO;
 use App\Http\Controllers\Controller;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
 use App\Services\Cart\CouponService;
-use App\Services\CartService;
+use App\Services\Cart\CartService;
 use App\Services\Checkout\CheckoutPromotions;
 use App\Services\Checkout\CheckoutTotalService;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +14,7 @@ use Illuminate\Http\Request;
 class CheckoutCouponController extends Controller
 {
     public function __construct(
-        protected CartService $cart,
+        protected CartService $cartService,
         protected CouponService $couponService,
         protected CouponRepositoryInterface $couponRepo,
         protected CheckoutTotalService $totalService,
@@ -24,8 +23,8 @@ class CheckoutCouponController extends Controller
 
     public function list(Request $request): JsonResponse
     {
-        $items     = $this->cart->getItems();
-        $subtotal  = $this->cart->getSubtotal();
+        $items     = $this->cartService->getItems();
+        $subtotal  = $this->cartService->getSubtotal();
         $hasShipping = $this->contextHasShipping($request);
 
         $coupons = $this->couponService->listForCart(
@@ -48,8 +47,8 @@ class CheckoutCouponController extends Controller
         if (empty($codes)) {
             return respondUnprocessable(trans('messages.checkout.coupon_choose_required'));
         }
-        $items     = $this->cart->getItems();
-        $subtotal  = $this->cart->getSubtotal();
+        $items     = $this->cartService->getItems();
+        $subtotal  = $this->cartService->getSubtotal();
         $hasShipping = $this->contextHasShipping($request);
 
         $result = $this->couponService->applyCodes($codes, $items, (int) $subtotal, contextHasShipping: $hasShipping);
@@ -123,8 +122,8 @@ class CheckoutCouponController extends Controller
 
     private function renderState(Request $request, bool $hasShipping, array $extra = [], ?array $applyResult = null): array
     {
-        $items     = $this->cart->getItems();
-        $subtotal  = (int) $this->cart->getSubtotal();
+        $items     = $this->cartService->getItems();
+        $subtotal  = (int) $this->cartService->getSubtotal();
 
         $ctx = new CheckoutPromotions();
         $ctx->setItems($items);

@@ -13,7 +13,7 @@ use App\Repositories\Interfaces\BlogRepositoryInterface;
 use App\Repositories\Interfaces\ReviewRepositoryInterface;
 use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
 use App\Repositories\Interfaces\UserWishlistRepositoryInterface;
-use App\Services\ProductOptionService;
+use App\Services\Product\ProductOptionService;
 use App\Services\Reward\RewardEarnService;
 
 class ProductController extends Controller

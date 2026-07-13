@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\Cart\VoucherService;
-use App\Services\CartService;
+use App\Services\Cart\CartService;
 use App\Services\Checkout\CheckoutTotalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 class CheckoutVoucherController extends Controller
 {
     public function __construct(
-        protected CartService $cart,
+        protected CartService $cartService,
         protected VoucherService $voucherService,
         protected CheckoutTotalService $totalService,
     ) {
@@ -51,6 +51,6 @@ class CheckoutVoucherController extends Controller
 
     private function estimateOrderTotal(): int
     {
-        return (int) $this->cart->getSubtotal();
+        return (int) $this->cartService->getSubtotal();
     }
 }

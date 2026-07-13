@@ -4,16 +4,17 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\Cart\GiftService;
-use App\Services\CartService;
+use App\Services\Cart\CartService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CheckoutGiftController extends Controller
 {
     public function __construct(
-        protected CartService $cart,
+        protected CartService $cartService,
         protected GiftService $giftService,
-    ) {}
+    ) {
+    }
 
     public function pick(Request $request): JsonResponse
     {
@@ -26,8 +27,8 @@ class CheckoutGiftController extends Controller
             ];
         }
 
-        $items    = $this->cart->getItems();
-        $subtotal = (int) $this->cart->getSubtotal();
+        $items    = $this->cartService->getItems();
+        $subtotal = (int) $this->cartService->getSubtotal();
 
         $result = $this->giftService->applyPicks($picks, $items, $subtotal);
 

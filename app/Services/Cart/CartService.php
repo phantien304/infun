@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Cart;
 
 use App\Enums\OptionRole;
 use App\Enums\StockPolicy;

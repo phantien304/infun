@@ -2,20 +2,8 @@
 
 namespace App\Services\Payment;
 
-use App\Helpers\ZaloPayMacGenerator;
 use Illuminate\Support\Facades\Http;
 
-/**
- * Cổng thanh toán ZaloPay (Open API v2).
- *
- * Bọc toàn bộ giao tiếp với ZaloPay: dựng payload, ký MAC (uỷ quyền cho
- * ZaloPayMacGenerator), gọi HTTP và xác minh callback/redirect.
- *
- * Được inject vào CheckoutPaymentService / RefundService. KHÔNG đọc public key
- * ở constructor — service này bị instantiate ở MỌI request checkout (kể cả
- * addToCart không dùng ZaloPay); nếu thiếu file key sẽ 500 cả luồng. Public key
- * được lazy-load qua getPublicKey(), chỉ đọc khi quick-pay thực sự cần encrypt.
- */
 class ZaloPayService
 {
     private ?string $publicKey = null;

@@ -393,7 +393,7 @@ Khi thêm cache mới:
 | Job mailer | `getMailer()` magic + method `_handle()` | inject `JobMailer` qua `handle(JobMailer)` |
 | Validate input | `$repo->getValidator()->validateCreate(...)` | `App\Http\Requests\Web\*Request` (FormRequest) |
 | Shipping fee | `App\Services\FeeShipService` extends `BaseService` | `App\Services\Checkout\ShippingFeeService` (Guzzle inline) |
-| Cart | `App\Helpers\Cart` đọc `product_option_value`/`_2` legacy | `App\Services\CartService` resolve `product_variant_id` cluster |
+| Cart | `App\Helpers\Cart` đọc `product_option_value`/`_2` legacy | `App\Services\Cart\CartService` resolve `product_variant_id` cluster |
 | Cart logic trong controller | 4 trait `CheckoutMarketing`/`CheckoutPayment`/`CheckoutTotal`/`CreateOrder` | service `App\Services\Checkout\*` inject qua DI |
 | Config "có thể override" | `getCoreConfig('x')` cứng | `setting('x')` — fallback DB → core config |
 | Helper user id | `getUserLoginId()` | `(int) getCurrentUserId()` |
@@ -1505,7 +1505,7 @@ Hai caller cùng đọc payload PHẢI nhận DIỄN cả 2 key cho variant role
 nhầm `product_option_value_id` của variant = mảng rỗng = silent corruption,
 cart add ở product level không biết variant):
 
-- `App\Services\CartService::splitOptionPayload` (line 275) — ưu tiên
+- `App\Services\Cart\CartService::splitOptionPayload` (line 275) — ưu tiên
   `option_value_id`, fallback `product_option_value_id`.
 - `App\Http\Requests\Web\CheckoutAddToCartRequest::withValidator` (line 40)
   — `$hasValueId = !empty($opt['option_value_id']) || !empty($opt['product_option_value_id'])`.

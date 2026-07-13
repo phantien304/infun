@@ -2854,9 +2854,15 @@ nginx LB conf dùng `resolver 127.0.0.11` (DNS embedded Docker) +
 ### Scout + Meilisearch
 
 `Product` có trait `Searchable` + `toSearchableArray()` index aggregate
-giá (min/max_variant_price). KHÔNG đẩy variant lên Meilisearch (500k×3
-= 1.5M doc, không cần). `makeAllSearchableUsing()` eager-load
-`description` để tránh N+1 khi `scout:import` chạy 500k row.
+giá (min/max_variant_price) + `category_id`/`filter_value_id` (mảng int
+từ pivot). KHÔNG đẩy variant lên Meilisearch (500k×3 = 1.5M doc, không
+cần). `makeAllSearchableUsing()` eager-load `description` +
+`productCategories` + `productFilters` để tránh N+1 khi import.
+
+**Index PER-LOCALE** (2026-07-13): `searchableAs()` = `products_{locale}`
+(vd `products_vi`). Import bằng `php artisan products:scout-import`
+(wrapper loop locale), KHÔNG `scout:import` trần — nó chỉ đẩy locale
+đang active. Xem mục "Meilisearch / Scout — trang list product".
 
 ### Debugbar + Clockwork
 
@@ -2945,27 +2951,36 @@ Khi keyword có giá trị + đi qua DB pipeline, `baseQuery()` tự `leftJoin
 product_description` để LIKE trên `product_description.name` (cùng cơ chế với
 sort=name). Meilisearch path bypass `baseQuery()` nên fast path không tốn join.
 
-### `searchViaMeilisearch` — chia filter theo nơi có data
+### `searchViaMeilisearch` — chia filter theo nơi có data (cập nhật 2026-07-13)
 
 Filter ĐẨY MEILISEARCH (đã khai báo `filterableAttributes` trong `config/scout.php`):
 
 - `manufacturer_id` → `whereIn`
+- `category_id`, `filter_value_id` → `whereIn` trên SCOUT builder (doc chứa mảng
+  int, Meili filter `IN` match khi bất kỳ phần tử nào khớp) — chuyển từ DB
+  closure lên Meili 2026-07-13 để pagination/total/recall đúng.
 - `price_min/price_max` → `where max_variant_price >= min`, `where min_variant_price <= max`
   (overlap test cho range — KHÔNG chỉ check min hoặc max một chiều)
 - `sort` → `sortMap[token]['meili']`
 
 Filter GIỮ DB (chạy trong `$builder->query()` callback sau khi Meilisearch trả IDs):
 
-- `category_id`, `filter_value_id` — `whereHas` relation, KHÔNG index
 - `in_stock` — `whereExists` join `product_stock`, value động không nên index
+  (TODO 2: denormalize `has_stock`)
 - `cardRelations` eager-load + `dateAvailable` scope + `$modifyBase` closure
+- eager-load `productFilters` đã chọn (CHỈ để hiển thị — lọc đã làm ở Meili)
 
-**Trade-off**: `paginator->total()` báo theo Meilisearch result count, KHÔNG phải
-DB post-filter count. Khi user combine keyword + category/filter_value, số trang
-hiển thị có thể overcount (Meilisearch trả 10k items, DB lọc còn 8k). Acceptable
-cho FTS discovery; nếu cần count chính xác phải push category/filter_value vào
-Meilisearch index (refactor lớn — phải observer ProductCategory/ProductFilter
-re-sync product khi relation đổi).
+**Trade-off còn lại**: `paginator->total()` = Meilisearch totalHits. Chỉ còn lệch
+khi kết hợp keyword + `in_stock` (hoặc product ngoài `dateAvailable`) — closure
+DB vẫn có thể bỏ bớt item sau khi Meili đã phân trang. Category/filter_value
+KHÔNG còn gây lệch.
+
+**Re-sync khi relation đổi**: `ProductWriteService::save`/`bulkUpdate` wrap
+transaction trong `Product::withoutSyncingToSearch()` (auto-sync trên `saved`
+chạy TRƯỚC syncCategories/syncFilters → doc stale, lại nằm TRONG transaction)
+rồi gọi `syncSearchIndex()` SAU commit → `$product->searchableAllLocales()`
+(nuốt exception + logError, không phá save flow). Mutation product ngoài
+write service (seed CLI, SQL tay) → doc Meili stale tới lần import kế.
 
 ### `sortMap()` — single source of truth
 
@@ -2979,16 +2994,20 @@ re-sync product khi relation đổi).
 phải lên đầu vì `HasListFilterToolbar` dùng phần tử đầu của `sortMenu()` làm
 default selection khi URL chưa có `?sort=`.
 
-`null` ở `meili` (vd `name`, hiện chưa index) → khi user search Meilisearch, sort
-đó bị bỏ qua âm thầm, Meilisearch fallback ranking theo relevance score. KHÔNG
-ném error.
+`null` ở `meili` → khi user search Meilisearch, sort đó bị bỏ qua âm thầm,
+Meilisearch fallback ranking theo relevance score. KHÔNG ném error. (`name`
+đã index + sortable từ 2026-07-13 — nhưng lưu ý Meili sort là ranking rule:
+có keyword thì relevance vẫn tham gia, KHÔNG A→Z tuyệt đối như ORDER BY.)
 
-### `config/scout.php` — index-settings
+### `config/scout.php` — index-settings (per-locale từ 2026-07-13)
 
 File CỐ Ý KHÔNG `new Product` để lấy `searchableAs()` — config load TRƯỚC khi
 service provider boot, instantiate Eloquent model trigger trait `Searchable` +
 `Auditable` cần `view` service chưa register → `ReflectionException: Class "view"
-does not exist`. Hardcode `'products'` làm key cho `index-settings`.
+does not exist`. Key `index-settings` build bằng loop `products_{locale}` đọc
+THẲNG env `APP_LOCALES` (không dựa `config('app.locales')` — file config load
+độc lập). `scout:sync-index-settings` tự prepend `SCOUT_PREFIX` cho key thường
+→ push đủ settings cho mọi index per-locale trong 1 lệnh.
 
 4 vai trò Meilisearch độc lập, một attribute có thể có 0/1/nhiều vai trò:
 
@@ -3008,19 +3027,29 @@ Chỉ khai báo capability thực sự dùng.
 2. Thêm vào `searchableAttributes`/`filterableAttributes`/`sortableAttributes`
    tương ứng trong `config/scout.php`.
 3. `php artisan config:clear`
-4. `php artisan scout:sync-index-settings` — push settings (KHÔNG re-index doc).
-5. `php artisan scout:import "App\Models\Entities\Product"` — re-push 500k doc
-   với field mới (5-15 phút, chunk theo `SCOUT_CHUNK_SEARCHABLE=500`).
+4. `php artisan scout:sync-index-settings` — push settings cho MỌI index
+   per-locale (KHÔNG re-index doc).
+5. `php artisan products:scout-import` — wrapper loop `config('app.locales')`,
+   setLocale rồi delegate `scout:import` cho từng index `products_{locale}`
+   (5-15 phút/locale trên 500k doc, chunk `SCOUT_CHUNK_SEARCHABLE=500`).
+   Flags: `--locale=vi` (1 locale/process — split-process pattern khi nhiều
+   locale + sợ OOM), `--fresh` (scout:flush trước, dọn doc mồ côi).
+   KHÔNG chạy `scout:import` trần — chỉ đẩy index của locale đang active.
+   Chạy với `SCOUT_QUEUE=false` (default) — queue worker có locale riêng
+   → doc rơi sai index.
 
 Bỏ qua step 5 = doc cũ KHÔNG có field mới → filter/sort theo field đó luôn rỗng.
 
 ### Verify Meilisearch settings
 
 ```
-curl -s "http://localhost:7700/indexes/products/settings" -H "Authorization: Bearer $MEILISEARCH_KEY" | jq '.filterableAttributes, .sortableAttributes'
+curl -s "http://localhost:7700/indexes" -H "Authorization: Bearer $MEILISEARCH_KEY" | jq '.results[].uid'
+curl -s "http://localhost:7700/indexes/products_vi/settings" -H "Authorization: Bearer $MEILISEARCH_KEY" | jq '.filterableAttributes, .sortableAttributes'
 ```
 
-phải thấy đủ các field đã khai báo. Thiếu → chưa chạy `scout:sync-index-settings`.
+phải thấy 1 index `products_{locale}` cho MỖI locale trong `APP_LOCALES`, mỗi
+index đủ các field đã khai báo. Thiếu settings → chưa chạy
+`scout:sync-index-settings`; thiếu index → chưa chạy `products:scout-import`.
 
 ### `positiveIntList` helper — trust shape or skip
 
@@ -3066,105 +3095,99 @@ Partial node nhận `byParent`, `openIds`, `activeId`, `depth` và recurse.
 ### Rotate icon — inline `:style` thay vì `rotate-90` class
 
 Dự án dùng Tailwind v4 với `@tailwindcss/vite` (JIT scan blade ở build time).
-Bundle CSS hiện tại trong `public/build/` được build trước khi tôi add partial
-mới → `rotate-90` KHÔNG có trong CSS output. Class tag SVG nhưng không có rule
-áp dụng → không xoay.
+Bundle CSS hiện tại trong `p
 
-Workaround: Alpine bind inline `:style="open ? 'transform: rotate(90deg)' :
-'transform: rotate(0deg)'"`. KHÔNG phụ thuộc Tailwind compile state — reload là
-xong, không cần `npm run build`. Nếu sau này rebuild, có thể quay về `:class="{
-'rotate-90': open }"` cũng hoạt động.
+---
 
-Rút ra: với Tailwind v4 JIT, **class dùng trong attribute động (`:class`,
-`x-bind`) chưa chắc được compile vào CSS bundle** nếu blade không xuất hiện ở
-build time. An toàn nhất là inline `:style` cho dynamic transform/color.
+## TODO (2026-07-13): Meilisearch product search — filter trong closure KHÔNG áp cho Meili (pagination/recall sai)
 
-## `logError` / ChannelWriter — không phải broken, chỉ ít gọi
+**Bối cảnh:** `ProductRepository::searchViaMeilisearch()` là HYBRID Meili + DB, KHÔNG thuần Meili.
 
-Triệu chứng trước đây: `storage/logs/{area}/{date}/errors.log` chưa từng tồn
-tại bất kỳ ngày nào (chỉ có `debug.log`) → tưởng `logError` silent fail.
+**Cơ chế (đã trace vendor):** `Builder::paginate()` (`vendor/laravel/scout/src/Builder.php:488`) — biểu thức lồng nhau: đối số trong `$engine->paginate()` (HTTP Meili) chạy TRƯỚC → trả trang ID + `totalHits`; rồi `$engine->map()` chạy SAU → `Searchable::queryScoutModelsByIds()` (`Searchable.php:329` `call_user_func($builder->queryCallback,$query)`) → `whereIn(id)->get()`. `total` = `getTotalCount($rawResults)` = `totalHits` của Meili.
 
-Test verify (gọi trực tiếp `ChannelLog::error('error', 'TEST')` từ controller):
-file `errors.log` được tạo bình thường. **ChannelWriter OK**.
+- **Meili lo** (trên Scout builder, TRƯỚC dòng 258 của ProductRepository): keyword, `manufacturer_id`, `min/max_variant_price`, sort, paginate.
+- **DB lo** (trong `$builder->query(fn (Builder $qb) => ...)`, dòng 262–300): `whereHas('productCategories')` (category_id), `whereHas('productFilters')` (filter_value_id), `whereExists` product_variant+product_stock (in_stock), `dateAvailable`, eager-load. Closure chạy SAU khi Meili đã phân trang → **KHÔNG áp cho Meili**.
 
-Nguyên nhân lịch sử: 38 caller `logError` trong codebase đều ở rare error path
-(payment fail, auth error...), chưa fire trong 9 ngày dev. `logDebug` ngược lại
-fire mỗi query qua `AppServiceProvider::logSql()` → `DB::listen` → debug.log
-luôn populated.
+**Hệ quả khi có filter closure (category / filter_value / in_stock):**
+1. Trang thiếu (< perPage) — Meili trả 20 ID, DB bỏ bớt.
+2. `total` + số trang SAI — dùng `totalHits` chưa trừ closure filter (over-count).
+3. Recall thấp (tệ nhất) — sản phẩm đúng filter nhưng không lọt top-N Meili → không bao giờ hiện.
+(Sản phẩm HIỆN ra thì vẫn đúng — precision OK; chỉ thiếu/sai đếm.)
 
-Khi debug `logError` không chạy, kiểm theo thứ tự:
-1. Code path có thực sự được trigger? (try block có vào không?)
-2. File source có ParseError không? (đã từng có `var_dump` syntax error chặn cả
-   class compile → logError trong đó cũng không chạy).
-3. Cuối cùng mới nghi `ChannelWriter` — confirm bằng direct call test.
+Chỉ SAI khi dùng closure filter. Nếu chỉ lọc bằng thứ Meili biết (keyword/manufacturer/price/sort) → chính xác tuyệt đối. Design cũ cho browse (luôn có category/filter) đi thẳng DB là **có chủ ý** vì DB làm 3 việc đó chuẩn. Hiện `list()` đã bị sửa cho browse cũng vào Meili → **làm lộ bug này ở trang danh mục**.
 
-`logError` đang dùng `ChannelLog::error('error', ...)` chuẩn — đừng đổi sang
-`\Log::error` (laravel.log) trừ khi cần universal log access.
+**Tiến độ (cập nhật 2026-07-13):**
+1. ✅ **category_id, filter_value_id → Meili** — ĐÃ LÀM:
+   - `Product::toSearchableArray()`: thêm 2 mảng int từ pivot (`loadMissing` để searchableAllLocales không re-query mỗi vòng).
+   - `config/scout.php`: thêm vào `filterableAttributes`.
+   - `searchViaMeilisearch()`: `whereIn` trên SCOUT builder; ĐÃ BỎ `whereHas` khỏi DB closure (closure chỉ còn eager-load productFilters để hiển thị).
+   - `makeAllSearchableUsing()`: eager-load `productCategories`, `productFilters`.
+   - BONUS: `ProductWriteService::save`/`bulkUpdate` wrap `withoutSyncingToSearch` + re-sync `searchableAllLocales()` SAU commit (auto-sync trên `saved` chạy trước syncCategories/syncFilters → stale; xem mục searchViaMeilisearch).
+2. ⬜ **in_stock** — CHƯA. Thiết kế đã chốt sau khi trace code (2026-07-13), xem
+   mục "Thiết kế `has_stock` — batch sync qua stock_movement watermark" bên dưới.
+   Hiện in_stock vẫn ở DB closure → total/paging còn lệch khi combine keyword + in_stock.
+3. ✅ **name (đa ngôn ngữ)** — ĐÃ LÀM: `searchableAs()` = `'products_'.app()->getLocale()` (kèm `SCOUT_PREFIX`), `config/scout.php` build index-settings per-locale từ env `APP_LOCALES`, `sortMap()['name']['meili']` = `'name'` + `name` vào `sortableAttributes`. Model có thêm `searchableAllLocales()`/`unsearchableAllLocales()`.
+4. ⬜ `pagination.maxTotalHits` mặc định 1000 — nâng nếu duyệt sâu danh mục lớn.
+5. ✅ **Lệnh sync/import** — command mới `products:scout-import` (`app/Console/Commands/ScoutImportProductsCommand.php`) loop locale + delegate `scout:flush`/`scout:import`. Quy trình chuẩn: `config:clear` → `scout:sync-index-settings` → `products:scout-import` (xem "Quy trình thêm field mới vào index").
 
-## Convention: Enum / phân loại / tầng Query (refactor 2026-07-06)
+**Việc còn nợ cluster này:**
+- Xoá product (destroy) chưa gọi `unsearchableAllLocales()` — Scout auto chỉ gỡ doc ở locale hiện tại; các index locale khác còn doc mồ côi tới lần `products:scout-import --fresh`.
+- Mutation ngoài write service (seed CLI, `DB::table` bulk) không re-sync Meili — giống drift #7 của cache observer; chạy `products:scout-import` sau seed.
+- Index cũ `products` (không suffix locale) còn trên Meilisearch server — xoá tay: `curl -X DELETE "$MEILISEARCH_HOST/indexes/products" -H "Authorization: Bearer $MEILISEARCH_KEY"`.
 
-### Enum cho giá trị mã hoá — `app/Enums`
+**Lựa chọn an toàn tạm thời nếu browse có vấn đề:** rollback `list()` về `keyword === '' → DB` để browse không vỡ (chỉ còn cần cho case in_stock).
 
-Giá trị mã hoá thuộc **miền đóng, do code sở hữu** → PHP backed enum trong
-`App\Enums`. KHÔNG dùng magic number / `getCoreConfig` / `const` rải rác.
+### Thiết kế `has_stock` — batch sync qua `stock_movement` watermark (chốt 2026-07-13, CHƯA implement)
 
-Phép thử enum-vs-config: *"Thêm/bớt một giá trị có buộc viết code xử lý mới
-không?"* — Có → **enum** (vd `role`: thêm role phải thêm nhánh hành vi); Không,
-chỉ là số tinh chỉnh admin đổi được → **config/DB** (vd cửa sổ thanh toán lại
-`240` phút, ngưỡng free-ship).
+Đánh giá đề xuất gốc ("observer trên ProductStock lật `has_stock` ngay"):
+đúng hướng denormalize nhưng có 3 điểm yếu khi soi code thật:
 
-- `App\Enums\OptionRole : int` — `CustomField = 0`, `Variant = 1`. **CÓ cast**
-  trên `Option` (`protected $casts = ['role' => OptionRole::class]`). An toàn vì
-  DB có CHECK `role IN (0,1)`.
-- `App\Enums\OptionType : string` — 12 widget (select/radio/checkbox/image/text/
-  textarea/email/phone/file/date/datetime/time). **KHÔNG cast** — tập `type` DB
-  legacy chưa enumerate chắc, cast bằng `from()` sẽ ném `ValueError` khi gặp
-  value lạ → chết mọi lần load Option. Dùng như value-object qua
-  `OptionType::tryFrom($s)` (value lạ → `null`, xử lý null-safe).
+1. **Churn nằm ở `reserved`, không phải `on_hand`.** Semantic in_stock =
+   `policy bypass OR (on_hand - reserved) > 0`; `reserved` đổi ở MỌI
+   add-to-cart (`StockService::reserveOne`) + mọi TTL release
+   (`stock:release-expired` cron mỗi phút). Sản phẩm sắp hết hàng lật qua
+   lật lại theo vòng reserve→release 15 phút → observer lật ngay = bão update.
+2. **Observer chạy TRONG transaction checkout đang giữ lock.**
+   `reserveOne`/`deductForOrder` đều `lockSellableStocks` (lockForUpdate)
+   trong transaction. UPDATE `product` + HTTP Meili tại đó = kéo dài lock,
+   reintroduce contention trên row `product` (đúng cái contention mà schema
+   tách `product_stock` ra để tránh), Meili down làm chậm/lỗi đường tiền.
+3. **Đẩy qua Scout `searchable()` quá nặng cho 1 field** — re-push full doc
+   (query description + categories + filters) × N locale chỉ vì 1 boolean.
 
-Quy tắc khi đã cast enum:
-- **Emit ra JSON/payload → `->value`** (giữ contract wire là int/string). Vd
-  `'role' => $role->value`.
-- **Eloquent `pluck()` TỰ áp cast** → giá trị pluck là enum. Vd
-  `Option::...->pluck('role')` cho ra `OptionRole`, dùng trực tiếp.
-- **Mảng payload HTTP không qua model → raw** → parse bằng
-  `OptionRole::fromInput($x['role'] ?? null)` (null/lạ → `CustomField`; default
-  an toàn vì `Variant` tạo SKU, phân loại nhầm tốn kém hơn).
+**Thiết kế thay thế** — tận dụng 2 thứ có sẵn: `stock_movement` là changelog
+append-only của mọi biến động tồn + scheduler đã chạy `everyMinute`:
 
-### Logic phân loại → method trên enum/model, KHÔNG so sánh rải ở service
+1. **Vá bug audit TRƯỚC (nên làm bất kể):** `ProductStockRepository::updateOnHand`
+   (CMS bulk edit) sửa `on_hand` mà KHÔNG ghi `stock_movement` — phá invariant
+   "rebuild được on_hand từ SUM movement". Thêm movement type `Adjust` tại đây.
+   Sau vá, mọi biến động tồn đều có movement → dùng được làm changelog.
+   (`consumeAllHolderReservations` không ghi movement nhưng chỉ chạy nhánh
+   Untracked — policy bypass nên `has_stock=1` bất biến, an toàn.)
+2. **Cột `product.has_stock TINYINT(1) NOT NULL DEFAULT 1`** + command
+   `stock:sync-has-stock` schedule mỗi phút (`withoutOverlapping`):
+   - Watermark = `stock_movement.id` cuối đã xử lý, lưu bảng `setting`.
+   - `SELECT DISTINCT pv.product_id FROM stock_movement sm JOIN product_variant pv ...
+     WHERE sm.id > watermark` → recompute EXISTS (đúng query của filter hiện tại)
+     cho từng product → **flip-only**: chỉ UPDATE khi giá trị đổi.
+3. **Đẩy Meili bằng partial document update, KHÔNG qua Scout:** gom mọi product
+   lật trong batch → 1 call `POST /indexes/products_{locale}/documents` với
+   `[{id, has_stock}, ...]` per locale (Meili tự merge partial doc).
+   N flips × M locales = M HTTP call, không phải N×M.
+4. `toSearchableArray()` đọc cột + thêm `has_stock` vào `filterableAttributes`;
+   `searchViaMeilisearch()` chuyển in_stock từ DB closure lên
+   `$builder->where('has_stock', ...)` → hết pagination bug. Filter
+   `AllowedFilter::callback('in_stock')` ở DB pipeline cũng đổi sang cột luôn —
+   2 engine cùng semantic + nhanh hơn correlated EXISTS trên 500k row.
+5. Riêng CMS tạo/sửa variant: `ProductVariantWriter::sync` recompute `has_stock`
+   inline (tần suất thấp; stock row mới tạo chưa chắc có movement).
 
-- `OptionRole::isVariant()/isCustomField()`, `OptionRole::fromInput()`.
-- `Option::isVariant()/isCustomField()` (delegate `role`).
-- `OptionType::isVariantWidget()/expectsTextInput()/expectsDateOrFileChoice()`
-  (gom các nhóm `in_array($type, [...])` cũ ở `CheckoutAddToCartRequest`).
-- Service / Resource / Request CHỈ gọi method, KHÔNG viết
-  `$x->role === OptionRole::Variant` rải rác. Đổi định nghĩa "variant" → sửa 1
-  chỗ (enum), không đi grep.
+Lợi ích so với đề xuất gốc: hot path checkout ZERO cost (không observer, không
+HTTP, không product lock); cron 1 phút tự thành debounce (lật qua lật lại trong
+phút = 0 update ròng); staleness tối đa ~1 phút — chấp nhận được cho filter
+search. Trade-off: seeder bulk (drift #7) vẫn cần `products:scout-import` sau
+seed như mọi khi.
 
-### Đọc tái dùng: model scope + repository method (KHÔNG có tầng Query riêng)
+**Stopgap rẻ nhất nếu chưa làm:** request có `filter[in_stock]` + keyword →
+route về DB pipeline (fallback LIKE) — đúng tuyệt đối nhưng chậm 1-3s.
 
-**Đã thử tầng `app/Queries/` (ProductCardQuery, CartQuery) rồi GỠ BỎ
-(2026-07-06).** Over-engineer cho monolith này: một class nhiều finder trả entity
-thực chất là repository đội lốt; tách ra còn tạo đường nối mong manh (đã gây bug
-"undefined method" khi xoá `cardScope/cardRelations` mà sót caller nội bộ trong
-`list()`/search).
-
-Chốt: **query tái dùng dùng cơ chế Laravel sẵn có, KHÔNG dựng namespace ngang cấp
-`Models/Services/Repositories`.**
-
-- **Model scope** cho mảnh query tái dùng: `dateAvailable()`, `hasActiveSpecial()`,
-  `effectivePriceBetween()`... (đang dùng). `ProductRepository::cardQuery/cardScope/
-  cardRelations` giữ là method riêng của repo — thế là đủ.
-- **Repository method** cho read theo aggregate (+ caching; controller map DTO bằng
-  `ProductDTO::collect(...)` như cũ).
-- **Chỉ** cân nhắc tầng đọc riêng khi có **read model xuyên nhiều aggregate** thật
-  (báo cáo / view phức tạp) — codebase chưa có, nên chưa dựng.
-- Ràng buộc đã học: `ProductDTO` chứa `Lazy::create(fn…)` (closure) → KHÔNG
-  serialize/cache được DTO. Cache **model**, map DTO ở biên (controller).
-
-**Việc còn nợ (tùy chọn, KHÔNG bắt buộc):** `DB::table` / query Eloquent thô rải ở
-`CouponService`, `GiftService`, `VoucherService`, `PromotionService`,
-`ReviewService`, `ProductVariantAggregateObserver`, `AccountService`,
-`StockService`... có thể hạ dần thành **model scope / repository method** nếu thấy
-cần — không dựng tầng mới. (Seed*/Purge command dùng `DB::table` chấp nhận được —
-tooling dev.)

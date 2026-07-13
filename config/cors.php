@@ -32,6 +32,8 @@ return [
     'allowed_origins' => [
         'http://cms.infun.test',
         'https://cms.infun.test',
+        'http://cms.infun.co',
+        'https://cms.infun.co',
     ],
 
     'allowed_origins_patterns' => [],

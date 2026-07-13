@@ -107,7 +107,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             ],
             'name' => [
                 'db'    => AllowedSort::field('name', 'product_description.name'),
-                'meili' => null,
+                'meili' => 'name',
                 'menu'  => true,
             ],
             'viewed' => [
@@ -227,6 +227,16 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             $builder->whereIn('manufacturer_id', $manufacturer);
         }
 
+        $selectedCategory = self::positiveIntList($request->input('filter.category_id', []));
+        if (! empty($selectedCategory)) {
+            $builder->whereIn('category_id', $selectedCategory);
+        }
+
+        $selectedFilters = self::positiveIntList($request->input('filter.filter_value_id', []));
+        if (! empty($selectedFilters)) {
+            $builder->whereIn('filter_value_id', $selectedFilters);
+        }
+
         $min = self::normalizePrice($request->input('filter.price_min'));
         $max = self::normalizePrice($request->input('filter.price_max'));
         if ($min !== null) {
@@ -246,9 +256,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             }
         }
 
-        $cardRelations    = $this->cardRelations();
-        $selectedFilters  = self::positiveIntList($request->input('filter.filter_value_id', []));
-        $selectedCategory = self::positiveIntList($request->input('filter.category_id', []));
+        $cardRelations = $this->cardRelations();
         $inStockRaw = collect((array) $request->input('filter.in_stock', []))
             ->map(fn ($v) => (string) $v)
             ->filter(fn ($v) => $v === '0' || $v === '1')
@@ -258,7 +266,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         $builder->query(function (Builder $qb) use (
             $cardRelations,
             $selectedFilters,
-            $selectedCategory,
             $inStockRaw,
             $modifyBase,
         ) {
@@ -266,16 +273,11 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 ->dateAvailable()
                 ->with($cardRelations);
 
-            if (! empty($selectedCategory)) {
-                $qb->whereHas('productCategories', fn ($qq) => $qq->whereIn('category_id', $selectedCategory));
-            }
-
             if (! empty($selectedFilters)) {
-                $qb->whereHas('productFilters', fn ($qq) => $qq->whereIn('filter_value_id', $selectedFilters))
-                    ->with([
-                        'productFilters' => fn ($q) => $q->whereIn('filter_value_id', $selectedFilters),
-                        'productFilters.filterValue.description',
-                    ]);
+                $qb->with([
+                    'productFilters' => fn ($q) => $q->whereIn('filter_value_id', $selectedFilters),
+                    'productFilters.filterValue.description',
+                ]);
             }
 
             if ($inStockRaw->count() === 1) {

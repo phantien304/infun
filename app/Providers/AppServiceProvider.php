@@ -22,11 +22,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton('channellog', function ($app) {
             return new \App\Helpers\ChannelWriter();
         });
-        $this->app->singleton(\App\Services\Currency\CurrencyService::class);
-        $this->app->singleton(\App\Services\Measurement\LengthService::class);
-        $this->app->singleton(\App\Services\Measurement\WeightService::class);
-        $this->app->scoped(\App\Services\ConfigDbService::class);
-        $this->app->scoped(\App\Services\Stock\WarehouseService::class);
+        $this->app->scoped(\App\Services\Currency\CurrencyService::class);
+        $this->app->scoped(\App\Services\Measurement\LengthService::class);
+        $this->app->scoped(\App\Services\Measurement\WeightService::class);
+        $this->app->singleton(\App\Services\ConfigDbService::class);
+        $this->app->singleton(\App\Services\Stock\WarehouseService::class);
     }
 
     public function boot(): void
@@ -140,7 +140,7 @@ class AppServiceProvider extends ServiceProvider
         $bindings = is_file($path) ? require $path : static::discoverRepositoryBindings();
 
         foreach ($bindings as $interface => $implementation) {
-            $this->app->singleton($interface, $implementation);
+            $this->app->scoped($interface, $implementation);
         }
     }
 

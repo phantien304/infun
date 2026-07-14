@@ -5,7 +5,6 @@ namespace App\Observers;
 use App\Models\Entities\Orders;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 
-
 class OrderRewardObserver
 {
     public function updated(Orders $order): void

@@ -19,7 +19,7 @@ class WarehouseService
         return $this->allMemo ??= $this->warehouseRepo->listAllCached();
     }
 
-    public function sellableIds(): array
+    public function sellableWarehouseIds(): array
     {
         $ids = $this->allWarehouses()
             ->filter(fn (Warehouse $w) => $w->is_active && $w->is_sellable)

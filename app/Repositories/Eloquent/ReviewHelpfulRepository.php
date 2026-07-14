@@ -27,7 +27,7 @@ class ReviewHelpfulRepository extends QueryableRepository implements ReviewHelpf
             $existing->ip = $ip;
             $existing->save();
         } else {
-            ReviewHelpful::create([
+            $this->resetModel()->create([
                 'review_id' => $reviewId,
                 'user_id'   => $userId,
                 'vote_type' => $voteType,

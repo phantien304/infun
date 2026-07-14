@@ -15,7 +15,7 @@ class UserCouponRepository extends QueryableRepository implements UserCouponRepo
 
     public function saveForUser(int $userId, int $couponId): void
     {
-        UserCoupon::query()->updateOrInsert(
+        $this->resetModel()->query()->updateOrInsert(
             ['user_id' => $userId, 'coupon_id' => $couponId],
             ['saved_at' => now()],
         );
@@ -23,7 +23,7 @@ class UserCouponRepository extends QueryableRepository implements UserCouponRepo
 
     public function unsaveForUser(int $userId, int $couponId): bool
     {
-        return UserCoupon::query()
+        return $this->resetModel()->query()
             ->where('user_id', $userId)
             ->where('coupon_id', $couponId)
             ->delete() > 0;

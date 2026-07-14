@@ -10,21 +10,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
-/**
- * Feature test cho các nhánh reserve/deduct CHƯA được StockOversellTest phủ:
- *   - reserveCart: tắt kiểm tra tồn, variant không tracking, policy backorder
- *     bypass, phân bổ nhiều kho;
- *   - deductForOrder: thiếu product_variant_id, không có row kho, policy
- *     Untracked (chỉ nhả hold), và ghi movement SaleBackorder cho phần thiếu.
- *
- * Tự dựng schema tối thiểu (3 bảng stock) như StockOversellTest, cộng thêm:
- *   - Override ConfigDbService::getConfigs() (ĐÚNG tên method thật) để bật/tắt
- *     config_stock_checkout mà không cần bảng settings.
- *   - Bind WarehouseService giả (sellableIds/defaultId cố định) để không phụ
- *     thuộc bảng warehouse + tầng cache repo.
- *
- * Mỗi test chạy trên 1 sqlite :memory: mới (app refresh giữa các test).
- */
 class StockReserveDeductTest extends TestCase
 {
     protected StockService $stock;
@@ -42,8 +27,7 @@ class StockReserveDeductTest extends TestCase
 
     protected function bindConfig(int $stockCheckout): void
     {
-        $this->app->instance(ConfigDbService::class, new class($stockCheckout) extends ConfigDbService
-        {
+        $this->app->instance(ConfigDbService::class, new class ($stockCheckout) extends ConfigDbService {
             public function __construct(private int $sc)
             {
             }
@@ -58,8 +42,7 @@ class StockReserveDeductTest extends TestCase
     protected function bindWarehouse(): void
     {
         // Hai kho bán được: id 1 (mặc định) ưu tiên trước, rồi id 2.
-        $this->app->instance(WarehouseService::class, new class extends WarehouseService
-        {
+        $this->app->instance(WarehouseService::class, new class () extends WarehouseService {
             public function __construct()
             {
             }

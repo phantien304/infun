@@ -17,6 +17,8 @@
         "laravel/scout": "^11.3",
         "laravel/socialite": "^5.27",
         "laravel/tinker": "^2.10.1",
+        "league/flysystem-async-aws-s3": "3.0",
+        "league/flysystem-aws-s3-v3": "*",
         "meilisearch/meilisearch-php": "^1.16",
         "owen-it/laravel-auditing": "14.0",
         "predis/predis": "*",

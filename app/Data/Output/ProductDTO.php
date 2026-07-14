@@ -6,7 +6,7 @@ use App\Data\Concerns\HasThumbnail;
 use App\Data\Concerns\LazyData;
 use App\Enums\StockPolicy;
 use App\Models\Entities\Product;
-use App\Models\Entities\ProductVariant;
+use App\Models\Entities\ProductStock;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Spatie\LaravelData\Data;
@@ -277,60 +277,60 @@ class ProductDTO extends Data
     {
         if ($product->relationLoaded('productVariants') && $product->productVariants->isNotEmpty()) {
             foreach ($product->productVariants as $variant) {
-                if ($variant->canSellQuantity(1)) {
-                    return self::stockLabelForVariant($product, $variant);
+                $stock = $variant->productStock ?? null;
+                if ($stock instanceof ProductStock && $stock->canSell(1)) {
+                    return self::stockLabelFromPolicy($product, $stock);
                 }
             }
             return $product->stockStatus?->name
                 ?? getModuleConfig('product.text_outstock');
         }
 
-        $variant = $product->relationLoaded('defaultVariant')
-            ? $product->defaultVariant
+        $stock = $product->relationLoaded('defaultVariant')
+            ? $product->defaultVariant?->productStock
             : null;
 
-        if (! ($variant instanceof ProductVariant)) {
+        if (! ($stock instanceof ProductStock)) {
             return $product->stockStatus?->name
                 ?? getModuleConfig('product.text_outstock');
         }
 
-        return self::stockLabelForVariant($product, $variant);
+        return self::stockLabelFromPolicy($product, $stock);
     }
 
     private static function resolveInStock(Product $product): bool
     {
         if ($product->relationLoaded('productVariants') && $product->productVariants->isNotEmpty()) {
             foreach ($product->productVariants as $variant) {
-                if ($variant->canSellQuantity(1)) {
+                $stock = $variant->productStock ?? null;
+                if (! ($stock instanceof ProductStock)) {
+                    continue;
+                }
+                if ($stock->canSell(1)) {
                     return true;
                 }
             }
             return false;
         }
 
-        $variant = $product->relationLoaded('defaultVariant')
-            ? $product->defaultVariant
+        $stock = $product->relationLoaded('defaultVariant')
+            ? $product->defaultVariant?->productStock
             : null;
 
-        return $variant instanceof ProductVariant && $variant->canSellQuantity(1);
+        return $stock instanceof ProductStock && $stock->canSell(1);
     }
 
-    /**
-     * Nhãn tồn kho của một variant — TỔNG HỢP qua mọi kho sellable (đa kho).
-     * Số lượng hiển thị lấy tồn khả bán thực (không dùng sentinel policy).
-     */
-    private static function stockLabelForVariant(Product $product, ProductVariant $variant): string
+    private static function stockLabelFromPolicy(Product $product, ProductStock $stock): string
     {
-        $policy = $variant->effectiveStockPolicy();
-        $available = $variant->sellableQuantityTotal();
+        $policy = $stock->policy();
+        $available = max(0, (int) ($stock->on_hand ?? 0) - (int) ($stock->reserved ?? 0));
 
         if ($policy === StockPolicy::Untracked) {
             return getModuleConfig('product.text_instock');
         }
 
         if ($policy === StockPolicy::Backorder && $available <= 0) {
-            return getModuleConfig('product.text_backorder')
-                ?? '';
+            return getModuleConfig('product.text_backorder');
         }
 
         if ($available <= 0) {

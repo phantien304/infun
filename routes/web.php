@@ -13,7 +13,7 @@ Route::get('l/{slug}', 'AffiliateRedirectController@show')
     ->name('affiliate.redirect')
     ->middleware(['maintenance', 'throttle:60,1'])
     ->where('slug', '[A-Za-z0-9]{1,10}');
-Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function () {
+Route::middleware(['maintenance', 'limit_access'])->group(function () {
     Route::get('/san-pham', 'ProductController@getList')->name('product.getList');
     Route::get('/khuyen-mai', 'ProductController@special')->name('product.special');
     Route::get('/san-pham/get-list-review', 'ProductController@getListReview')->name('product.getListReview');

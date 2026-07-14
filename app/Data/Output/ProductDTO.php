@@ -6,7 +6,7 @@ use App\Data\Concerns\HasThumbnail;
 use App\Data\Concerns\LazyData;
 use App\Enums\StockPolicy;
 use App\Models\Entities\Product;
-use App\Models\Entities\ProductStock;
+use App\Models\Entities\ProductVariant;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Spatie\LaravelData\Data;
@@ -277,53 +277,48 @@ class ProductDTO extends Data
     {
         if ($product->relationLoaded('productVariants') && $product->productVariants->isNotEmpty()) {
             foreach ($product->productVariants as $variant) {
-                $stock = $variant->productStock ?? null;
-                if ($stock instanceof ProductStock && $stock->canSell(1)) {
-                    return self::stockLabelFromPolicy($product, $stock);
+                if ($variant->canSellQuantity(1)) {
+                    return self::stockLabelForVariant($product, $variant);
                 }
             }
             return $product->stockStatus?->name
                 ?? getModuleConfig('product.text_outstock');
         }
 
-        $stock = $product->relationLoaded('defaultVariant')
-            ? $product->defaultVariant?->productStock
+        $variant = $product->relationLoaded('defaultVariant')
+            ? $product->defaultVariant
             : null;
 
-        if (! ($stock instanceof ProductStock)) {
+        if (! ($variant instanceof ProductVariant)) {
             return $product->stockStatus?->name
                 ?? getModuleConfig('product.text_outstock');
         }
 
-        return self::stockLabelFromPolicy($product, $stock);
+        return self::stockLabelForVariant($product, $variant);
     }
 
     private static function resolveInStock(Product $product): bool
     {
         if ($product->relationLoaded('productVariants') && $product->productVariants->isNotEmpty()) {
             foreach ($product->productVariants as $variant) {
-                $stock = $variant->productStock ?? null;
-                if (! ($stock instanceof ProductStock)) {
-                    continue;
-                }
-                if ($stock->canSell(1)) {
+                if ($variant->canSellQuantity(1)) {
                     return true;
                 }
             }
             return false;
         }
 
-        $stock = $product->relationLoaded('defaultVariant')
-            ? $product->defaultVariant?->productStock
+        $variant = $product->relationLoaded('defaultVariant')
+            ? $product->defaultVariant
             : null;
 
-        return $stock instanceof ProductStock && $stock->canSell(1);
+        return $variant instanceof ProductVariant && $variant->canSellQuantity(1);
     }
 
-    private static function stockLabelFromPolicy(Product $product, ProductStock $stock): string
+    private static function stockLabelForVariant(Product $product, ProductVariant $variant): string
     {
-        $policy = $stock->policy();
-        $available = max(0, (int) ($stock->on_hand ?? 0) - (int) ($stock->reserved ?? 0));
+        $policy = $variant->effectiveStockPolicy();
+        $available = $variant->sellableQuantityTotal();
 
         if ($policy === StockPolicy::Untracked) {
             return getModuleConfig('product.text_instock');

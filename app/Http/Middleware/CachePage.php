@@ -14,12 +14,6 @@ class CachePage
         'api/*',
     ];
 
-    /**
-     * Param tracking (affiliate/UTM/ads) bị loại khỏi cache key: giá trị unique
-     * per-visitor (aff_click token...) mà giữ trong key thì mỗi click short link
-     * tạo 1 bản cache 24h (rác store) và khách affiliate luôn MISS.
-     * Nội dung trang không phụ thuộc các param này nên strip là an toàn.
-     */
     protected $ignoredQueryParams = [
         'aff', 'aff_click', 'ref',
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
@@ -69,7 +63,6 @@ class CachePage
         return $response->header('X-Cache', 'MISS');
     }
 
-    /** URL làm cache key: bỏ param tracking, sort param còn lại (ổn định thứ tự). */
     protected function normalizedUrl($request): string
     {
         $query = $request->query();

@@ -23,7 +23,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'check_js_request' => \App\Http\Middleware\CheckJsRequest::class,
-            'check_permission' => \App\Http\Middleware\CheckPermission::class,
             'auth' => \App\Http\Middleware\Authenticate::class,
             'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
             'check_login' => \App\Http\Middleware\CheckLogin::class,
@@ -37,5 +36,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'cms.permission' => \App\Http\Middleware\CmsPermission::class,
         ]);
     })
-    ->withExceptions(function (Exceptions $exceptions): void {})
+    ->withExceptions(function (Exceptions $exceptions): void {
+    })
     ->create();

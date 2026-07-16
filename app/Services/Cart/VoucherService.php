@@ -145,49 +145,38 @@ class VoucherService
             return;
         }
 
-        $statusApplied = VoucherHistoryStatus::Applied->value;
+        $statusConfirmed = VoucherHistoryStatus::Confirmed->value;
         $userId = (int) getCurrentUserId() ?: null;
+        $voucherIds = [];
 
         foreach ($result['applied'] as $entry) {
             if ($entry['amount'] <= 0) {
                 continue;
             }
+
+            $voucher = $entry['voucher'];
+
+            if ($this->voucherRepo->incrementRedeemed((int) $voucher->id, (float) $entry['amount']) === 0) {
+                throw new \App\Exceptions\VoucherExhaustedException(
+                    (int) $voucher->id,
+                    (string) $voucher->code,
+                    (float) $entry['amount'],
+                );
+            }
+
             $this->voucherHistoryRepo->record(
-                (int) $entry['voucher']->id,
+                (int) $voucher->id,
                 $orderId,
                 $userId,
                 (int) $entry['amount'],
-                $statusApplied,
+                $statusConfirmed,
             );
-        }
-    }
 
-    public function confirmOrderVouchers(int $orderId): void
-    {
-        $statusApplied = VoucherHistoryStatus::Applied->value;
-        $statusConfirmed = VoucherHistoryStatus::Confirmed->value;
-
-        $rows = $this->voucherHistoryRepo->forOrderByStatus($orderId, $statusApplied);
-        if ($rows->isEmpty()) {
-            return;
-        }
-
-        $this->voucherHistoryRepo->markStatus($rows->pluck('id')->all(), $statusConfirmed);
-
-        foreach ($rows as $row) {
-            $affected = $this->voucherRepo->incrementRedeemed((int) $row->voucher_id, (float) $row->amount);
-            if ($affected === 0) {
-                logError(sprintf(
-                    'confirmOrderVouchers: voucher %d insufficient balance for order %d (amount %s) — double-spend blocked, needs CS review',
-                    (int) $row->voucher_id,
-                    $orderId,
-                    (string) $row->amount,
-                ));
-            }
+            $voucherIds[] = (int) $voucher->id;
         }
 
         $this->voucherRepo->markFullyUsed(
-            $rows->pluck('voucher_id')->unique()->all(),
+            array_values(array_unique($voucherIds)),
             VoucherStatus::Active->value,
             VoucherStatus::FullyUsed->value,
         );

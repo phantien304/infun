@@ -129,7 +129,6 @@ return [
             'status_fully_used' => 'Đã dùng hết',
             'status_revoked'    => 'Đã thu hồi',
             'status_unknown'    => 'Không xác định',
-            // Nhãn HSD (VoucherDTO)
             'expiry_none'       => 'Không thời hạn',
             'expiry_expired_at' => 'Đã hết hạn %s',
             'expiry_days'       => 'Còn %s ngày',

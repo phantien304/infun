@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Exceptions\CouponExhaustedException;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\RewardExhaustedException;
+use App\Exceptions\VoucherExhaustedException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\CheckoutAddToCartRequest;
 use App\Http\Requests\Web\CheckoutSaveOrderRequest;
@@ -26,6 +27,7 @@ use App\Services\Checkout\PromotionService;
 use App\Services\Stock\StockService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -239,39 +241,30 @@ class CheckoutController extends Controller
     public function saveOrder(CheckoutSaveOrderRequest $request)
     {
         $sessionId = (string) session()->getId();
-        $promotions = null;
-        $items = [];
-        $totalData = [];
-        $total = 0;
-
+        $cart = null;
         $idemKey = (string) $request->input(
             'idempotency_key',
             (string) session()->get(getCoreConfig('session.checkout_idem'), '')
         );
-
         if ($idemKey === '') {
-            [$promotions, $items, $totalData, $total, $failed] = $this->buildCartForOrder();
-            if ($failed !== null) {
-                return $failed;
+            $cart = $this->buildCartForOrder();
+            if ($cart instanceof RedirectResponse) {
+                return $cart;
             }
-            $idemKey = $sessionId.'|'.$this->cartSignature($items, $total);
+            $idemKey = $sessionId.'|'.$this->cartSignature($cart['items'], $cart['total']);
         }
-
         $idemKeyMd5 = md5($idemKey);
         $idemCacheKey = $this->idempotencyCacheKey($idemKeyMd5);
-
         if (! Cache::add($idemCacheKey, 'processing', now()->addSeconds(60))) {
             return $this->handleDuplicateSubmit($idemCacheKey, $idemKeyMd5);
         }
-
-        if ($promotions === null) {
-            [$promotions, $items, $totalData, $total, $failed] = $this->buildCartForOrder();
-            if ($failed !== null) {
-                Cache::forget($idemCacheKey);
-                return $failed;
-            }
+        $cart ??= $this->buildCartForOrder();
+        if ($cart instanceof RedirectResponse) {
+            Cache::forget($idemCacheKey);
+            return $cart;
         }
 
+        ['promotions' => $promotions, 'items' => $items, 'totalData' => $totalData, 'total' => $total] = $cart;
         $params = $request->validated();
         $params['idempotency_key'] = $idemKeyMd5;
 
@@ -300,6 +293,16 @@ class CheckoutController extends Controller
             logError($e);
             return redirect(route('checkout.index'))
                 ->with('failed', sprintf(trans('messages.checkout.reward.not_enough'), number_format($e->available)))
+                ->withInput();
+        } catch (VoucherExhaustedException $e) {
+            Cache::forget($idemCacheKey);
+            logError($e);
+            return redirect(route('checkout.index'))
+                ->with('failed', sprintf(
+                    trans('messages.checkout.voucher.error_reason'),
+                    $e->voucherCode,
+                    trans('messages.checkout.voucher.used_up'),
+                ))
                 ->withInput();
         } catch (QueryException $e) {
             if ($this->isDuplicateKey($e)) {
@@ -382,19 +385,17 @@ class CheckoutController extends Controller
         return $redirect;
     }
 
-    protected function buildCartForOrder(): array
+    protected function buildCartForOrder(): array|RedirectResponse
     {
         $promotions = $this->buildAppliedPromotions();
         [$error, $items] = $this->validateCart($promotions);
         if ($error !== '' || empty($items)) {
-            $failed = redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
-
-            return [null, [], [], 0, $failed];
+            return redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
         }
 
         [$totalData, $total] = $this->totalService->build($promotions, withShipping: true);
 
-        return [$promotions, $items, $totalData, $total, null];
+        return compact('promotions', 'items', 'totalData', 'total');
     }
 
     protected function handleDuplicateSubmit(string $idemCacheKey, string $idemKeyMd5)

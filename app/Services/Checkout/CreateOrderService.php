@@ -40,6 +40,7 @@ class CreateOrderService
             $this->writeOrderItems($promotions, $order->id);
             $this->writeOrderTotals($order->id, $totalData);
 
+            //   stock → coupon → voucher → gift → reward
             $this->subtractStockForItems($promotions, $order->id);
             $this->promotionService->recordForOrder($promotions, $order->id, $total);
             $this->writeRewardRedeem($order->id, $totalData);

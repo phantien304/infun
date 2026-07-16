@@ -31,9 +31,9 @@
             </button>
         </div>
         @php
-            $typePercent = (int) getCoreConfig('coupon.type.percent');
-            $typeFixed = (int) getCoreConfig('coupon.type.fixed');
-            $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
+            $typePercent = \App\Enums\CouponType::Percent->value;
+            $typeFixed = \App\Enums\CouponType::Fixed->value;
+            $typeFreeship = \App\Enums\CouponType::Freeship->value;
             $discountCoupons = $coupons
                 ->filter(fn($c) => in_array($c->type, [$typePercent, $typeFixed], true))
                 ->values();

@@ -186,27 +186,12 @@ return [
         'country_id_default' => 230
     ],
     'coupon' => [
-        'type' => [
-            'percent'  => 1, // discount_value = %
-            'fixed'    => 2, // discount_value = VND.
-            'freeship' => 3, // skip discount_value, set shipping_fee=0.
-        ],
-        'apply_scope' => [
-            'all'        => 0,
-            'products'   => 1,
-            'categories' => 2,
-        ],
-        'history_status' => [
-            'applied'   => 0, // đang trong cart, chưa thanh toán.
-            'used'      => 1, // order paid → trừ used_count.
-            'cancelled' => 2, // order cancel → trả quota lại.
-        ],
         'stacking' => [
             'allow_freeship_with_discount' => true,
         ],
         'cache' => [
             'tag_root'   => 'coupon_root',
-            'tag_user'   => 'coupon_user_', // concat user_id → tag riêng (saved list).
+            'tag_user'   => 'coupon_user_',
             'key_active' => 'coupon_active',
         ],
         'cart_applied_ttl_minutes' => 30,

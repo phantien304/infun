@@ -2,6 +2,8 @@
 
 namespace App\Data\Output;
 
+use App\Enums\CouponApplyScope;
+use App\Enums\CouponType;
 use App\Models\Entities\Coupon;
 use Illuminate\Support\Carbon;
 use Spatie\LaravelData\Data;
@@ -13,7 +15,7 @@ class CouponDTO extends Data
         public string $code,
         public string $name,
         public ?string $description,
-        public int $type,                    // 1=percent, 2=fixed, 3=freeship
+        public int $type,
         public string $typeLabel,
         public string $typeIcon,
         public float $discountValue,
@@ -21,7 +23,7 @@ class CouponDTO extends Data
         public string $discountLabel,
         public ?float $minSubtotal,
         public string $minSubtotalLabel,
-        public int $applyScope,              // 0=all, 1=products, 2=categories
+        public int $applyScope,
         public string $applyScopeLabel,
         public ?string $badge,
         public ?string $dateStart,
@@ -76,87 +78,79 @@ class CouponDTO extends Data
 
     private static function resolveTypeLabel(int $type): string
     {
-        return match ($type) {
-            (int) getCoreConfig('coupon.type.percent')  => 'Giảm theo %',
-            (int) getCoreConfig('coupon.type.fixed')    => 'Giảm cố định',
-            (int) getCoreConfig('coupon.type.freeship') => 'Miễn phí vận chuyển',
-            default                                      => 'Voucher',
-        };
+        return CouponType::fromInput($type)?->label()
+            ?? trans('messages.checkout.coupon.type_fallback');
     }
 
     private static function resolveTypeIcon(int $type): string
     {
-        return match ($type) {
-            (int) getCoreConfig('coupon.type.percent')  => '%',
-            (int) getCoreConfig('coupon.type.fixed')    => '₫',
-            (int) getCoreConfig('coupon.type.freeship') => '🚚',
-            default                                      => '★',
-        };
+        return CouponType::fromInput($type)?->symbol() ?? '★';
     }
 
     private static function resolveDiscountLabel(Coupon $coupon): string
     {
         $type = (int) $coupon->type;
 
-        if ($type === (int) getCoreConfig('coupon.type.percent')) {
-            $label = 'Giảm ' . rtrim(rtrim(number_format((float) $coupon->discount, 2), '0'), '.') . '%';
+        if ($type === CouponType::Percent->value) {
+            $percent = rtrim(rtrim(number_format((float) $coupon->discount, 2), '0'), '.');
+
             if ($coupon->discount_max !== null && (float) $coupon->discount_max > 0) {
-                $label .= ' tối đa ' . money((float) $coupon->discount_max);
+                return sprintf(
+                    trans('messages.checkout.coupon.discount_percent_max'),
+                    $percent,
+                    money((float) $coupon->discount_max),
+                );
             }
-            return $label;
+
+            return sprintf(trans('messages.checkout.coupon.discount_percent'), $percent);
         }
 
-        if ($type === (int) getCoreConfig('coupon.type.fixed')) {
-            return 'Giảm ' . money((float) $coupon->discount);
+        if ($type === CouponType::Fixed->value) {
+            return sprintf(trans('messages.checkout.coupon.discount_fixed'), money((float) $coupon->discount));
         }
 
-        if ($type === (int) getCoreConfig('coupon.type.freeship')) {
-            return 'Miễn phí vận chuyển';
+        if ($type === CouponType::Freeship->value) {
+            return trans('messages.checkout.coupon.type_freeship');
         }
 
-        return 'Voucher';
+        return trans('messages.checkout.coupon.type_fallback');
     }
 
     private static function resolveMinSubtotalLabel(Coupon $coupon): string
     {
         if ($coupon->min_subtotal === null || (float) $coupon->min_subtotal <= 0) {
-            return 'Không giới hạn';
+            return trans('messages.checkout.coupon.min_subtotal_any');
         }
-        return 'Đơn từ ' . money((float) $coupon->min_subtotal);
+        return sprintf(trans('messages.checkout.coupon.min_subtotal_from'), money((float) $coupon->min_subtotal));
     }
 
     private static function resolveApplyScopeLabel(int $scope): string
     {
-        return match ($scope) {
-            (int) getCoreConfig('coupon.apply_scope.all')        => 'Tất cả sản phẩm',
-            (int) getCoreConfig('coupon.apply_scope.products')   => 'Một số sản phẩm',
-            (int) getCoreConfig('coupon.apply_scope.categories') => 'Một số ngành hàng',
-            default                                               => 'Tất cả sản phẩm',
-        };
+        return (CouponApplyScope::fromInput($scope) ?? CouponApplyScope::All)->label();
     }
 
     private static function resolveExpiresLabel(Coupon $coupon): string
     {
         if (! $coupon->date_end) {
-            return 'Không giới hạn';
+            return trans('messages.checkout.coupon.expiry_none');
         }
 
         $end = Carbon::parse($coupon->date_end);
         $now = Carbon::now();
 
         if ($end->lt($now)) {
-            return 'Đã hết hạn';
+            return trans('messages.checkout.coupon.expiry_expired');
         }
 
         $diffDays = $now->diffInDays($end, false);
         if ($diffDays <= 7) {
             $diffHours = $now->diffInHours($end, false);
             if ($diffHours <= 24) {
-                return 'Còn ' . max(1, (int) $diffHours) . ' giờ';
+                return sprintf(trans('messages.checkout.coupon.expiry_hours'), max(1, (int) $diffHours));
             }
-            return 'Còn ' . (int) $diffDays . ' ngày';
+            return sprintf(trans('messages.checkout.coupon.expiry_days'), (int) $diffDays);
         }
 
-        return 'HSD: ' . $end->format('d/m/Y');
+        return sprintf(trans('messages.checkout.coupon.expiry_date'), $end->format('d/m/Y'));
     }
 }

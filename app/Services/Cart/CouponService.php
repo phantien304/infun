@@ -3,7 +3,9 @@
 namespace App\Services\Cart;
 
 use App\Data\Output\CouponDTO;
+use App\Enums\CouponApplyScope;
 use App\Enums\CouponHistoryStatus;
+use App\Enums\CouponType;
 use App\Models\Entities\Coupon;
 use App\Repositories\Interfaces\CouponHistoryRepositoryInterface;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
@@ -62,7 +64,7 @@ class CouponService
 
     public function validateForCart(Coupon $coupon, CartCouponContext $cartContext, ?int $usedByUser = null): ?string
     {
-        if (! $cartContext->hasShipping && (int) $coupon->type === (int) getCoreConfig('coupon.type.freeship')) {
+        if (! $cartContext->hasShipping && (int) $coupon->type === CouponType::Freeship->value) {
             return trans('messages.checkout.coupon.apply_at_checkout');
         }
 
@@ -90,14 +92,14 @@ class CouponService
         }
 
         $scope = (int) $coupon->apply_scope;
-        if ($scope === (int) getCoreConfig('coupon.apply_scope.products')) {
+        if ($scope === CouponApplyScope::Products->value) {
             $allowedProductIds = $coupon->couponProducts->pluck('product_id')->all();
             if (empty(array_intersect($cartContext->productIds, $allowedProductIds))) {
                 return trans('messages.checkout.coupon.scope_products');
             }
         }
 
-        if ($scope === (int) getCoreConfig('coupon.apply_scope.categories')) {
+        if ($scope === CouponApplyScope::Categories->value) {
             $allowedCategoryIds = $coupon->couponCategories->pluck('category_id')->all();
             if (empty(array_intersect($cartContext->categoryIds, $allowedCategoryIds))) {
                 return trans('messages.checkout.coupon.scope_categories');
@@ -132,7 +134,7 @@ class CouponService
     {
         $type = (int) $coupon->type;
 
-        if ($type === (int) getCoreConfig('coupon.type.percent')) {
+        if ($type === CouponType::Percent->value) {
             $rawDiscount = (int) floor($applicableSubtotal * ((float) $coupon->discount / 100));
             if ($coupon->discount_max !== null) {
                 $rawDiscount = min($rawDiscount, (int) $coupon->discount_max);
@@ -140,11 +142,11 @@ class CouponService
             return min($rawDiscount, $applicableSubtotal);
         }
 
-        if ($type === (int) getCoreConfig('coupon.type.fixed')) {
+        if ($type === CouponType::Fixed->value) {
             return min((int) $coupon->discount, $applicableSubtotal);
         }
 
-        if ($type === (int) getCoreConfig('coupon.type.freeship')) {
+        if ($type === CouponType::Freeship->value) {
             return 0;
         }
 
@@ -163,7 +165,7 @@ class CouponService
         $bestDiscount = null;
         $bestFreeship = null;
 
-        $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
+        $typeFreeship = CouponType::Freeship->value;
         $allowStack = (bool) getCoreConfig('coupon.stacking.allow_freeship_with_discount');
 
         foreach (array_unique(array_map('strval', $codes)) as $code) {
@@ -287,11 +289,11 @@ class CouponService
     private function resolveApplicableSubtotal(Coupon $coupon, array $cartItems, int $cartSubtotal): int
     {
         $scope = (int) $coupon->apply_scope;
-        if ($scope === (int) getCoreConfig('coupon.apply_scope.all')) {
+        if ($scope === CouponApplyScope::All->value) {
             return $cartSubtotal;
         }
 
-        if ($scope === (int) getCoreConfig('coupon.apply_scope.products')) {
+        if ($scope === CouponApplyScope::Products->value) {
             $allowed = $coupon->couponProducts->pluck('product_id')->all();
             return (int) array_sum(array_map(
                 fn ($item) => in_array((int) ($item['id'] ?? 0), $allowed, true)
@@ -300,7 +302,7 @@ class CouponService
             ));
         }
 
-        if ($scope === (int) getCoreConfig('coupon.apply_scope.categories')) {
+        if ($scope === CouponApplyScope::Categories->value) {
             $allowed = $coupon->couponCategories->pluck('category_id')->all();
             $productInCat = $this->productIdsInCategories(
                 array_map(fn ($item) => (int) ($item['id'] ?? 0), $cartItems),

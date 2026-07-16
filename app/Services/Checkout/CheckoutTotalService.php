@@ -2,6 +2,7 @@
 
 namespace App\Services\Checkout;
 
+use App\Enums\CouponType;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 
 class CheckoutTotalService
@@ -43,7 +44,7 @@ class CheckoutTotalService
 
     protected function linesAppliedCoupons(CheckoutPromotions $promotions, array &$totalData, int &$total): void
     {
-        $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
+        $typeFreeship = CouponType::Freeship->value;
 
         foreach ($promotions->appliedCoupons as $entry) {
             $coupon = $entry['coupon'];
@@ -190,7 +191,7 @@ class CheckoutTotalService
 
     protected function findFreeshipEntry(CheckoutPromotions $ctx): ?array
     {
-        $typeFreeship = (int) getCoreConfig('coupon.type.freeship');
+        $typeFreeship = CouponType::Freeship->value;
         foreach ($ctx->appliedCoupons as $entry) {
             if ((int) ($entry['type'] ?? $entry['coupon']->type) === $typeFreeship) {
                 return $entry;

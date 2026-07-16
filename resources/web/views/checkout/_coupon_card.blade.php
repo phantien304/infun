@@ -1,16 +1,12 @@
-{{--
-    Voucher card row — dùng chung trong modal "Mã giảm giá" + "Mã freeship".
-
-    Input:
-      $coupon  CouponDTO
---}}
 <label class="block voucher-card relative" x-show="tab === 'all' || {{ $coupon->savedByUser ? 'true' : 'false' }}">
-    <div class="flex bg-white rounded overflow-hidden shadow-sm border
+    <div
+        class="flex bg-white rounded overflow-hidden shadow-sm border
                 @if (!$coupon->applicableToCart) opacity-50 @endif">
         {{-- Left ribbon — type icon + color --}}
-        <div class="flex-shrink-0 w-20 flex items-center justify-center text-white text-3xl font-bold
-                    @if ($coupon->type === (int) getCoreConfig('coupon.type.percent')) bg-orange-500
-                    @elseif ($coupon->type === (int) getCoreConfig('coupon.type.fixed')) bg-red-500
+        <div
+            class="flex-shrink-0 w-20 flex items-center justify-center text-white text-3xl font-bold
+                    @if ($coupon->type === \App\Enums\CouponType::Percent->value) bg-orange-500
+                    @elseif ($coupon->type === \App\Enums\CouponType::Fixed->value) bg-red-500
                     @else bg-green-500 @endif">
             {{ $coupon->typeIcon }}
         </div>

@@ -327,11 +327,6 @@ class StockService
     ): void {
         $warehouseId = (int) $stock->warehouse_id;
 
-        // Nhả TOÀN BỘ hold của phiên tại kho này (không chỉ min(held, take)) —
-        // hold tồn tại vì dòng đơn này; giữ phần dư là leak reserved vĩnh viễn.
-        // Chỉ tính $released khi CHÍNH MÌNH xoá được row (affected=1) — nếu
-        // job release đã nhả hold này rồi thì reserved cũng đã trừ rồi, trừ
-        // thêm là double-decrement.
         $released = 0;
         $hold = $holds->get($warehouseId);
         if ($holder !== '' && $hold) {
@@ -371,8 +366,6 @@ class StockService
         $holds = $this->stockReservationRepo->reservationsForVariant($holder, $variantId);
 
         foreach ($holds as $hold) {
-            // Idempotent như applyDeduction: chỉ trừ reserved khi chính mình
-            // xoá được row — tránh double-decrement khi đua với job release.
             if ($this->stockReservationRepo->deleteReservationById((int) $hold->id) !== 1) {
                 continue;
             }

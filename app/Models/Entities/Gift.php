@@ -7,13 +7,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * Master gift campaign — xem schema chi tiết ở migration
- * `2026_06_12_000000_create_gift_table.php`.
- *
- * Code đọc enum qua `getCoreConfig('gift.trigger_type.*')` /
- * `getCoreConfig('gift.pick_type.*')` — KHÔNG hardcode literal 0/1/2.
- */
 class Gift extends Base
 {
     use SoftDeletes;
@@ -22,8 +15,6 @@ class Gift extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
-
-    /** Bypass HasSchemaCache fillable forever-cache (xem note Coupon::$guarded). */
     protected $guarded = [];
 
     protected $casts = [
@@ -54,10 +45,6 @@ class Gift extends Base
         return $this->hasMany(OrderGift::class, 'gift_id', 'id');
     }
 
-    /**
-     * Active = is_active=1 + date trong window + chưa hết quota global.
-     * KHÔNG check trigger ở đây (cần cart context — GiftService::validate).
-     */
     public function scopeActive(Builder $query): Builder
     {
         return $query

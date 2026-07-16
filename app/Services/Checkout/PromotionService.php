@@ -53,7 +53,7 @@ class PromotionService
     {
         $this->recordCoupons($promotions, $orderId);
         $this->voucherService->recordOrderVouchers($orderId, $orderTotal);
-        $this->giftService->recordOrderGifts(
+        $promotions->droppedGifts = $this->giftService->recordOrderGifts(
             $orderId,
             $promotions->items,
             (int) array_sum(array_column($promotions->items, 'total')),
@@ -63,8 +63,8 @@ class PromotionService
     public function revertForOrder(int $orderId): void
     {
         $this->couponService->revertOrderCoupons($orderId);
-        $this->giftService->revertOrderGifts($orderId);
         $this->voucherService->revertOrderVouchers($orderId);
+        $this->giftService->revertOrderGifts($orderId);
     }
 
     protected function recordCoupons(CheckoutPromotions $promotions, int $orderId): void

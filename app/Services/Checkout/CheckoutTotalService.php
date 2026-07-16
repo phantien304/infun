@@ -79,7 +79,7 @@ class CheckoutTotalService
         }
         $totalData[] = [
             'code'  => 'gifts',
-            'title' => trans('messages.checkout.gift'),
+            'title' => trans('messages.checkout.gift.label'),
             'text'  => sprintf(trans('messages.checkout.gift_count'), $count),
             'value' => 0,
         ];

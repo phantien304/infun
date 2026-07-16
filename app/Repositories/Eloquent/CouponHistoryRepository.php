@@ -24,15 +24,6 @@ class CouponHistoryRepository extends QueryableRepository implements CouponHisto
             ->count();
     }
 
-    /**
-     * Đếm số ĐƠN user đã dùng coupon (chỉ status Used) bằng LOCKING READ.
-     *
-     * Dùng cho guard per-user tại thời điểm chốt đơn, SAU KHI đã giữ X-lock
-     * row coupon (incrementUsedCount): locking read đọc bản committed mới
-     * nhất thay vì snapshot REPEATABLE READ của transaction — transaction
-     * đua song song vừa commit xong là thấy ngay. Đi qua index
-     * idx_ch_user_coupon_status nên chỉ lock đúng dải row liên quan.
-     */
     public function countUsedByUserForUpdate(int $userId, int $couponId): int
     {
         return $this->resetModel()->query()

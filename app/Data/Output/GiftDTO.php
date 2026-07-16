@@ -2,10 +2,11 @@
 
 namespace App\Data\Output;
 
+use App\Enums\GiftPickType;
+use App\Enums\GiftTriggerType;
 use App\Models\Entities\Gift;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Data;
 
 class GiftDTO extends Data
@@ -70,58 +71,47 @@ class GiftDTO extends Data
 
     private static function resolveTriggerLabel(Gift $gift): string
     {
-        $type = (int) $gift->trigger_type;
-        if ($type === (int) getCoreConfig('gift.trigger_type.min_subtotal')) {
-            return 'Đơn tối thiểu';
-        }
-        if ($type === (int) getCoreConfig('gift.trigger_type.buy_specific_product')) {
-            return 'Mua sản phẩm chỉ định';
-        }
-        return 'Điều kiện đặc biệt';
+        return GiftTriggerType::fromInput($gift->trigger_type)?->label()
+            ?? trans('messages.checkout.gift.trigger_special');
     }
 
     private static function resolveMinSubtotalLabel(Gift $gift): string
     {
         if ($gift->min_subtotal === null || (float) $gift->min_subtotal <= 0) {
-            return 'Không giới hạn';
+            return trans('messages.checkout.gift.min_subtotal_any');
         }
-        return 'Đơn từ ' . money((float) $gift->min_subtotal);
+        return sprintf(trans('messages.checkout.gift.min_subtotal_from'), money((float) $gift->min_subtotal));
     }
 
     private static function resolvePickTypeLabel(Gift $gift): string
     {
-        $type = (int) $gift->pick_type;
-        if ($type === (int) getCoreConfig('gift.pick_type.auto')) {
-            return 'Tự động tặng kèm';
+        $type = GiftPickType::fromInput($gift->pick_type);
+
+        if ($type === GiftPickType::PickUpToN && (int) ($gift->pick_limit ?? 0) > 0) {
+            return sprintf(trans('messages.checkout.gift.pick_up_to_limit'), (int) $gift->pick_limit);
         }
-        if ($type === (int) getCoreConfig('gift.pick_type.pick_1_of_n')) {
-            return 'Chọn 1 quà';
-        }
-        if ($type === (int) getCoreConfig('gift.pick_type.pick_up_to_n')) {
-            $limit = $gift->pick_limit !== null ? (int) $gift->pick_limit : 0;
-            return $limit > 0 ? "Chọn tối đa {$limit} quà" : 'Chọn nhiều quà';
-        }
-        return 'Chọn quà';
+
+        return $type?->label() ?? trans('messages.checkout.gift.pick_fallback');
     }
 
     private static function resolveExpiresLabel(Gift $gift): string
     {
         if (! $gift->date_end) {
-            return 'Không giới hạn';
+            return trans('messages.checkout.gift.expiry_none');
         }
         $end = Carbon::parse($gift->date_end);
         $now = Carbon::now();
         if ($end->lt($now)) {
-            return 'Đã hết hạn';
+            return trans('messages.checkout.gift.expiry_expired');
         }
         $diffDays = $now->diffInDays($end, false);
         if ($diffDays <= 7) {
             $diffHours = $now->diffInHours($end, false);
             if ($diffHours <= 24) {
-                return 'Còn ' . max(1, (int) $diffHours) . ' giờ';
+                return sprintf(trans('messages.checkout.gift.expiry_hours'), max(1, (int) $diffHours));
             }
-            return 'Còn ' . (int) $diffDays . ' ngày';
+            return sprintf(trans('messages.checkout.gift.expiry_days'), (int) $diffDays);
         }
-        return 'HSD: ' . $end->format('d/m/Y');
+        return sprintf(trans('messages.checkout.gift.expiry_date'), $end->format('d/m/Y'));
     }
 }

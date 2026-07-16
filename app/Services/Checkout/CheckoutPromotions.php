@@ -14,6 +14,8 @@ class CheckoutPromotions
 
     public array $appliedGifts = [];
 
+    public array $droppedGifts = [];
+
     public ?int $orderId = null;
 
     public function setItems(array $items): static

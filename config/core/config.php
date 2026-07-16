@@ -83,7 +83,6 @@ return [
         'param_ref'              => 'ref',          // ?ref=CODE — link tay không qua shortener
         'param_click'            => 'aff_click',    // token gắn bởi redirect /l/{slug}
         'click_throttle_minutes' => 30,             // cùng session + affiliate + link không log click mới
-        // Anti-fraud (Phase 6):
         'dedupe_minutes'         => 10,             // cùng affiliate+link+IP+UA trong X phút → tái dùng click cũ (chặn bot xóa cookie/session)
         'max_clicks_per_day'     => 2000,           // cap click/ngày/affiliate — vượt thì bỏ log (vẫn redirect); 0 = không cap
         'max_links'              => 200,            // cap số short link / affiliate (chống spam bảng); 0 = không cap
@@ -231,15 +230,6 @@ return [
         ],
     ],
     'gift' => [
-        'trigger_type' => [
-            'min_subtotal'         => 1, // đơn từ X VND (đọc gift.min_subtotal).
-            'buy_specific_product' => 2, // mua bất kỳ SP trong gift_trigger_product.
-        ],
-        'pick_type' => [
-            'auto'          => 0, // tự áp tất cả gift_item khi đủ ĐK.
-            'pick_1_of_n'   => 1, // radio: chọn 1 trong N gift_item.
-            'pick_up_to_n'  => 2, // checkbox: chọn tối đa pick_limit gift_item.
-        ],
         'cache' => [
             'tag_root'   => 'gift_root',
             'key_active' => 'gift_active',

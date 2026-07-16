@@ -1,22 +1,10 @@
-{{--
-    Shopee-style gift modal — render từng gift kèm picker UI tuỳ pick_type:
-      auto         → text "Tự động tặng kèm" + list items pre-checked disabled
-      pick_1_of_n  → radio chọn 1 item
-      pick_up_to_n → checkbox chọn tối đa pick_limit
-
-    Events:
-      @open-gift-modal.window  → mở modal
-      @remove-gift.window      → POST giftsRemove, swap DOM
-
-    Input: $gifts (Collection<GiftDTO>)
---}}
 <div x-data="giftModal()" @open-gift-modal.window="open()" @remove-gift.window="remove()" x-show="show" x-cloak
     class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0" style="display:none;">
     <div class="absolute inset-0 bg-black/50" @click="show = false"></div>
 
     <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-lg sm:max-h-[85vh] flex flex-col shadow-2xl">
         <header class="flex items-center justify-between px-4 py-3 border-b">
-            <h3 class="text-lg font-semibold">Chọn quà tặng</h3>
+            <h3 class="text-lg font-semibold">{{ trans('messages.checkout.gift.modal_title') }}</h3>
             <button @click="show = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </header>
 
@@ -28,7 +16,8 @@
                             <i class="fi-rs-gift text-pink-500 text-2xl flex-shrink-0 mt-1"></i>
                             <div class="flex-1 min-w-0">
                                 @if ($gift->badge)
-                                    <span class="inline-block px-2 py-0.5 mb-1 text-xs font-bold bg-pink-100 text-pink-700 rounded">
+                                    <span
+                                        class="inline-block px-2 py-0.5 mb-1 text-xs font-bold bg-pink-100 text-pink-700 rounded">
                                         {{ $gift->badge }}
                                     </span>
                                 @endif
@@ -50,9 +39,9 @@
 
                     @if ($gift->availableToCart && $gift->items->count())
                         @php
-                            $pickAuto = (int) getCoreConfig('gift.pick_type.auto');
-                            $pick1OfN = (int) getCoreConfig('gift.pick_type.pick_1_of_n');
-                            $pickUpToN = (int) getCoreConfig('gift.pick_type.pick_up_to_n');
+                            $pickAuto = \App\Enums\GiftPickType::Auto->value;
+                            $pick1OfN = \App\Enums\GiftPickType::PickOneOfN->value;
+                            $pickUpToN = \App\Enums\GiftPickType::PickUpToN->value;
                         @endphp
                         <div class="p-3">
                             <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -62,32 +51,28 @@
                                         $isPicked = in_array($item->id, $gift->pickedItemIds, true);
                                     @endphp
                                     <label class="block gift-item-card relative cursor-pointer">
-                                        <div class="border rounded p-2 transition
+                                        <div
+                                            class="border rounded p-2 transition
                                                     @if ($isPicked) border-pink-500 bg-pink-50 @else border-gray-200 hover:border-pink-300 @endif">
                                             @if ($gift->pickType === $pickAuto)
-                                                <input type="checkbox"
-                                                    name="picks[{{ $gift->id }}][]"
-                                                    value="{{ $item->id }}"
-                                                    checked disabled
+                                                <input type="checkbox" name="picks[{{ $gift->id }}][]"
+                                                    value="{{ $item->id }}" checked disabled
                                                     class="absolute top-1 right-1 w-4 h-4">
                                             @elseif ($gift->pickType === $pick1OfN)
-                                                <input type="radio"
-                                                    name="picks[{{ $gift->id }}]"
-                                                    value="{{ $item->id }}"
-                                                    @checked($isPicked)
+                                                <input type="radio" name="picks[{{ $gift->id }}]"
+                                                    value="{{ $item->id }}" @checked($isPicked)
                                                     @change="togglePick({{ $gift->id }}, {{ $item->id }}, 'radio')"
                                                     class="absolute top-1 right-1 w-4 h-4">
                                             @else
-                                                <input type="checkbox"
-                                                    name="picks[{{ $gift->id }}][]"
-                                                    value="{{ $item->id }}"
-                                                    @checked($isPicked)
+                                                <input type="checkbox" name="picks[{{ $gift->id }}][]"
+                                                    value="{{ $item->id }}" @checked($isPicked)
                                                     @change="togglePick({{ $gift->id }}, {{ $item->id }}, 'checkbox', {{ $gift->pickLimit ?? 'null' }})"
                                                     class="absolute top-1 right-1 w-4 h-4">
                                             @endif
                                             <img src="{{ $itemImage }}" alt="{{ $item->productName }}"
                                                 class="w-full aspect-square object-cover rounded">
-                                            <p class="text-xs font-medium mt-2 line-clamp-2">{{ $item->productName }}</p>
+                                            <p class="text-xs font-medium mt-2 line-clamp-2">{{ $item->productName }}
+                                            </p>
                                             @if ($item->variantName)
                                                 <p class="text-xs text-gray-500">{{ $item->variantName }}</p>
                                             @endif
@@ -102,19 +87,20 @@
             @empty
                 <div class="text-center text-gray-400 py-12">
                     <i class="fi-rs-gift text-4xl"></i>
-                    <p class="mt-2">Chưa có quà nào</p>
+                    <p class="mt-2">{{ trans('messages.checkout.gift.modal_empty') }}</p>
                 </div>
             @endforelse
         </div>
 
         <footer class="px-4 py-3 border-t flex items-center justify-between bg-white">
             <span class="text-sm text-gray-600">
-                Đã chọn <b x-text="totalPicked()"></b> quà
+                {{ trans('messages.checkout.gift.modal_picked_prefix') }} <b x-text="totalPicked()"></b>
+                {{ trans('messages.checkout.gift.modal_picked_suffix') }}
             </span>
             <div class="flex gap-2">
-                <button @click="show = false" type="button" class="btn btn-sm bg-gray-100 text-gray-700">Trở lại</button>
-                <button @click="apply()" type="button"
-                    :disabled="loading"
+                <button @click="show = false" type="button" class="btn btn-sm bg-gray-100 text-gray-700">Trở
+                    lại</button>
+                <button @click="apply()" type="button" :disabled="loading"
                     class="btn btn-sm bg-pink-500 text-white disabled:opacity-50">
                     OK
                 </button>
@@ -131,7 +117,9 @@
             // picks shape: { gift_id_X: [item_id_a, item_id_b] }
             picks: @json($gifts->mapWithKeys(fn($g) => [(int) $g->id => array_map('intval', $g->pickedItemIds)])->all()),
 
-            open() { this.show = true; },
+            open() {
+                this.show = true;
+            },
 
             togglePick(giftId, itemId, mode, limit = null) {
                 const key = String(giftId);
@@ -147,7 +135,7 @@
                     this.picks[key].splice(i, 1);
                 } else {
                     if (limit !== null && this.picks[key].length >= limit) {
-                        alert('Tối đa ' + limit + ' quà cho voucher này');
+                        alert(@json(trans('messages.checkout.gift.js_max_per_gift')).replace('%s', limit));
                         // Uncheck UI vì state không update.
                         event.target.checked = false;
                         return;
@@ -167,13 +155,17 @@
             async apply() {
                 this.loading = true;
                 try {
-                    const res = await this.post('{{ route('checkout.giftsPick') }}', { picks: this.picks });
+                    const res = await this.post('{{ route('checkout.giftsPick') }}', {
+                        picks: this.picks
+                    });
                     if (res.success && res.data?.reload) {
                         window.location.reload();
                     } else {
-                        alert(res.message || 'Lỗi nhận quà');
+                        alert(res.message || @json(trans('messages.checkout.gift.js_pick_error')));
                     }
-                } finally { this.loading = false; }
+                } finally {
+                    this.loading = false;
+                }
             },
 
             async remove() {
@@ -195,14 +187,17 @@
                     }
                 };
                 for (const [k, v] of Object.entries(data)) append(k, v);
-                const csrf = document.querySelector('meta[name="csrf-token"]')?.content
-                          || document.querySelector('input[name="_token"]')?.value;
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content ||
+                    document.querySelector('input[name="_token"]')?.value;
                 if (csrf) fd.append('_token', csrf);
 
                 const r = await fetch(url, {
                     method: 'POST',
                     body: fd,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
                     credentials: 'same-origin',
                 });
                 return r.json();

@@ -27,18 +27,8 @@ interface OrderRepositoryInterface extends BaseRepositoryInterface
 
     public function appendHistory(int $orderId, int $statusId, ?int $userId = null): OrdersHistory;
 
-    /**
-     * Tạo 1 dòng sản phẩm của đơn cùng toàn bộ option của nó. Repo tự gắn
-     * order_id / order_product_id cho từng option row.
-     *
-     * @param  array<string,mixed>  $productData
-     * @param  array<int,array<string,mixed>>  $optionsData
-     */
     public function createOrderItem(array $productData, array $optionsData): OrdersProduct;
 
-    /**
-     * @param  array<string,mixed>  $data
-     */
     public function createOrderTotal(array $data): OrdersTotal;
 
     public function ensureHistory(int $orderId, int $statusId): void;

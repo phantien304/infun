@@ -3,6 +3,8 @@
 namespace App\Services\Cart;
 
 use App\Data\Output\GiftDTO;
+use App\Enums\GiftPickType;
+use App\Enums\GiftTriggerType;
 use App\Models\Entities\Gift;
 use App\Repositories\Interfaces\GiftRepositoryInterface;
 use App\Repositories\Interfaces\OrderGiftRepositoryInterface;
@@ -36,7 +38,7 @@ class GiftService
                 $sessionEntry = $appliedByGift->get((int) $gift->id);
                 if ($sessionEntry) {
                     $pickedItemIds = (array) ($sessionEntry['item_ids'] ?? []);
-                } elseif ((int) $gift->pick_type === (int) getCoreConfig('gift.pick_type.auto')) {
+                } elseif ((int) $gift->pick_type === GiftPickType::Auto->value) {
                     $pickedItemIds = $gift->items->pluck('id')->all();
                 }
             }
@@ -51,21 +53,24 @@ class GiftService
     {
         $type = (int) $gift->trigger_type;
 
-        if ($type === (int) getCoreConfig('gift.trigger_type.min_subtotal')) {
+        if ($type === GiftTriggerType::MinSubtotal->value) {
             if ($gift->min_subtotal === null) {
                 return null;
             }
             if ($cartSubtotal < (float) $gift->min_subtotal) {
                 $missingAmount = (float) $gift->min_subtotal - $cartSubtotal;
-                return 'Cần mua thêm ' . number_format($missingAmount) . (string) getConfigDb('config_currency');
+                return sprintf(
+                    trans('messages.checkout.gift.need_more'),
+                    number_format($missingAmount) . (string) getConfigDb('config_currency'),
+                );
             }
             return null;
         }
 
-        if ($type === (int) getCoreConfig('gift.trigger_type.buy_specific_product')) {
+        if ($type === GiftTriggerType::BuySpecificProduct->value) {
             $triggerIds = $gift->triggerProducts->pluck('product_id')->all();
             if (empty(array_intersect($cartProductIds, $triggerIds))) {
-                return 'Chưa có SP áp dụng trong giỏ';
+                return trans('messages.checkout.gift.not_in_cart');
             }
             return null;
         }
@@ -79,30 +84,30 @@ class GiftService
         $allowedIds = $gift->items->pluck('id')->map('intval')->all();
         $invalid = array_diff($itemIds, $allowedIds);
         if (! empty($invalid)) {
-            return 'Quà không hợp lệ';
+            return trans('messages.checkout.gift.invalid_items');
         }
 
         $pickType = (int) $gift->pick_type;
         $count = count($itemIds);
 
-        if ($pickType === (int) getCoreConfig('gift.pick_type.auto')) {
+        if ($pickType === GiftPickType::Auto->value) {
             if ($count > 0 && $count !== count($allowedIds)) {
-                return 'Quà tự động — phải nhận tất cả';
+                return trans('messages.checkout.gift.auto_take_all');
             }
             return null;
         }
 
-        if ($pickType === (int) getCoreConfig('gift.pick_type.pick_1_of_n')) {
+        if ($pickType === GiftPickType::PickOneOfN->value) {
             if ($count !== 1) {
-                return 'Phải chọn đúng 1 quà';
+                return trans('messages.checkout.gift.pick_exactly_one');
             }
             return null;
         }
 
-        if ($pickType === (int) getCoreConfig('gift.pick_type.pick_up_to_n')) {
+        if ($pickType === GiftPickType::PickUpToN->value) {
             $limit = (int) ($gift->pick_limit ?? 0);
             if ($limit > 0 && $count > $limit) {
-                return "Chỉ được chọn tối đa {$limit} quà";
+                return sprintf(trans('messages.checkout.gift.pick_limit_max'), $limit);
             }
             return null;
         }
@@ -125,7 +130,7 @@ class GiftService
 
             $gift = $this->giftRepo->findActiveById($giftId);
             if (! $gift) {
-                $errors[] = "Quà #{$giftId} không tồn tại hoặc không còn hiệu lực";
+                $errors[] = sprintf(trans('messages.checkout.gift.not_found'), $giftId);
                 continue;
             }
 
@@ -237,11 +242,13 @@ class GiftService
         return $items;
     }
 
-    public function recordOrderGifts(int $orderId, array $cartItems, int $cartSubtotal): void
+    public function recordOrderGifts(int $orderId, array $cartItems, int $cartSubtotal): array
     {
+        $droppedGifts = [];
+
         $applied = $this->getAppliedGifts();
         if (empty($applied)) {
-            return;
+            return $droppedGifts;
         }
 
         $cartProductIds = array_unique(array_map(fn ($i) => (int) ($i['id'] ?? 0), $cartItems));
@@ -264,6 +271,7 @@ class GiftService
             }
 
             if ($this->giftRepo->incrementUsedCount($giftId) === 0) {
+                $droppedGifts[] = (string) $gift->name;
                 logError(sprintf(
                     'recordOrderGifts: gift %d exhausted at commit — order %d proceeds without gift',
                     $giftId,
@@ -288,6 +296,8 @@ class GiftService
                 );
             }
         }
+
+        return $droppedGifts;
     }
 
     public function revertOrderGifts(int $orderId): void

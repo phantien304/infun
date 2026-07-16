@@ -261,46 +261,22 @@ class CheckoutController extends Controller
             return $this->handleDuplicateSubmit($idemCacheKey, $idemKeyMd5);
         }
 
-        try {
-            $params = $request->validated();
-            $params['idempotency_key'] = $idemKeyMd5;
+        $params = $request->validated();
+        $params['idempotency_key'] = $idemKeyMd5;
 
+        try {
             $orderId = $this->createOrderService->create($promotions, $params, $totalData, $total);
 
             Cache::put($idemCacheKey, $orderId, now()->addSeconds(60));
-
-            $this->sendOrderEmails($items, $totalData, $this->buildOrderMailData($params, $orderId));
-
-            $payload = $this->paymentService->buildOrderPayload(
-                $params['payment_code'],
-                $orderId,
-                $total,
-                $params['telephone'] ?? null,
-                $params['email'] ?? null
-            );
-            $url = $this->paymentService->startPayment($orderId, $payload);
-
-            $this->cartService->clear();
-            $this->stockService->releaseHolder($sessionId);
-            session()->put(getCoreConfig('session.last_order'), $orderId);
-            session()->forget(getCoreConfig('session.checkout_idem'));
-
-            if (filled($url)) {
-                return redirect($url);
-            }
-
-            return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
         } catch (InsufficientStockException $e) {
             Cache::forget($idemCacheKey);
             logError($e);
-
             return redirect(route('checkout.index'))
                 ->with('failed', sprintf(trans('messages.ErrorStockProduct'), ''))
                 ->withInput();
         } catch (CouponExhaustedException $e) {
             Cache::forget($idemCacheKey);
             logError($e);
-
             return redirect(route('checkout.index'))
                 ->with('failed', trans(
                     $e->scope === CouponExhaustedException::SCOPE_USER
@@ -311,7 +287,6 @@ class CheckoutController extends Controller
         } catch (RewardExhaustedException $e) {
             Cache::forget($idemCacheKey);
             logError($e);
-
             return redirect(route('checkout.index'))
                 ->with('failed', sprintf(trans('messages.checkout.reward.not_enough'), number_format($e->available)))
                 ->withInput();
@@ -326,17 +301,77 @@ class CheckoutController extends Controller
                     return redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
                 }
             }
-
             Cache::forget($idemCacheKey);
             logError($e);
-
             return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
         } catch (\Throwable $e) {
             Cache::forget($idemCacheKey);
             logError($e);
-
             return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
         }
+
+        return $this->finalizeCreatedOrder($orderId, $params, $items, $totalData, $total, $sessionId, $promotions);
+    }
+
+    protected function finalizeCreatedOrder(int $orderId, array $params, array $items, array $totalData, int $total, string $sessionId, CheckoutPromotions $promotions)
+    {
+        $warnings = [];
+        if (! empty($promotions->droppedGifts)) {
+            $warnings[] = sprintf(
+                trans('messages.checkout.gift.exhausted'),
+                '"'.implode('", "', $promotions->droppedGifts).'"',
+            );
+        }
+
+        try {
+            $this->cartService->clear();
+            $this->stockService->releaseHolder($sessionId);
+        } catch (\Throwable $e) {
+            logError('finalizeCreatedOrder cleanup: '.$e->getMessage(), ['order_id' => $orderId]);
+        }
+
+        session()->put(getCoreConfig('session.last_order'), $orderId);
+        session()->forget(getCoreConfig('session.checkout_idem'));
+
+        try {
+            $this->sendOrderEmails($items, $totalData, $this->buildOrderMailData($params, $orderId));
+        } catch (\Throwable $e) {
+            logError('sendOrderEmails: '.$e->getMessage(), ['order_id' => $orderId]);
+        }
+
+        try {
+            $payload = $this->paymentService->buildOrderPayload(
+                $params['payment_code'],
+                $orderId,
+                $total,
+                $params['telephone'] ?? null,
+                $params['email'] ?? null
+            );
+            $url = $this->paymentService->startPayment($orderId, $payload);
+
+            if (filled($url)) {
+                // Đi gateway — flash warning vẫn sống tới request kế của
+                // session (lúc khách quay về trang success/processing).
+                return $this->successRedirect($warnings, redirect($url));
+            }
+        } catch (\Throwable $e) {
+            logError('startPayment: '.$e->getMessage(), ['order_id' => $orderId]);
+            $warnings[] = trans('messages.checkout.payment_init_failed');
+        }
+
+        return $this->successRedirect($warnings);
+    }
+
+    /** Về trang success (hoặc redirect chỉ định) kèm gom các cảnh báo không-chặn-đơn. */
+    protected function successRedirect(array $warnings, $redirect = null)
+    {
+        $redirect ??= redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
+
+        if (! empty($warnings)) {
+            $redirect->with('failed', implode('<br>', $warnings));
+        }
+
+        return $redirect;
     }
 
     protected function handleDuplicateSubmit(string $idemCacheKey, string $idemKeyMd5)

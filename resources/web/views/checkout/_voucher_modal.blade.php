@@ -1,11 +1,5 @@
-{{--
-    Voucher modal — gift card thay vì coupon. 2 tab:
-      - Nhập mã: input code thủ công (cho cả guest)
-      - Thẻ của tôi: list voucher VoucherDTO theo to_email (chỉ user logged in)
---}}
-<div x-data="voucherModal()" @open-voucher-modal.window="open()" @remove-voucher.window="removeAll()"
-    x-show="show" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0"
-    style="display:none;">
+<div x-data="voucherModal()" @open-voucher-modal.window="open()" @remove-voucher.window="removeAll()" x-show="show" x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0" style="display:none;">
     <div class="absolute inset-0 bg-black/50" @click="show = false"></div>
 
     <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-lg sm:max-h-[85vh] flex flex-col shadow-2xl">
@@ -14,7 +8,6 @@
             <button @click="show = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </header>
 
-        {{-- Input mã thủ công --}}
         <div class="px-4 py-3 border-b bg-gray-50 flex gap-2">
             <input type="text" x-model="manualCode" placeholder="Nhập mã voucher"
                 class="flex-1 form-control h-10 px-3 rounded border-gray-300">
@@ -24,13 +17,13 @@
             </button>
         </div>
 
-        {{-- Mã đã áp --}}
-        @if (! empty($appliedVoucherCodes))
+        @if (!empty($appliedVoucherCodes))
             <div class="px-4 py-2 border-b">
                 <div class="text-xs text-gray-500 mb-1">Đã áp dụng:</div>
                 <div class="flex flex-wrap gap-2">
                     @foreach ($appliedVoucherCodes as $code)
-                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs">
+                        <span
+                            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs">
                             {{ $code }}
                             <button type="button" @click="removeOne('{{ $code }}')"
                                 class="ml-1 text-purple-500 hover:text-red-500">×</button>
@@ -40,14 +33,13 @@
             </div>
         @endif
 
-        {{-- List "Thẻ của tôi" --}}
         <div class="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50">
             @auth
                 @forelse ($myVouchers as $voucher)
-                    <div class="bg-white rounded shadow-sm border overflow-hidden
+                    <div
+                        class="bg-white rounded shadow-sm border overflow-hidden
                                 @if (!$voucher->redeemable) opacity-60 @endif">
                         <div class="flex">
-                            {{-- Theme image / banner --}}
                             <div class="flex-shrink-0 w-24 bg-purple-100 flex items-center justify-center">
                                 @if ($voucher->themeImage)
                                     <img src="{{ thumbnail($voucher->themeImage, 96, 96) }}" alt="theme"
@@ -60,8 +52,9 @@
                             <div class="flex-1 p-3 min-w-0">
                                 <div class="flex items-start justify-between gap-2">
                                     <h4 class="font-bold text-sm text-gray-900 truncate">{{ $voucher->code }}</h4>
-                                    <span class="text-xs px-2 py-0.5 rounded
-                                                @if ($voucher->status === (int) getCoreConfig('voucher.status.active')) bg-green-100 text-green-700
+                                    <span
+                                        class="text-xs px-2 py-0.5 rounded
+                                                @if ($voucher->status === \App\Enums\VoucherStatus::Active->value) bg-green-100 text-green-700
                                                 @else bg-gray-100 text-gray-500 @endif">
                                         {{ $voucher->statusLabel }}
                                     </span>
@@ -123,7 +116,9 @@
             loading: false,
             manualCode: '',
 
-            open() { this.show = true; },
+            open() {
+                this.show = true;
+            },
 
             async applyManual() {
                 const code = this.manualCode.trim();
@@ -139,17 +134,23 @@
             async apply(code) {
                 this.loading = true;
                 try {
-                    const res = await this.post('{{ route('checkout.vouchersApply') }}', { code });
+                    const res = await this.post('{{ route('checkout.vouchersApply') }}', {
+                        code
+                    });
                     if (res.success && res.data?.reload) {
                         window.location.reload();
                     } else {
                         alert(res.message || 'Mã không hợp lệ');
                     }
-                } finally { this.loading = false; }
+                } finally {
+                    this.loading = false;
+                }
             },
 
             async removeOne(code) {
-                const res = await this.post('{{ route('checkout.vouchersRemove') }}', { code });
+                const res = await this.post('{{ route('checkout.vouchersRemove') }}', {
+                    code
+                });
                 if (res.success && res.data?.reload) window.location.reload();
             },
 
@@ -161,12 +162,16 @@
             async post(url, data) {
                 const fd = new FormData();
                 for (const [k, v] of Object.entries(data)) fd.append(k, v);
-                const csrf = document.querySelector('meta[name="csrf-token"]')?.content
-                          || document.querySelector('input[name="_token"]')?.value;
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content ||
+                    document.querySelector('input[name="_token"]')?.value;
                 if (csrf) fd.append('_token', csrf);
                 const r = await fetch(url, {
-                    method: 'POST', body: fd,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
                     credentials: 'same-origin',
                 });
                 return r.json();

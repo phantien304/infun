@@ -124,6 +124,16 @@ return [
             'expired'           => "Voucher đã hết hạn",
             'used_up'           => "Voucher đã dùng hết",
             'invalid_order'     => "Đơn hàng không hợp lệ",
+            'status_active'     => 'Còn hiệu lực',
+            'status_expired'    => 'Đã hết hạn',
+            'status_fully_used' => 'Đã dùng hết',
+            'status_revoked'    => 'Đã thu hồi',
+            'status_unknown'    => 'Không xác định',
+            // Nhãn HSD (VoucherDTO)
+            'expiry_none'       => 'Không thời hạn',
+            'expiry_expired_at' => 'Đã hết hạn %s',
+            'expiry_days'       => 'Còn %s ngày',
+            'expiry_date'       => 'HSD: %s',
         ],
         'reward' => [
             'disabled'   => 'Điểm thưởng hiện không khả dụng',

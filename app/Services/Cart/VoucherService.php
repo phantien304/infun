@@ -3,6 +3,8 @@
 namespace App\Services\Cart;
 
 use App\Data\Output\VoucherDTO;
+use App\Enums\VoucherHistoryStatus;
+use App\Enums\VoucherStatus;
 use App\Models\Entities\Voucher;
 use App\Repositories\Interfaces\VoucherHistoryRepositoryInterface;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
@@ -47,7 +49,7 @@ class VoucherService
 
     public function validate(Voucher $voucher, int $orderTotal): ?string
     {
-        $statusActive = (int) getCoreConfig('voucher.status.active');
+        $statusActive = VoucherStatus::Active->value;
         if ((int) $voucher->status !== $statusActive) {
             return trans('messages.voucher.inactive');
         }
@@ -143,7 +145,7 @@ class VoucherService
             return;
         }
 
-        $statusApplied = (int) getCoreConfig('voucher.history_status.applied');
+        $statusApplied = VoucherHistoryStatus::Applied->value;
         $userId = (int) getCurrentUserId() ?: null;
 
         foreach ($result['applied'] as $entry) {
@@ -162,8 +164,8 @@ class VoucherService
 
     public function confirmOrderVouchers(int $orderId): void
     {
-        $statusApplied = (int) getCoreConfig('voucher.history_status.applied');
-        $statusConfirmed = (int) getCoreConfig('voucher.history_status.confirmed');
+        $statusApplied = VoucherHistoryStatus::Applied->value;
+        $statusConfirmed = VoucherHistoryStatus::Confirmed->value;
 
         $rows = $this->voucherHistoryRepo->forOrderByStatus($orderId, $statusApplied);
         if ($rows->isEmpty()) {
@@ -184,22 +186,20 @@ class VoucherService
             }
         }
 
-        $statusActive = (int) getCoreConfig('voucher.status.active');
-        $statusFullyUsed = (int) getCoreConfig('voucher.status.fully_used');
         $this->voucherRepo->markFullyUsed(
             $rows->pluck('voucher_id')->unique()->all(),
-            $statusActive,
-            $statusFullyUsed,
+            VoucherStatus::Active->value,
+            VoucherStatus::FullyUsed->value,
         );
     }
 
     public function revertOrderVouchers(int $orderId): void
     {
-        $statusConfirmed = (int) getCoreConfig('voucher.history_status.confirmed');
-        $statusRefunded = (int) getCoreConfig('voucher.history_status.refunded');
+        $statusConfirmed = VoucherHistoryStatus::Confirmed->value;
+        $statusRefunded = VoucherHistoryStatus::Refunded->value;
 
         $rows = $this->voucherHistoryRepo->forOrderByStatuses($orderId, [
-            (int) getCoreConfig('voucher.history_status.applied'),
+            VoucherHistoryStatus::Applied->value,
             $statusConfirmed,
         ]);
         if ($rows->isEmpty()) {
@@ -212,8 +212,8 @@ class VoucherService
             $this->voucherRepo->decrementRedeemed((int) $row->voucher_id, (float) $row->amount);
         }
 
-        $statusActive = (int) getCoreConfig('voucher.status.active');
-        $statusFullyUsed = (int) getCoreConfig('voucher.status.fully_used');
+        $statusActive = VoucherStatus::Active->value;
+        $statusFullyUsed = VoucherStatus::FullyUsed->value;
         $this->voucherRepo->reactivateVouchers(
             $rows->pluck('voucher_id')->unique()->all(),
             $statusFullyUsed,

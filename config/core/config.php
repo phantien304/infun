@@ -197,21 +197,10 @@ return [
         'cart_applied_ttl_minutes' => 30,
     ],
     'voucher' => [
-        'status' => [
-            'active'      => 1, // còn dùng được
-            'expired'     => 2, // hết HSD (date_expire < now)
-            'fully_used'  => 3, // balance = 0
-            'revoked'     => 4, // admin thu hồi (fraud)
-        ],
-        'history_status' => [
-            'applied'   => 1, // đang ở cart, chưa thanh toán
-            'confirmed' => 2, // order paid → balance trừ thật
-            'refunded'  => 3, // order cancel → balance trả lại
-        ],
         'cache' => [
             'tag_root'      => 'voucher_root',
             'key_active'    => 'voucher_active',
-            'tag_user_'     => 'voucher_user_', // concat user_email → per-user tag.
+            'tag_user_'     => 'voucher_user_',
         ],
     ],
     'gift' => [

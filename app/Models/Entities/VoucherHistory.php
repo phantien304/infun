@@ -2,19 +2,11 @@
 
 namespace App\Models\Entities;
 
+use App\Enums\VoucherHistoryStatus;
 use App\Models\Base\Base;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * Lifecycle redeem:
- *   1 = applied   → đang ở cart (chưa thanh toán) — KHÔNG trừ balance thật.
- *   2 = confirmed → order paid → trừ vào redeemed_balance.
- *   3 = refunded  → order cancel → trả balance lại.
- *
- * `amount` ở schema mới là DECIMAL DƯƠNG (số tiền user redeem) — KHÔNG còn
- * lưu negative như legacy. Số dư còn lại = voucher.amount - SUM(history confirmed).
- */
 class VoucherHistory extends Base
 {
     protected $table = 'voucher_history';
@@ -54,6 +46,6 @@ class VoucherHistory extends Base
 
     public function scopeConfirmed(Builder $query): Builder
     {
-        return $query->where('status', (int) getCoreConfig('voucher.history_status.confirmed'));
+        return $query->where('status', VoucherHistoryStatus::Confirmed->value);
     }
 }

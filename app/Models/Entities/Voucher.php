@@ -2,6 +2,7 @@
 
 namespace App\Models\Entities;
 
+use App\Enums\VoucherStatus;
 use App\Models\Base\Base;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -51,7 +52,7 @@ class Voucher extends Base
 
     public function scopeRedeemable(Builder $query): Builder
     {
-        $statusActive = (int) getCoreConfig('voucher.status.active');
+        $statusActive = VoucherStatus::Active->value;
         $now = Carbon::now();
         return $query
             ->where("{$this->getTable()}.status", $statusActive)

@@ -2,18 +2,11 @@
 
 namespace App\Data\Output;
 
+use App\Enums\VoucherStatus;
 use App\Models\Entities\Voucher;
 use Illuminate\Support\Carbon;
 use Spatie\LaravelData\Data;
 
-/**
- * Voucher DTO (gift card cá nhân) cho modal "Voucher của tôi".
- *
- * Pre-compute label hiển thị (amountLabel, redeemedLabel, availableLabel,
- * dateExpireLabel, statusLabel) trong DTO — blade chỉ render.
- *
- * `redeemable` = active + chưa expire + còn balance. Service set khi factory.
- */
 class VoucherDTO extends Data
 {
     public function __construct(
@@ -26,22 +19,20 @@ class VoucherDTO extends Data
         public ?string $message,
         public ?string $themeImage,
         public ?string $themeName,
-
         public float $amount,
         public float $redeemedBalance,
         public float $availableBalance,
         public string $amountLabel,
         public string $redeemedLabel,
         public string $availableLabel,
-
         public int $status,
         public string $statusLabel,
         public ?string $dateExpire,
         public string $dateExpireLabel,
-
         public bool $redeemable,
         public ?string $notRedeemableReason,
-    ) {}
+    ) {
+    }
 
     public static function fromModel(
         Voucher $voucher,
@@ -61,7 +52,7 @@ class VoucherDTO extends Data
             toEmail:             $voucher->to_email,
             message:             $voucher->message,
             themeImage:          $voucher->voucherTheme?->image,
-            themeName:           null, // resolve qua theme description nếu cần i18n
+            themeName:           null,
             amount:              $amount,
             redeemedBalance:     $redeemed,
             availableBalance:    $available,
@@ -79,29 +70,24 @@ class VoucherDTO extends Data
 
     private static function resolveStatusLabel(int $status): string
     {
-        return match ($status) {
-            (int) getCoreConfig('voucher.status.active')     => 'Còn hiệu lực',
-            (int) getCoreConfig('voucher.status.expired')    => 'Đã hết hạn',
-            (int) getCoreConfig('voucher.status.fully_used') => 'Đã dùng hết',
-            (int) getCoreConfig('voucher.status.revoked')    => 'Đã thu hồi',
-            default                                            => 'Không xác định',
-        };
+        return VoucherStatus::fromInput($status)?->label()
+            ?? trans('messages.checkout.voucher.status_unknown');
     }
 
     private static function resolveExpireLabel(Voucher $voucher): string
     {
         if (! $voucher->date_expire) {
-            return 'Không thời hạn';
+            return trans('messages.checkout.voucher.expiry_none');
         }
         $end = Carbon::parse($voucher->date_expire);
         $now = Carbon::now();
         if ($end->lt($now)) {
-            return 'Đã hết hạn ' . $end->format('d/m/Y');
+            return sprintf(trans('messages.checkout.voucher.expiry_expired_at'), $end->format('d/m/Y'));
         }
         $diffDays = $now->diffInDays($end, false);
         if ($diffDays <= 7) {
-            return 'Còn ' . max(1, (int) $diffDays) . ' ngày';
+            return sprintf(trans('messages.checkout.voucher.expiry_days'), max(1, (int) $diffDays));
         }
-        return 'HSD: ' . $end->format('d/m/Y');
+        return sprintf(trans('messages.checkout.voucher.expiry_date'), $end->format('d/m/Y'));
     }
 }

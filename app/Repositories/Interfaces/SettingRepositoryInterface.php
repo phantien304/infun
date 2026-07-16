@@ -8,5 +8,7 @@ interface SettingRepositoryInterface extends BaseRepositoryInterface
 {
     public function listAllCached(): array;
 
+    public function listPublicCached(): array;
+
     public function flushCache(): void;
 }

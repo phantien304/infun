@@ -25,8 +25,20 @@ class SettingRepository extends QueryableRepository implements SettingRepository
         );
     }
 
+    public function listPublicCached(): array
+    {
+        return Cache::remember(
+            getCoreConfig('cache.setting').':cms_public',
+            now()->addDays(30),
+            fn () => $this->resetModel()->where('cms_public', 1)->get()
+                ->mapWithKeys(fn (Setting $s) => [$s->key => $s->parsed_value])
+                ->all()
+        );
+    }
+
     public function flushCache(): void
     {
         Cache::forget(getCoreConfig('cache.setting'));
+        Cache::forget(getCoreConfig('cache.setting').':cms_public');
     }
 }

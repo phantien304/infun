@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MariaDB MASTER — /etc/mysql/conf.d/master.cnf (restart sau khi chép)
+# Nhận toàn bộ GHI (DB_WRITE_HOST). Checklist: docs/SCALE-30K.md mục B-DB.
+# ─────────────────────────────────────────────────────────────────────────────
+[mysqld]
+server-id                = 1
+log-bin                  = mysql-bin
+binlog-format            = ROW           # bắt buộc cho replication an toàn với lock/hold
+expire-logs-days         = 7
+gtid-domain-id           = 1
+gtid-strict-mode         = 1
+
+# sync-binlog=1: fsync binlog mỗi transaction — an toàn nhất khi mất điện,
+# đổi lấy ~vài % throughput ghi. Chấp nhận rủi ro thì để 0.
+sync-binlog              = 1
+innodb-flush-log-at-trx-commit = 1       # prod: 1 (ACID). Staging chịu được 2.
+
+# ── Sizing (SỬA theo RAM máy — hướng dẫn: buffer pool ≈ 70% RAM máy DB riêng) ──
+innodb-buffer-pool-size  = 8G
+innodb-log-file-size     = 1G
+innodb-flush-method      = O_DIRECT
+max-connections          = 500           # app servers × pm.max_children + worker + dư
+tmp-table-size           = 128M
+max-heap-table-size      = 128M
+
+# Flash-sale: lock FOR UPDATE trên product_stock — timeout ngắn + app retry
+# (tránh request treo giữ connection). Xem SCALE-30K.md mục C.
+innodb-lock-wait-timeout = 10
+
+character-set-server     = utf8mb4
+collation-server         = utf8mb4_unicode_ci
+skip-name-resolve        = 1

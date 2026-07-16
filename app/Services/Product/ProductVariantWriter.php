@@ -9,9 +9,15 @@ use App\Models\Entities\ProductOption;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
 use App\Models\Entities\ProductVariantAttribute;
+use App\Services\Stock\WarehouseService;
 
 class ProductVariantWriter
 {
+    public function __construct(
+        private readonly WarehouseService $warehouseService,
+    ) {
+    }
+
     public function sync(Product $product, array $options, array $variants): void
     {
         $this->syncOptions($product, $options);
@@ -111,10 +117,13 @@ class ProductVariantWriter
                 $attr->save();
             }
 
-            $stock = ProductStock::where('product_variant_id', $variant->id)->first()
-                ?? new ProductStock();
+            $warehouseId = $this->warehouseService->defaultId();
+            $stock = ProductStock::where('product_variant_id', $variant->id)
+                ->where('warehouse_id', $warehouseId)
+                ->first() ?? new ProductStock();
             $stock->product_variant_id = $variant->id;
-            $stock->on_hand            = (int) ($v['on_hand'] ?? 0);
+            $stock->warehouse_id       = $warehouseId;
+            $stock->on_hand            = max(0, (int) ($v['on_hand'] ?? 0));
             $stock->save();
         }
 

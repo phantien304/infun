@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MariaDB REPLICA — /etc/mysql/conf.d/replica.cnf (restart sau khi chép)
+# Nhận ĐỌC (DB_READ_HOST1/2). MỖI replica SỬA server-id KHÁC NHAU (2, 3...).
+# Seed data + START SLAVE: xem deploy/README.md bước 2.
+# ─────────────────────────────────────────────────────────────────────────────
+[mysqld]
+server-id                = 2              # SỬA: replica thứ 2 dùng 3, v.v.
+
+# Chặn mọi ghi từ user thường (root/SUPER vẫn ghi được — MariaDB không có
+# super_read_only như MySQL; đừng cho app dùng user có SUPER).
+read-only                = 1
+
+# Ghi lại relay log đã apply vào binlog riêng — cần nếu sau này promote
+# replica thành master hoặc treo thêm replica cấp 2.
+log-bin                  = mysql-bin
+log-slave-updates        = 1
+gtid-strict-mode         = 1
+
+# Replica apply song song — giảm lag khi master ghi dồn dập
+slave-parallel-threads   = 4
+slave-parallel-mode      = optimistic
+
+# Relay log tự dọn
+relay-log                = relay-bin
+relay-log-purge          = 1
+
+# ── Sizing (SỬA theo RAM) — replica phục vụ đọc nên buffer pool cũng cần lớn ──
+innodb-buffer-pool-size  = 8G
+innodb-flush-log-at-trx-commit = 2        # replica chịu được 2 (rebuild được từ master)
+innodb-flush-method      = O_DIRECT
+max-connections          = 500
+tmp-table-size           = 128M
+max-heap-table-size      = 128M
+
+character-set-server     = utf8mb4
+collation-server         = utf8mb4_unicode_ci
+skip-name-resolve        = 1

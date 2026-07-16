@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ProxySQL — STAGING (docker-compose.scale.yml)
+# Vai trò: connection pool + route read/write + tự loại replica bị lag.
+#
+# Topology:
+#   Laravel ──6033──▶ ProxySQL ──▶ HG10 (writer: mysql)
+#           ──6034──▶          ──▶ HG20 (readers: mysql-replica1/2, cân tải)
+#
+# Laravel GIỮ read/write split + sticky của chính nó (nó biết request nào vừa
+# ghi) — ProxySQL chỉ route theo PORT vào, không parse SQL:
+#   DB_WRITE_HOST=proxysql:6033 → hostgroup 10
+#   DB_READ_HOST1=proxysql:6034 → hostgroup 20 (ProxySQL tự cân giữa 2 replica)
+#
+# Lag-aware: monitor check Seconds_Behind_Master mỗi 2s; replica lag >10s bị
+# SHUN khỏi HG20 (traffic đọc dồn về replica còn lại / master không bị kéo vào
+# vì read_only=0 giữ nó ở HG10; HG20 rỗng thì query 6034 lỗi → Laravel retry).
+#
+# Admin (đổi pass khi đem đi đâu khác):
+#   docker compose exec proxysql mysql -h127.0.0.1 -P6032 -uradmin -pradmin
+#   SELECT * FROM stats_mysql_connection_pool;
+#   SELECT * FROM mysql_server_replication_lag_log ORDER BY time_start_us DESC LIMIT 10;
+# ─────────────────────────────────────────────────────────────────────────────
+
+datadir="/var/lib/proxysql"
+
+admin_variables=
+{
+    admin_credentials="admin:admin;radmin:radmin"   # radmin: kết nối từ ngoài container
+    mysql_ifaces="0.0.0.0:6032"
+}
+
+mysql_variables=
+{
+    threads=4
+    max_connections=2048
+    # 2 listener: 6033=write → HG10, 6034=read → HG20 (query rules bên dưới)
+    interfaces="0.0.0.0:6033;0.0.0.0:6034"
+    server_version="10.11.9"        # khớp MariaDB backend để client không bối rối
+    connect_timeout_server=3000
+    connect_retries_on_failure=3
+    # Monitor user — tạo tự động trong docker/mysql/replica-init.sh
+    monitor_username="monitor"
+    monitor_password="monitor_pass"
+    monitor_connect_interval=10000
+    monitor_ping_interval=5000
+    monitor_read_only_interval=2000          # phát hiện failover nhanh
+    monitor_replication_lag_interval=2000    # check lag mỗi 2s
+    ping_interval_server_msec=10000
+    default_query_timeout=300000
+}
+
+# HG10 = writer, HG20 = reader. max_replication_lag chỉ đặt trên reader.
+mysql_servers=
+(
+    { address="mysql",          port=3306, hostgroup=10, max_connections=200 },
+    { address="mysql-replica1", port=3306, hostgroup=20, max_connections=200, max_replication_lag=10 },
+    { address="mysql-replica2", port=3306, hostgroup=20, max_connections=200, max_replication_lag=10 }
+)
+
+# ProxySQL tự di chuyển server giữa HG theo @@read_only (master demote/promote
+# tự nhận). check_type=read_only: read_only=0 → HG10, read_only=1 → HG20.
+mysql_replication_hostgroups=
+(
+    { writer_hostgroup=10, reader_hostgroup=20, check_type="read_only", comment="infun mariadb" }
+)
+
+# Frontend user = backend user (staging dùng root/root).
+# transaction_persistent=1: trong transaction giữ nguyên 1 backend connection
+# (bắt buộc — FOR UPDATE + COMMIT phải cùng connection).
+mysql_users=
+(
+    { username="root", password="root", default_hostgroup=10, transaction_persistent=1, active=1 }
+)
+
+# Route theo port vào — đơn giản, không parse SQL, không bất ngờ.
+mysql_query_rules=
+(
+    { rule_id=1, active=1, proxy_port=6033, destination_hostgroup=10, apply=1 },
+    { rule_id=2, active=1, proxy_port=6034, destination_hostgroup=20, apply=1 }
+)

@@ -4,10 +4,16 @@ namespace App\Http\Controllers\Api\Cms;
 
 use App\Http\Controllers\Controller;
 use App\Models\Entities\Language;
+use App\Repositories\Interfaces\SettingRepositoryInterface;
 use Illuminate\Http\JsonResponse;
 
 class SystemController extends Controller
 {
+    public function __construct(
+        private readonly SettingRepositoryInterface $settingRepo,
+    ) {
+    }
+
     public function init(): JsonResponse
     {
         $texts = trans('rcms');
@@ -17,10 +23,9 @@ class SystemController extends Controller
 
         $config = array_merge(
             (array) setting('module.cms.config'),
-            (array) getConfigDb()
+            $this->settingRepo->listPublicCached()
         );
 
-        // Contract REST thống nhất: { data }.
         return response()->json([
             'data' => [
                 'config'        => $config,

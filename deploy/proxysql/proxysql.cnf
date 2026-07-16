@@ -1,0 +1,86 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ProxySQL — PROD (/etc/proxysql.cnf)
+# Vai trò: connection pool (chặn connection storm vào DB) + route read/write
+# theo port + tự loại replica lag khỏi pool đọc.
+#
+# ⚠ File .cnf chỉ được đọc LẦN ĐẦU (khi chưa có /var/lib/proxysql/proxysql.db).
+#   Đổi config về sau: vào admin (mysql -P6032) → UPDATE → LOAD ... TO RUNTIME
+#   → SAVE ... TO DISK. Hoặc xoá proxysql.db rồi restart (mất runtime stats).
+#
+# VỊ TRÍ ĐẶT: chạy 1 ProxySQL TRÊN MỖI APP SERVER (sidecar, app nối
+# 127.0.0.1:6033/6034) — khỏi cần HA riêng cho ProxySQL, chết theo app server.
+# (Phương án khác: cặp ProxySQL riêng + keepalived VIP — phức tạp hơn.)
+#
+# Laravel .env (xem deploy/env.production.example):
+#   DB_WRITE_HOST=127.0.0.1  DB_WRITE_PORT=6033
+#   DB_READ_HOST1=127.0.0.1  DB_READ_PORT=6034
+#
+# Monitor user — tạo TRÊN MASTER (replication tự lan xuống replica đã chạy;
+# replica dựng trước đó thì chạy thêm trên từng replica):
+#   CREATE USER 'monitor'@'%' IDENTIFIED BY '<PASS_MONITOR>';
+#   GRANT REPLICATION CLIENT, SLAVE MONITOR ON *.* TO 'monitor'@'%';
+# ─────────────────────────────────────────────────────────────────────────────
+
+datadir="/var/lib/proxysql"
+
+admin_variables=
+{
+    admin_credentials="admin:CHANGE_ME_ADMIN"   # SỬA — đừng để mặc định
+    mysql_ifaces="127.0.0.1:6032"               # admin chỉ nghe local
+}
+
+mysql_variables=
+{
+    threads=4
+    max_connections=4096
+    interfaces="0.0.0.0:6033;0.0.0.0:6034"
+    server_version="10.11.9"                    # khớp version MariaDB backend
+    connect_timeout_server=3000
+    connect_retries_on_failure=3
+    monitor_username="monitor"
+    monitor_password="CHANGE_ME_MONITOR"        # SỬA — khớp user tạo trên DB
+    monitor_connect_interval=10000
+    monitor_ping_interval=5000
+    monitor_read_only_interval=2000
+    monitor_replication_lag_interval=2000
+    ping_interval_server_msec=10000
+    default_query_timeout=300000
+    # Pool: giữ connection backend sống 30 phút, tái dùng giữa các request —
+    # đây là cái "chặn connection storm" khi php-fpm scale hàng trăm worker.
+    free_connections_pct=10
+    connection_max_age_ms=1800000
+}
+
+# SỬA IP thật. max_connections mỗi backend: tổng từ mọi ProxySQL sidecar
+# cộng lại phải < max_connections của MariaDB (500 trong deploy/mysql/*.cnf).
+# Ví dụ 4 app server × 100 = 400 < 500. max_replication_lag=10: lag >10s bị
+# SHUN khỏi pool đọc tới khi bắt kịp.
+mysql_servers=
+(
+    { address="10.0.0.10", port=3306, hostgroup=10, max_connections=100 },
+    { address="10.0.0.11", port=3306, hostgroup=20, max_connections=100, max_replication_lag=10 },
+    { address="10.0.0.12", port=3306, hostgroup=20, max_connections=100, max_replication_lag=10 }
+)
+
+# Tự di chuyển server giữa HG theo @@read_only — failover promote replica
+# (đặt read_only=0) là ProxySQL tự trỏ write sang node mới trong ~2s.
+mysql_replication_hostgroups=
+(
+    { writer_hostgroup=10, reader_hostgroup=20, check_type="read_only", comment="infun mariadb" }
+)
+
+# SỬA user/pass app thật (user KHÔNG có SUPER — để read_only chặn được ghi nhầm).
+# transaction_persistent=1 BẮT BUỘC: transaction (FOR UPDATE...COMMIT) phải
+# đi trọn trên 1 backend connection.
+mysql_users=
+(
+    { username="infun_app", password="CHANGE_ME_APP", default_hostgroup=10, transaction_persistent=1, active=1 }
+)
+
+# Route theo port vào — Laravel tự split read/write + sticky, ProxySQL không
+# cần parse SQL (nhanh và không bao giờ route nhầm SELECT ... FOR UPDATE).
+mysql_query_rules=
+(
+    { rule_id=1, active=1, proxy_port=6033, destination_hostgroup=10, apply=1 },
+    { rule_id=2, active=1, proxy_port=6034, destination_hostgroup=20, apply=1 }
+)

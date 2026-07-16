@@ -34,8 +34,40 @@ class AppServiceProvider extends ServiceProvider
         $this->optimizes('repository:cache', 'repository:clear', 'repositories');
         $this->registerViewNamespaces();
         $this->registerRouteMacros();
+        $this->registerRateLimiters();
         $this->logSql();
         $this->registerObservers();
+    }
+
+    /**
+     * Named rate limiter cho endpoint nóng (routes dùng throttle:add-to-cart...).
+     * Mức limit đọc từ config/throttle.php — nới được qua env khi load test.
+     *
+     * Key theo user đăng nhập → session → IP (thứ tự ưu tiên). KHÔNG key
+     * thuần IP: sau LB/CGNAT cả văn phòng chung 1 IP → chặn nhầm khách thật.
+     * Lưu ý: cần trustProxies (bootstrap/app.php) để ->ip() ra IP client
+     * thật thay vì IP của nginx LB.
+     */
+    protected function registerRateLimiters(): void
+    {
+        $keyFor = function (\Illuminate\Http\Request $request): string {
+            if ($user = $request->user()) {
+                return 'u:' . $user->getAuthIdentifier();
+            }
+            if ($request->hasSession()) {
+                return 's:' . $request->session()->getId();
+            }
+
+            return 'ip:' . $request->ip();
+        };
+
+        \Illuminate\Support\Facades\RateLimiter::for('add-to-cart', function (\Illuminate\Http\Request $request) use ($keyFor) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute((int) config('throttle.add_to_cart', 30))->by($keyFor($request));
+        });
+
+        \Illuminate\Support\Facades\RateLimiter::for('save-order', function (\Illuminate\Http\Request $request) use ($keyFor) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute((int) config('throttle.save_order', 10))->by($keyFor($request));
+        });
     }
 
     protected function registerRouteMacros(): void

@@ -195,6 +195,7 @@ return [
     'AddWishlistSuccess' => 'Thêm sản phẩm yêu thích thành công',
     'DeleteWishlistSuccess' => 'Xóa sản phẩm yêu thích thành công',
     'PaymentOrderSuccess' => 'Bạn đã thanh toán đơn hàng thành công',
+    'ErrorFullName' => 'Vui lòng nhập Họ tên',
     'ErrorPhone' => 'Số điện thoại không hợp lệ',
     'ErrorQuantity' => 'Số lượng không hợp lệ',
     'ErrorNotFoundProduct' => 'Sản phẩm không tồn tại',

@@ -10,6 +10,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Sau LB (nginx/HAProxy/ALB) mọi request mang IP của proxy — phải
+        // trust X-Forwarded-* để request->ip() ra IP client thật (throttle
+        // đếm đúng từng khách, log đúng) và detect HTTPS đúng.
+        // '*' an toàn KHI app server chỉ nhận traffic từ LB (không expose
+        // thẳng ra internet). Prod muốn chặt hơn: liệt kê dải IP của LB.
+        $middleware->trustProxies(at: '*');
+
         $middleware->append([
             App\Http\Middleware\HttpsProtocol::class,
             App\Http\Middleware\TransformApiHeaders::class,
@@ -29,10 +36,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'maintenance' => \App\Http\Middleware\Maintenance::class,
             'cache_page' => \App\Http\Middleware\CachePage::class,
             'limit_access' => \App\Http\Middleware\LimitAccess::class,
-            // Sanctum: kiểm tra ability/scope của token (vd 'abilities:mobile').
             'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
             'ability' => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,
-            // Tự phân quyền REST CMS theo spatie (BaseCmsController + macro cmsApiResource).
             'cms.permission' => \App\Http\Middleware\CmsPermission::class,
         ]);
     })

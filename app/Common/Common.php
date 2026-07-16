@@ -145,7 +145,8 @@ function buildUrl(?string $slug, ?string $moduleKey, ?int $id, ?string $prefix =
 }
 function thumbnail(string $image, int $width = 400, int $height = 400, string $module = 'web'): string
 {
-    return CustomStorage::getStorage('public')->resizeImage($image, $width, $height, $module);
+    return CustomStorage::getStorage(config('media.image_disk', 'image'))
+        ->resizeImage($image, $width, $height, $module);
 }
 function setting($key, $default = null)
 {

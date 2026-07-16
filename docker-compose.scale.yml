@@ -1,0 +1,323 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Override compose MÔ PHỎNG TOPOLOGY PROD cho mốc 30k user (docs/SCALE-30K.md)
+# Ưu tiên 1-4 của checklist:
+#   1. Redis TÁCH 2 instance: session/queue (noeviction + AOF) vs cache (allkeys-lru)
+#   2. MariaDB 1 master + 2 replica (GTID) — Laravel read/write split
+#   3. php-fpm pool tuning + OPcache prod-mode (kết hợp docker-compose.lb.yml
+#      để scale nhiều app server sau nginx LB)
+#   4. Scheduler container (schedule:work) — nhả reservation hết hạn mỗi phút
+#
+# CÁCH CHẠY (kèm LB, scale 3 app server):
+#   docker compose -f docker-compose.yml -f docker-compose.lb.yml -f docker-compose.scale.yml \
+#     up -d --build --scale infun-php=3
+#
+#   PowerShell đỡ gõ dài:
+#     $env:COMPOSE_FILE = "docker-compose.yml;docker-compose.lb.yml;docker-compose.scale.yml"
+#     docker compose up -d --scale infun-php=3
+#
+# LẦN ĐẦU: replica tự dump toàn bộ data từ master rồi start replication —
+# DB lớn sẽ mất vài phút. Theo dõi:
+#   docker compose logs -f mysql-replica1 mysql-replica2
+#
+# VERIFY:
+#   Replication:  docker compose exec mysql-replica1 mariadb -uroot -proot \
+#                   -e "SHOW SLAVE STATUS\G" | grep -E "Running|Seconds_Behind"
+#   Redis split:  docker compose exec redis-cache redis-cli CONFIG GET maxmemory-policy
+#                 docker compose exec redis       redis-cli CONFIG GET maxmemory-policy
+#   Laravel:      docker compose exec infun-php php artisan tinker
+#                   --execute="DB::connection()->select('select @@hostname');"
+#
+# LƯU Ý: đổi code PHP KHÔNG tự áp dụng (opcache.validate_timestamps=0) —
+#   docker compose restart infun-php
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Env chung cho mọi container chạy Laravel (php, queue, scheduler)
+x-scale-env: &scale-env
+  # ── Read/write split QUA PROXYSQL (pool + cân tải + lag-aware) ──
+  # 6033 → hostgroup writer (master), 6034 → hostgroup reader (2 replica,
+  # ProxySQL tự cân tải + tự loại replica lag >10s).
+  # Muốn BỎ ProxySQL (nối thẳng DB như trước): đổi lại
+  #   DB_WRITE_HOST=mysql, DB_READ_HOST1=mysql-replica1,
+  #   DB_READ_HOST2=mysql-replica2, xoá 2 dòng PORT.
+  DB_WRITE_HOST: proxysql
+  DB_WRITE_PORT: 6033
+  DB_READ_HOST1: proxysql
+  DB_READ_PORT: 6034
+  # ── Redis tách instance: default (session+queue) vẫn là `redis`,
+  #    cache trỏ instance riêng được phép evict ──
+  REDIS_CACHE_HOST: redis-cache
+  REDIS_CACHE_PORT: 6379
+
+services:
+  # ──────────────────────────────────────────────────────────────────────
+  # App PHP-FPM: nhận env split + mount pool/opcache tuning
+  # ──────────────────────────────────────────────────────────────────────
+  infun-php:
+    environment:
+      <<: *scale-env
+    volumes:
+      - ./:/var/www/html
+      - ./docker/php/www.pool.conf:/usr/local/etc/php-fpm.d/zz-www.conf:ro
+      - ./docker/php/opcache-prod.ini:/usr/local/etc/php/conf.d/zzz-opcache-prod.ini:ro
+    depends_on:
+      mysql-replica1:
+        condition: service_healthy
+      mysql-replica2:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      proxysql:
+        condition: service_started
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Queue worker: cùng env split (job cũng đọc replica / ghi master)
+  # ──────────────────────────────────────────────────────────────────────
+  infun-queue:
+    environment:
+      <<: *scale-env
+    depends_on:
+      mysql-replica1:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Scheduler — chạy `schedule:run` mỗi phút (foreground, không cần cron).
+  # BẮT BUỘC cho stock:release-expired (nhả hold hết hạn — không chạy thì
+  # tồn kho "ảo" tăng dần, khách không mua được hàng thật ra còn).
+  # Chỉ chạy 1 instance duy nhất — KHÔNG scale service này.
+  # ──────────────────────────────────────────────────────────────────────
+  infun-scheduler:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: infun-scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan schedule:work
+    volumes:
+      - ./:/var/www/html
+    environment:
+      <<: *scale-env
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: infun
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_CLIENT: phpredis
+      SCOUT_DRIVER: meilisearch
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_KEY: ""
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Redis SESSION + QUEUE (instance gốc `redis`, .env REDIS_HOST trỏ vào đây)
+  # noeviction: đầy RAM thì báo lỗi ghi chứ KHÔNG lặng lẽ xoá key —
+  # evict session = đăng xuất hàng loạt, evict queue = mất job/mất giỏ.
+  # AOF everysec: restart không mất session/job (mất tối đa 1s).
+  # ──────────────────────────────────────────────────────────────────────
+  redis:
+    command:
+      - redis-server
+      - --protected-mode
+      - "no"
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - "512mb"
+      - --maxmemory-policy
+      - noeviction
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Redis CACHE (instance MỚI — REDIS_CACHE_HOST trỏ vào đây)
+  # allkeys-lru: đầy RAM thì evict key ít dùng — cache mất chỉ tốn 1 lần
+  # query lại DB, vô hại. KHÔNG persistence (cache chết thì warm lại).
+  # ──────────────────────────────────────────────────────────────────────
+  redis-cache:
+    image: redis:7-alpine
+    container_name: infun-redis-cache
+    restart: always
+    ports:
+      - "6380:6379"   # host 6380 để khỏi đụng redis chính (6379)
+    command:
+      - redis-server
+      - --protected-mode
+      - "no"
+      - --appendonly
+      - "no"
+      - --save
+      - ""
+      - --maxmemory
+      - "512mb"
+      - --maxmemory-policy
+      - allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    labels:
+      autoheal: "true"
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # ProxySQL — pool connection + route read/write + loại replica lag.
+  # App nối vào đây thay vì nối thẳng DB:
+  #   6033 → master (HG10) · 6034 → replicas cân tải (HG20) · 6032 = admin
+  # Config: docker/proxysql/proxysql.cnf. Monitor user (monitor/monitor_pass)
+  # được replica-init.sh tạo tự động trên cả master lẫn replica.
+  # ⚠ Nếu replica đã init TRƯỚC khi thêm ProxySQL (volume cũ), tạo tay:
+  #   docker compose exec mysql          mariadb -uroot -proot -e "CREATE USER IF NOT EXISTS 'monitor'@'%' IDENTIFIED BY 'monitor_pass'; GRANT REPLICATION CLIENT, SLAVE MONITOR ON *.* TO 'monitor'@'%';"
+  #   docker compose exec mysql-replica1 mariadb -uroot -proot -e "..."  (tương tự cho replica2)
+  # Xem pool/lag: mysql -h127.0.0.1 -P6032 -uradmin -pradmin
+  #   SELECT * FROM stats_mysql_connection_pool;
+  # ──────────────────────────────────────────────────────────────────────
+  proxysql:
+    image: proxysql/proxysql:2.6.6
+    container_name: infun-proxysql
+    restart: unless-stopped
+    ports:
+      - "6032:6032"   # admin
+      - "6033:6033"   # write endpoint
+      - "6034:6034"   # read endpoint
+    volumes:
+      - ./docker/proxysql/proxysql.cnf:/etc/proxysql.cnf:ro
+      - proxysql_data:/var/lib/proxysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mysql-replica1:
+        condition: service_healthy
+      mysql-replica2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "proxysql", "--version"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - infun-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # MariaDB MASTER — bật binlog + GTID để replica bám theo.
+  # (command override thay TOÀN BỘ list gốc nên phải lặp lại các flag cũ)
+  # ──────────────────────────────────────────────────────────────────────
+  mysql:
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=1G
+      - --innodb-log-file-size=256M
+      - --innodb-flush-log-at-trx-commit=2
+      - --innodb-flush-method=O_DIRECT
+      - --max-connections=300
+      - --tmp-table-size=64M
+      - --max-heap-table-size=64M
+      # ── Replication (master) ──
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --expire-logs-days=3
+      - --gtid-domain-id=1
+      # sync-binlog=0: OS tự flush — nhanh, đủ cho staging. Prod cân nhắc =1
+      # (an toàn nhất nhưng chậm ghi hơn; xem deploy/mysql/master.cnf).
+      - --sync-binlog=0
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 2 REPLICA — lần đầu boot (volume trống) tự chạy replica-init.sh:
+  # tạo repl user trên master → dump data → import → START SLAVE (GTID).
+  # read-only=1: Laravel chỉ đọc; mọi ghi nhầm vào replica sẽ báo lỗi ngay.
+  # Muốn làm lại từ đầu: docker compose down && docker volume rm
+  #   infun-stack_mysql_replica1_data infun-stack_mysql_replica2_data
+  # ──────────────────────────────────────────────────────────────────────
+  mysql-replica1:
+    image: mariadb:10.11
+    container_name: infun-mysql-replica1
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MASTER_HOST: mysql
+      MASTER_ROOT_PASSWORD: root
+      MASTER_DB: infun
+      REPL_USER: repl
+      REPL_PASSWORD: repl_secret
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=512M
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-connections=300
+      - --server-id=2
+      - --read-only=1
+      - --skip-name-resolve
+    volumes:
+      - mysql_replica1_data:/var/lib/mysql
+      - ./docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30        # lần đầu dump+import lâu → cho nhiều retry
+      start_period: 60s
+    networks:
+      - infun-net
+
+  mysql-replica2:
+    image: mariadb:10.11
+    container_name: infun-mysql-replica2
+    restart: unless-stopped
+    ports:
+      - "3308:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MASTER_HOST: mysql
+      MASTER_ROOT_PASSWORD: root
+      MASTER_DB: infun
+      REPL_USER: repl
+      REPL_PASSWORD: repl_secret
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=512M
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-connections=300
+      - --server-id=3
+      - --read-only=1
+      - --skip-name-resolve
+    volumes:
+      - mysql_replica2_data:/var/lib/mysql
+      - ./docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    networks:
+      - infun-net
+
+volumes:
+  mysql_replica1_data:
+  mysql_replica2_data:
+  proxysql_data:

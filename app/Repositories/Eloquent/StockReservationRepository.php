@@ -67,4 +67,14 @@ class StockReservationRepository extends QueryableRepository implements StockRes
     {
         $reservation->delete();
     }
+
+    public function deleteReservationById(int $id): int
+    {
+        return (int) $this->resetModel()->whereKey($id)->delete();
+    }
+
+    public function findReservationById(int $id): ?StockReservation
+    {
+        return $this->resetModel()->find($id);
+    }
 }

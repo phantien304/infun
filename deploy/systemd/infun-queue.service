@@ -1,0 +1,30 @@
+# /etc/systemd/system/infun-queue.service
+# Queue worker Laravel — email đơn hàng, ProcessImageUpload (đẩy R2)...
+# Bật:   systemctl enable --now infun-queue
+# Scale: chuyển sang template unit (infun-queue@.service) rồi
+#        systemctl start infun-queue@{1..3} nếu queue dồn.
+# Nâng cấp về sau: composer require laravel/horizon → đổi ExecStart thành
+#        php artisan horizon (kèm dashboard + auto-balance).
+[Unit]
+Description=infun Laravel queue worker
+After=network.target redis-server.service mysql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/infun
+# --max-time=3600: worker tự thoát mỗi giờ, systemd kéo lại → xả memory leak.
+# queue:restart (sau deploy) cũng khiến worker thoát êm → Restart=always nạp code mới.
+ExecStart=/usr/bin/php artisan queue:work redis --sleep=1 --tries=3 --timeout=90 --max-time=3600
+Restart=always
+RestartSec=3
+# Cho job đang chạy 100s để xong trước khi SIGKILL (khớp --timeout=90)
+TimeoutStopSec=100
+KillSignal=SIGTERM
+
+# Hardening nhẹ
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

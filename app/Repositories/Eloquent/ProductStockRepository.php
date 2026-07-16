@@ -14,7 +14,7 @@ class ProductStockRepository extends QueryableRepository implements ProductStock
         return ProductStock::class;
     }
 
-    public function lockSellableStocks(int $variantId, array $warehouseIds): Collection
+    public function lockSellableProductStocks(int $variantId, array $warehouseIds): Collection
     {
         return $this->resetModel()
             ->where('product_variant_id', $variantId)
@@ -23,7 +23,7 @@ class ProductStockRepository extends QueryableRepository implements ProductStock
             ->get();
     }
 
-    public function lockStock(int $variantId, int $warehouseId): ?ProductStock
+    public function lockProductStock(int $variantId, int $warehouseId): ?ProductStock
     {
         return $this->resetModel()
             ->where('product_variant_id', $variantId)
@@ -37,11 +37,17 @@ class ProductStockRepository extends QueryableRepository implements ProductStock
         $stock->save();
     }
 
-    public function updateOnHand(int $variantId, int $onHand): void
+    public function updateOnHand(int $variantId, int $onHand, ?int $warehouseId = null): void
     {
-        $stock = ProductStock::where('product_variant_id', $variantId)->first();
+        $warehouseId ??= app(\App\Services\Stock\WarehouseService::class)->defaultId();
+
+        $stock = ProductStock::where('product_variant_id', $variantId)
+            ->where('warehouse_id', $warehouseId)
+            ->lockForUpdate()
+            ->first();
         if ($stock) {
-            $stock->on_hand = $onHand;
+            $stock->on_hand = max(0, $onHand);
+            $stock->version = (int) ($stock->version ?? 0) + 1;
             $stock->save();
         }
     }

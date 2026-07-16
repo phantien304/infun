@@ -38,9 +38,11 @@ Route::middleware(['maintenance', 'limit_access'])->group(function () {
             Route::post('saveRepayment', 'CheckoutController@saveRepayment')->name('checkout.saveRepayment');
         });
         Route::any('cart', 'CheckoutController@cart')->name('checkout.cart');
-        Route::post('add-to-cart', 'CheckoutController@addToCart')->name('checkout.addToCart')->middleware('throttle:30,1');
+        // Named limiter (AppServiceProvider) — mức đặt trong config/throttle.php,
+        // key theo user/session (không thuần IP, tránh chặn nhầm sau LB/CGNAT).
+        Route::post('add-to-cart', 'CheckoutController@addToCart')->name('checkout.addToCart')->middleware('throttle:add-to-cart');
         Route::post('consult-sign', 'CheckoutController@consultSign')->name('checkout.consultSign');
-        Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder')->middleware('throttle:10,1');
+        Route::post('save-order', 'CheckoutController@saveOrder')->name('checkout.saveOrder')->middleware('throttle:save-order');
         Route::get('success', 'CheckoutController@success')->name('checkout.success');
         Route::get('processing', 'CheckoutController@processing')->name('checkout.processing')->withoutMiddleware(['cache_page']);
         Route::get('status', 'CheckoutController@orderStatus')->name('checkout.status')->withoutMiddleware(['cache_page']);

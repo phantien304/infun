@@ -1,0 +1,27 @@
+# /etc/systemd/system/infun-scheduler.service
+# Scheduler Laravel — chạy schedule:run mỗi phút (schedule:work foreground).
+# QUAN TRỌNG: stock:release-expired nhả hold hết hạn — không chạy thì tồn kho
+# "ảo" tăng dần (hàng bị giữ mãi, khách không mua được).
+#
+# ⚠ CHỈ CHẠY 1 INSTANCE TRÊN TOÀN HỆ THỐNG (1 máy duy nhất) — chạy trùng là
+# command chạy đôi. Nhiều máy muốn HA: dùng cron + onOneServer() (cache Redis
+# chung đã có sẵn) thay vì bật service này ở 2 nơi.
+#
+# Bật: systemctl enable --now infun-scheduler
+[Unit]
+Description=infun Laravel scheduler (schedule:work)
+After=network.target redis-server.service mysql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/infun
+ExecStart=/usr/bin/php artisan schedule:work
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

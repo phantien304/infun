@@ -40,7 +40,7 @@ class MyStorage
         if ($this->isUploadFile($content)) {
             $r = Storage::putFileAs(getTmpUploadDir(date('Y-m-d')), $content, $fileName);
             if (!$r) {
-                throw new  UploadException(trans('messages.file_upload_failed', ['file' => $newFilePath]));
+                throw new UploadException(trans('messages.file_upload_failed', ['file' => $newFilePath]));
             }
             return $newFilePath;
         }
@@ -55,12 +55,15 @@ class MyStorage
     /**
      * @param $fileName
      */
-    public function download($fileName) {}
-
+    public function download($fileName)
+    {
+    }
 
     public function url($fileName)
     {
-        if (!$fileName) return '';
+        if (!$fileName) {
+            return '';
+        }
         if (str_contains($fileName, 'http')) {
             return $fileName;
         }
@@ -75,20 +78,30 @@ class MyStorage
 
     public function resizeImage(?string $path, $width = 50, $height = 50, $module = 'web')
     {
-        if (!$path) return '';
-        if (str_contains($path, 'http')) return $path;
+        if (!$path) {
+            return '';
+        }
+        if (str_contains($path, 'http')) {
+            return $path;
+        }
 
         $path = str_replace('\\', '/', ltrim($path, '/'));
-        $disk = Storage::disk($this->getStorageType());
+        $diskName = $this->getStorageType();
+        $disk = Storage::disk($diskName);
+
+        if (config("filesystems.disks.{$diskName}.driver") === 's3') {
+            if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'svg') {
+                return $this->url($path);
+            }
+            $cachePath = trim((string) (setting('folder_cache') ?: 'cache'), '/')
+                . '/' . $width . 'x' . $height . '/' . $path;
+
+            return $this->url($cachePath);
+        }
+
         $fromPublic = false;
 
         if (!$disk->exists($path)) {
-            // Storage disk `public` map tới storage/app/public/. Nhưng nhiều
-            // ảnh hệ thống (legacy + seed) nằm thẳng trong Laravel public/
-            // (vd public/seed/products/, public/data/, public/catalog/). Trước
-            // khi rơi xuống no_img fallback, thử đọc trực tiếp từ public_path
-            // — flag $fromPublic để file_get_contents + asset() dùng đường
-            // dẫn đúng.
             if (is_file(public_path($path))) {
                 $fromPublic = true;
             } else {
@@ -132,7 +145,9 @@ class MyStorage
 
     public function withOutUrl($fileName)
     {
-        if (empty($fileName)) return '';
+        if (empty($fileName)) {
+            return '';
+        }
 
         $prefix = '__prefix__';
         $baseUrl = $this->url($prefix);
@@ -144,7 +159,6 @@ class MyStorage
         $cleanPath = str_replace($baseUrl, '', $fileName);
         return ltrim($cleanPath, '/');
     }
-
 
     public function moveFromTmpToMedia($filePath, $newName = '')
     {

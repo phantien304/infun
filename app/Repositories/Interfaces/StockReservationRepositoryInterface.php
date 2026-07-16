@@ -21,4 +21,8 @@ interface StockReservationRepositoryInterface extends BaseRepositoryInterface
     public function saveReservation(StockReservation $reservation): void;
 
     public function deleteReservation(StockReservation $reservation): void;
+
+    public function deleteReservationById(int $id): int;
+
+    public function findReservationById(int $id): ?StockReservation;
 }

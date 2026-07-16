@@ -46,8 +46,21 @@ return [
 
         'mysql' => [
             'driver' => 'mysql',
-            'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
+            'read' => [
+                'host' => array_values(array_filter([
+                    env('DB_READ_HOST1', env('DB_HOST', '127.0.0.1')),
+                    env('DB_READ_HOST2'),
+                ])),
+                // Port riêng cho read — dùng khi đi qua ProxySQL (6034 = reader
+                // hostgroup). Không set → fallback DB_PORT như cũ.
+                'port' => env('DB_READ_PORT', env('DB_PORT', '3306')),
+            ],
+            'write' => [
+                'host' => [env('DB_WRITE_HOST', env('DB_HOST', '127.0.0.1'))],
+                // ProxySQL: 6033 = writer hostgroup (master).
+                'port' => env('DB_WRITE_PORT', env('DB_PORT', '3306')),
+            ],
+            'sticky' => true,
             'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
@@ -166,12 +179,17 @@ return [
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
         ],
 
+        // Cache TÁCH instance khỏi session/queue khi scale:
+        //   - instance cache: maxmemory-policy allkeys-lru (được phép evict)
+        //   - instance default (session+queue): noeviction + AOF (KHÔNG evict)
+        // Thiếu REDIS_CACHE_HOST → fallback REDIS_HOST (1 instance như cũ,
+        // chỉ tách DB index).
         'cache' => [
-            'url' => env('REDIS_URL'),
-            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'url' => env('REDIS_CACHE_URL'),
+            'host' => env('REDIS_CACHE_HOST', env('REDIS_HOST', '127.0.0.1')),
             'username' => env('REDIS_USERNAME'),
-            'password' => env('REDIS_PASSWORD'),
-            'port' => env('REDIS_PORT', '6379'),
+            'password' => env('REDIS_CACHE_PASSWORD', env('REDIS_PASSWORD')),
+            'port' => env('REDIS_CACHE_PORT', env('REDIS_PORT', '6379')),
             'database' => env('REDIS_CACHE_DB', '1'),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),

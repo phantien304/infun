@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Exceptions\CouponExhaustedException;
 use App\Exceptions\InsufficientStockException;
+use App\Exceptions\RewardExhaustedException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\CheckoutAddToCartRequest;
 use App\Http\Requests\Web\CheckoutSaveOrderRequest;
@@ -306,6 +307,13 @@ class CheckoutController extends Controller
                         ? 'messages.checkout.coupon.used_up_user'
                         : 'messages.checkout.coupon.used_up_total'
                 ))
+                ->withInput();
+        } catch (RewardExhaustedException $e) {
+            Cache::forget($idemCacheKey);
+            logError($e);
+
+            return redirect(route('checkout.index'))
+                ->with('failed', sprintf(trans('messages.checkout.reward.not_enough'), number_format($e->available)))
                 ->withInput();
         } catch (QueryException $e) {
             if ($this->isDuplicateKey($e)) {

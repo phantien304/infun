@@ -27,27 +27,6 @@ class CreateOrderService
     ) {
     }
 
-    /**
-     * Transaction = CHỈ cụm bất biến tiền-hàng, sắp xếp theo nguyên tắc:
-     *
-     *  1. THU HẸP — side effect dẫn xuất (earn điểm thưởng, affiliate
-     *     conversion) tách ra DB::afterCommit: lỗi ở đó không giết đơn khách
-     *     đã trả tiền, tự log + xử lý riêng. Riêng writeRewardRedeem (TIÊU
-     *     điểm đổi giảm giá) là tiền — phải ở lại transaction, không thì đơn
-     *     có discount mà điểm không bị trừ (hoặc ngược lại).
-     *
-     *  2. LOCK LATE — mọi insert không cần lock (order, items, totals,
-     *     redeem điểm) chạy TRƯỚC; trừ kho (FOR UPDATE row stock) + redeem
-     *     coupon (X-lock row coupon) dồn xuống CUỐI, ngay trước commit →
-     *     thời gian giữ lock hot row co từ "cả transaction" xuống vài câu
-     *     lệnh cuối. Thứ tự lock toàn cục giữ nguyên: stock → coupon.
-     *
-     *  3. RETRY — attempts=3: deadlock/lock-wait-timeout là lỗi transient,
-     *     DB::transaction tự rollback + chạy lại closure. An toàn vì mọi
-     *     ghi đều trong transaction (rollback sạch, kể cả afterCommit
-     *     callback của attempt fail cũng bị hủy theo) và saveOrder đã có
-     *     idempotency key.
-     */
     public function create(CheckoutPromotions $promotions, array $params, array $totalData, int $total): int
     {
         return $this->orderRepo->transaction(function () use ($promotions, $params, $totalData, $total) {
@@ -60,10 +39,10 @@ class CreateOrderService
 
             $this->writeOrderItems($promotions, $order->id);
             $this->writeOrderTotals($order->id, $totalData);
-            $this->writeRewardRedeem($order->id, $totalData);
 
             $this->subtractStockForItems($promotions, $order->id);
             $this->promotionService->recordForOrder($promotions, $order->id, $total);
+            $this->writeRewardRedeem($order->id, $totalData);
 
             DB::afterCommit(function () use ($promotions, $totalData, $order) {
                 $this->writeUserReward($promotions);

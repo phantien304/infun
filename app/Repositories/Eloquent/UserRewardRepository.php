@@ -111,6 +111,19 @@ class UserRewardRepository extends QueryableRepository implements UserRewardRepo
             return;
         }
 
+        $balance = (int) $this->resetModel()
+            ->where('user_id', $userId)
+            ->where('status', RewardStatus::Available->value)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->lockForUpdate()
+            ->sum('points');
+
+        if ($balance < $points) {
+            throw new \App\Exceptions\RewardExhaustedException($userId, $points, max(0, $balance));
+        }
+
         UserReward::create([
             'user_id'          => $userId,
             'order_id'         => $orderId,

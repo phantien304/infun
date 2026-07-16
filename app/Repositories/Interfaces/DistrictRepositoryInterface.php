@@ -9,6 +9,5 @@ interface DistrictRepositoryInterface extends BaseRepositoryInterface
 {
     public function listByZone(int $zoneId): Collection;
 
-    /** Tên district theo id (kèm bản soft-deleted — snapshot đơn hàng). Không có → ''. */
     public function nameById(int $id): string;
 }

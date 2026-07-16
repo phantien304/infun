@@ -32,9 +32,9 @@ abstract class BaseRepository implements BaseRepositoryInterface
         return $this->makeModel();
     }
 
-    public function transaction(\Closure $callback)
+    public function transaction(\Closure $callback, int $attempts = 1)
     {
-        return DB::transaction($callback);
+        return DB::transaction($callback, $attempts);
     }
 
     public function getDetail(int $id)

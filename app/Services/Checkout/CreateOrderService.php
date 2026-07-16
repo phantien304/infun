@@ -10,6 +10,7 @@ use App\Repositories\Interfaces\ZoneRepositoryInterface;
 use App\Services\Affiliate\AffiliateConversionService;
 use App\Services\Currency\CurrencyService;
 use App\Services\Stock\StockService;
+use Illuminate\Support\Facades\DB;
 
 class CreateOrderService
 {
@@ -26,6 +27,27 @@ class CreateOrderService
     ) {
     }
 
+    /**
+     * Transaction = CHỈ cụm bất biến tiền-hàng, sắp xếp theo nguyên tắc:
+     *
+     *  1. THU HẸP — side effect dẫn xuất (earn điểm thưởng, affiliate
+     *     conversion) tách ra DB::afterCommit: lỗi ở đó không giết đơn khách
+     *     đã trả tiền, tự log + xử lý riêng. Riêng writeRewardRedeem (TIÊU
+     *     điểm đổi giảm giá) là tiền — phải ở lại transaction, không thì đơn
+     *     có discount mà điểm không bị trừ (hoặc ngược lại).
+     *
+     *  2. LOCK LATE — mọi insert không cần lock (order, items, totals,
+     *     redeem điểm) chạy TRƯỚC; trừ kho (FOR UPDATE row stock) + redeem
+     *     coupon (X-lock row coupon) dồn xuống CUỐI, ngay trước commit →
+     *     thời gian giữ lock hot row co từ "cả transaction" xuống vài câu
+     *     lệnh cuối. Thứ tự lock toàn cục giữ nguyên: stock → coupon.
+     *
+     *  3. RETRY — attempts=3: deadlock/lock-wait-timeout là lỗi transient,
+     *     DB::transaction tự rollback + chạy lại closure. An toàn vì mọi
+     *     ghi đều trong transaction (rollback sạch, kể cả afterCommit
+     *     callback của attempt fail cũng bị hủy theo) và saveOrder đã có
+     *     idempotency key.
+     */
     public function create(CheckoutPromotions $promotions, array $params, array $totalData, int $total): int
     {
         return $this->orderRepo->transaction(function () use ($promotions, $params, $totalData, $total) {
@@ -38,13 +60,18 @@ class CreateOrderService
 
             $this->writeOrderItems($promotions, $order->id);
             $this->writeOrderTotals($order->id, $totalData);
-            $this->promotionService->recordForOrder($promotions, $order->id, $total);
-            $this->writeUserReward($promotions);
             $this->writeRewardRedeem($order->id, $totalData);
-            $this->writeAffiliateConversion($order->id, $promotions, $totalData);
+
+            $this->subtractStockForItems($promotions, $order->id);
+            $this->promotionService->recordForOrder($promotions, $order->id, $total);
+
+            DB::afterCommit(function () use ($promotions, $totalData, $order) {
+                $this->writeUserReward($promotions);
+                $this->writeAffiliateConversion($order->id, $promotions, $totalData);
+            });
 
             return $order->id;
-        });
+        }, attempts: 3);
     }
 
     protected function buildOrderRow(array $params, int $total, string $uniqid): array
@@ -63,11 +90,11 @@ class CreateOrderService
             'telephone'         => $params['telephone'] ?? '',
             'address'           => $params['address'] ?? '',
             'country_id'        => getCoreConfig('zones.country_id_default'),
-            'zone'              => $this->geoName([$this->zoneRepo, 'nameById'], $params['zone_id'] ?? null, (string) ($params['zone_name'] ?? '')),
+            'zone'              => $this->geoName($this->zoneRepo->nameById(...), $params['zone_id'] ?? null, (string) ($params['zone_name'] ?? '')),
             'zone_id'           => $params['zone_id'] ?? null,
-            'district'          => $this->geoName([$this->districtRepo, 'nameById'], $params['district_id'] ?? null, (string) ($params['district_name'] ?? '')),
+            'district'          => $this->geoName($this->districtRepo->nameById(...), $params['district_id'] ?? null, (string) ($params['district_name'] ?? '')),
             'district_id'       => $params['district_id'] ?? null,
-            'ward'              => $this->geoName([$this->wardRepo, 'nameById'], $params['ward_id'] ?? null, (string) ($params['ward_name'] ?? '')),
+            'ward'              => $this->geoName($this->wardRepo->nameById(...), $params['ward_id'] ?? null, (string) ($params['ward_name'] ?? '')),
             'ward_id'           => $params['ward_id'] ?? null,
             'payment_code'      => $params['payment_code'] ?? '',
             'carrier_code'      => $params['carrier_code'] ?? '',
@@ -104,12 +131,17 @@ class CreateOrderService
     protected function writeOrderItems(CheckoutPromotions $promotions, int $orderId): void
     {
         foreach ($promotions->items as $item) {
-            $this->subtractStock($item + ['order_id' => $orderId]);
-
             $this->orderRepo->createOrderItem(
                 $this->buildOrderProductRow($item, $orderId),
                 $this->buildOrderProductOptionRows($item),
             );
+        }
+    }
+
+    protected function subtractStockForItems(CheckoutPromotions $promotions, int $orderId): void
+    {
+        foreach ($promotions->items as $item) {
+            $this->subtractStock($item + ['order_id' => $orderId]);
         }
     }
 
@@ -178,8 +210,13 @@ class CreateOrderService
         if (! auth()->check() || ! $promotions->orderId) {
             return;
         }
-        $points = (int) array_sum(array_column($promotions->items, 'reward'));
-        $this->userRewardRepo->recordOrderReward((int) getCurrentUserId(), $promotions->orderId, $points);
+
+        try {
+            $points = (int) array_sum(array_column($promotions->items, 'reward'));
+            $this->userRewardRepo->recordOrderReward((int) getCurrentUserId(), $promotions->orderId, $points);
+        } catch (\Throwable $e) {
+            logError('writeUserReward: '.$e->getMessage(), ['order_id' => $promotions->orderId]);
+        }
     }
 
     protected function writeRewardRedeem(int $orderId, array $totalData): void

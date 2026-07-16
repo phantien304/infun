@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Collection;
 
 interface BaseRepositoryInterface
 {
-    public function transaction(\Closure $callback);
+    public function transaction(\Closure $callback, int $attempts = 1);
 
     public function getDetail(int $id);
 

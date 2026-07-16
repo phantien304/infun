@@ -9,20 +9,6 @@ use App\Models\Entities\Orders;
 use App\Models\Entities\ProductCategory;
 use App\Repositories\Interfaces\AffiliateConversionRepositoryInterface;
 
-/**
- * Ghi hoa hồng khi tạo đơn (Phase 3 — AFFILIATE-PLAN.md).
- *
- * Business đã chốt:
- * - Base tính hoa hồng = SAU discount (coupon/reward/voucher), TRƯỚC ship —
- *   đọc từ totalData thay vì tự cộng lại, để luôn khớp số trên orders_total.
- *   Discount phân bổ tỷ lệ vào từng item (factor = base / subtotal).
- * - Rate precedence THEO TỪNG ITEM: affiliate.commission_rate (per-KOL,
- *   flat cho cả đơn) > affiliate_commission_rule theo category của SP
- *   (nhiều category → lấy rate cao nhất) > config_affiliate_commission_rate.
- * - Row conversion PENDING; observer approve khi giao / reject khi hủy.
- *
- * Lỗi ở đây KHÔNG được phá flow đặt hàng — caller wrap try/catch.
- */
 class AffiliateConversionService
 {
     public function __construct(
@@ -31,10 +17,6 @@ class AffiliateConversionService
     ) {
     }
 
-    /**
-     * @param array $items     cart items (CheckoutPromotions->items)
-     * @param array $totalData các dòng totals đã build (CheckoutTotalService)
-     */
     public function record(int $orderId, array $items, array $totalData): void
     {
         if ($orderId <= 0 || ! $this->attribution->enabled()) {
@@ -66,14 +48,9 @@ class AffiliateConversionService
             couponCode: $attr->couponCode,
         ));
 
-        // Query-builder update: không fire model events (không kích observer).
         Orders::query()->where('id', $orderId)->update(['affiliate_id' => $attr->affiliateId]);
     }
 
-    /**
-     * Base = sub_total + các dòng giảm (coupon:/reward/voucher:) — âm sẵn.
-     * KHÔNG gồm ship, coupon_freeship (giảm phí ship), gifts (value 0), total.
-     */
     protected function discountedBase(array $totalData): int
     {
         $base = 0;
@@ -90,7 +67,6 @@ class AffiliateConversionService
         return max(0, $base);
     }
 
-    /** @return array{0:int,1:float} [tiền hoa hồng, rate hiệu dụng % để audit] */
     protected function computeCommission(array $items, int $base, AffiliateAttribution $attr): array
     {
         $subtotal = (int) array_sum(array_column($items, 'total'));
@@ -120,10 +96,6 @@ class AffiliateConversionService
         return [$commission, $effectiveRate];
     }
 
-    /**
-     * Map product_id → rate theo affiliate_commission_rule. SP thuộc nhiều
-     * category có rule → lấy rate CAO NHẤT (deterministic, có lợi cho KOL).
-     */
     protected function categoryRates(array $productIds): array
     {
         $productIds = array_values(array_unique(array_map('intval', $productIds)));

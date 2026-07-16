@@ -60,8 +60,6 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->get();
     }
 
-    // === Write-side (balance/status) port từ VoucherService ===
-
     public function incrementRedeemed(int $voucherId, float $amount): int
     {
         return DB::table('voucher')

@@ -238,27 +238,38 @@ class CheckoutController extends Controller
 
     public function saveOrder(CheckoutSaveOrderRequest $request)
     {
-        $promotions = $this->buildAppliedPromotions();
-        [$error, $items] = $this->validateCart($promotions);
-        if ($error !== '' || empty($items)) {
-            return redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
-        }
-
-        [$totalData, $total] = $this->totalService->build($promotions, withShipping: true);
-
         $sessionId = (string) session()->getId();
-        $idemKey = (string) $request->input('idempotency_key', '');
+        $promotions = null;
+        $items = [];
+        $totalData = [];
+        $total = 0;
+
+        $idemKey = (string) $request->input(
+            'idempotency_key',
+            (string) session()->get(getCoreConfig('session.checkout_idem'), '')
+        );
+
         if ($idemKey === '') {
-            $idemKey = (string) session()->get(getCoreConfig('session.checkout_idem'), '');
-        }
-        if ($idemKey === '') {
+            [$promotions, $items, $totalData, $total, $failed] = $this->buildCartForOrder();
+            if ($failed !== null) {
+                return $failed;
+            }
             $idemKey = $sessionId.'|'.$this->cartSignature($items, $total);
         }
+
         $idemKeyMd5 = md5($idemKey);
-        $idemCacheKey = $this->buildIdempotencyKey($idemKeyMd5);
+        $idemCacheKey = $this->idempotencyCacheKey($idemKeyMd5);
 
         if (! Cache::add($idemCacheKey, 'processing', now()->addSeconds(60))) {
             return $this->handleDuplicateSubmit($idemCacheKey, $idemKeyMd5);
+        }
+
+        if ($promotions === null) {
+            [$promotions, $items, $totalData, $total, $failed] = $this->buildCartForOrder();
+            if ($failed !== null) {
+                Cache::forget($idemCacheKey);
+                return $failed;
+            }
         }
 
         $params = $request->validated();
@@ -350,8 +361,6 @@ class CheckoutController extends Controller
             $url = $this->paymentService->startPayment($orderId, $payload);
 
             if (filled($url)) {
-                // Đi gateway — flash warning vẫn sống tới request kế của
-                // session (lúc khách quay về trang success/processing).
                 return $this->successRedirect($warnings, redirect($url));
             }
         } catch (\Throwable $e) {
@@ -362,7 +371,6 @@ class CheckoutController extends Controller
         return $this->successRedirect($warnings);
     }
 
-    /** Về trang success (hoặc redirect chỉ định) kèm gom các cảnh báo không-chặn-đơn. */
     protected function successRedirect(array $warnings, $redirect = null)
     {
         $redirect ??= redirect(route('checkout.success'))->with('success', trans('messages.SuccessCreateOrder'));
@@ -372,6 +380,21 @@ class CheckoutController extends Controller
         }
 
         return $redirect;
+    }
+
+    protected function buildCartForOrder(): array
+    {
+        $promotions = $this->buildAppliedPromotions();
+        [$error, $items] = $this->validateCart($promotions);
+        if ($error !== '' || empty($items)) {
+            $failed = redirect(route('checkout.index'))->with('failed', $error ?: trans('messages.ErrorProduct'));
+
+            return [null, [], [], 0, $failed];
+        }
+
+        [$totalData, $total] = $this->totalService->build($promotions, withShipping: true);
+
+        return [$promotions, $items, $totalData, $total, null];
     }
 
     protected function handleDuplicateSubmit(string $idemCacheKey, string $idemKeyMd5)
@@ -402,7 +425,7 @@ class CheckoutController extends Controller
             return ['status' => 'none', 'redirect' => route('checkout.index')];
         }
 
-        $valueCache = Cache::get($this->buildIdempotencyKey($idemKeyMd5));
+        $valueCache = Cache::get($this->idempotencyCacheKey($idemKeyMd5));
 
         if (is_numeric($valueCache)) {
             session()->put(getCoreConfig('session.last_order'), (int) $valueCache);
@@ -454,7 +477,7 @@ class CheckoutController extends Controller
         return $token;
     }
 
-    protected function buildIdempotencyKey(string $idemKeyMd5): string
+    protected function idempotencyCacheKey(string $idemKeyMd5): string
     {
         return 'checkout:idem:'.$idemKeyMd5;
     }
@@ -643,7 +666,6 @@ class CheckoutController extends Controller
             ->first();
         $payment = $this->paymentRepo->findByCode((string) ($params['payment_code'] ?? ''));
 
-        // Snapshot đồng đang chọn để mailer (chạy queue, không cookie) format đúng đồng.
         $currency = $this->currencyService->currentCurrency();
 
         return array_merge($params, [

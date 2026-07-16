@@ -59,7 +59,7 @@ class CreateOrderService
         $currency = $this->currencyService->currentCurrency();
 
         return [
-            'id'                => (int) ($params['id'] ?? 0),
+            'id'                => 0,
             'invoice_no'        => $uniqid,
             'invoice_prefix'    => getConfigDb('config_invoice_prefix'),
             'user_id'           => getCurrentUserId(),

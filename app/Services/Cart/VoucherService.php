@@ -173,10 +173,6 @@ class VoucherService
         $this->voucherHistoryRepo->markStatus($rows->pluck('id')->all(), $statusConfirmed);
 
         foreach ($rows as $row) {
-            // Conditional: chỉ trừ khi số dư còn đủ — 2 đơn cùng tiêu một
-            // voucher thì đơn confirm sau bị chặn (không vượt trần amount).
-            // KHÔNG throw vì tới đây thanh toán đã xong — log để CS xử lý
-            // (đơn được giảm giá nhưng voucher không còn đủ số dư).
             $affected = $this->voucherRepo->incrementRedeemed((int) $row->voucher_id, (float) $row->amount);
             if ($affected === 0) {
                 logError(sprintf(

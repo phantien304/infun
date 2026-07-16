@@ -67,21 +67,22 @@ class PromotionService
         $this->voucherService->revertOrderVouchers($orderId);
     }
 
-    protected function recordCoupons(CheckoutPromotions $ctx, int $orderId): void
+    protected function recordCoupons(CheckoutPromotions $promotions, int $orderId): void
     {
-        if (empty($ctx->appliedCoupons)) {
+        if (empty($promotions->appliedCoupons)) {
             return;
         }
 
         $userId = (int) getCurrentUserId() ?: null;
 
-        foreach ($ctx->appliedCoupons as $entry) {
+        foreach ($promotions->appliedCoupons as $entry) {
             $coupon = $entry['coupon'];
             $this->couponService->recordUsedForOrder(
                 (int) $coupon->id,
                 $orderId,
                 $userId,
                 (int) $entry['discount'],
+                $coupon->uses_customer !== null ? (int) $coupon->uses_customer : null,
             );
         }
     }

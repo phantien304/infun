@@ -16,10 +16,19 @@ class DistrictRepository extends QueryableRepository implements DistrictReposito
 
     public function listByZone(int $zoneId): Collection
     {
-        return District::query()
+        return $this->resetModel()->query()
             ->where('zone_id', $zoneId)
             ->with('description')
             ->orderBy('id')
             ->get();
+    }
+
+    public function nameById(int $id): string
+    {
+        return (string) ($this->resetModel()
+            ->withTrashed()
+            ->with('description')
+            ->find($id)
+            ?->description?->name ?? '');
     }
 }

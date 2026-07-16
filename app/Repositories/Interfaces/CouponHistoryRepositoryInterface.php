@@ -10,6 +10,8 @@ interface CouponHistoryRepositoryInterface extends BaseRepositoryInterface
 {
     public function countUsedByUser(int $userId, int $couponId): int;
 
+    public function countUsedByUserForUpdate(int $userId, int $couponId): int;
+
     public function countUsedByUserForCoupons(int $userId, array $couponIds): array;
 
     public function recordApplied(int $couponId, ?int $userId, int $amount, CouponHistoryStatus $status): int;

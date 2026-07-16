@@ -16,10 +16,19 @@ class WardRepository extends QueryableRepository implements WardRepositoryInterf
 
     public function listByDistrict(int $districtId): Collection
     {
-        return Ward::query()
+        return $this->resetModel()->query()
             ->where('district_id', $districtId)
             ->with('description')
             ->orderBy('id')
             ->get();
+    }
+
+    public function nameById(int $id): string
+    {
+        return (string) ($this->resetModel()
+            ->withTrashed()
+            ->with('description')
+            ->find($id)
+            ?->description?->name ?? '');
     }
 }

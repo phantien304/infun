@@ -52,9 +52,16 @@ class GiftRepository extends QueryableRepository implements GiftRepositoryInterf
             ->first();
     }
 
-    public function incrementUsedCount(int $giftId, int $by = 1): void
+    public function incrementUsedCount(int $giftId, int $by = 1): int
     {
-        DB::table('gift')->where('id', $giftId)->increment('used_count', $by);
+        return DB::table('gift')
+            ->where('id', $giftId)
+            ->where(function ($q) use ($by) {
+                $q->whereNull('uses_total')
+                    ->orWhereRaw('used_count + ? <= uses_total', [$by]);
+            })
+            ->whereNull('deleted_at')
+            ->increment('used_count', $by);
     }
 
     public function decrementUsedCount(int $giftId): void
@@ -62,6 +69,7 @@ class GiftRepository extends QueryableRepository implements GiftRepositoryInterf
         DB::table('gift')
             ->where('id', $giftId)
             ->where('used_count', '>=', 1)
+            ->whereNull('deleted_at')
             ->decrement('used_count');
     }
 

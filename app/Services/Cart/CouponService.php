@@ -242,8 +242,25 @@ class CouponService
         );
     }
 
-    public function recordUsedForOrder(int $couponId, int $orderId, ?int $userId, int $amount): void
+    public function recordUsedForOrder(int $couponId, int $orderId, ?int $userId, int $amount, ?int $usesCustomer = null): void
     {
+        if ($this->couponRepo->incrementUsedCount($couponId) === 0) {
+            throw new \App\Exceptions\CouponExhaustedException(
+                $couponId,
+                \App\Exceptions\CouponExhaustedException::SCOPE_TOTAL,
+            );
+        }
+
+        if ($userId !== null && $usesCustomer !== null) {
+            $used = $this->couponHistoryRepo->countUsedByUserForUpdate($userId, $couponId);
+            if ($used >= $usesCustomer) {
+                throw new \App\Exceptions\CouponExhaustedException(
+                    $couponId,
+                    \App\Exceptions\CouponExhaustedException::SCOPE_USER,
+                );
+            }
+        }
+
         $this->couponHistoryRepo->recordUsed(
             $couponId,
             $orderId,
@@ -251,7 +268,6 @@ class CouponService
             $amount,
             CouponHistoryStatus::Used,
         );
-        $this->couponRepo->incrementUsedCount($couponId);
     }
 
     public function revertOrderCoupons(int $orderId): void

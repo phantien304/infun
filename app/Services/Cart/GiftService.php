@@ -263,6 +263,16 @@ class GiftService
                 continue;
             }
 
+            if ($this->giftRepo->incrementUsedCount($giftId) === 0) {
+                logError(sprintf(
+                    'recordOrderGifts: gift %d exhausted at commit — order %d proceeds without gift',
+                    $giftId,
+                    $orderId,
+                ));
+
+                continue;
+            }
+
             $itemQtys = $gift->items->whereIn('id', $itemIds)->pluck('quantity', 'id')->all();
 
             foreach ($itemIds as $itemId) {
@@ -277,8 +287,6 @@ class GiftService
                     (int) $itemQtys[$itemId],
                 );
             }
-
-            $this->giftRepo->incrementUsedCount($giftId);
         }
     }
 

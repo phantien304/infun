@@ -62,9 +62,13 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
 
     // === Write-side (balance/status) port từ VoucherService ===
 
-    public function incrementRedeemed(int $voucherId, float $amount): void
+    public function incrementRedeemed(int $voucherId, float $amount): int
     {
-        DB::table('voucher')->where('id', $voucherId)->increment('redeemed_balance', $amount);
+        return DB::table('voucher')
+            ->where('id', $voucherId)
+            ->whereRaw('redeemed_balance + ? <= amount', [$amount])
+            ->whereNull('deleted_at')
+            ->increment('redeemed_balance', $amount);
     }
 
     public function decrementRedeemed(int $voucherId, float $amount): void
@@ -72,6 +76,7 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
         DB::table('voucher')
             ->where('id', $voucherId)
             ->where('redeemed_balance', '>=', $amount)
+            ->whereNull('deleted_at')
             ->decrement('redeemed_balance', $amount);
     }
 
@@ -84,6 +89,7 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->whereIn('id', $voucherIds)
             ->where('status', $activeStatus)
             ->whereColumn('redeemed_balance', '>=', 'amount')
+            ->whereNull('deleted_at')
             ->update(['status' => $fullyUsedStatus]);
     }
 
@@ -96,6 +102,7 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->whereIn('id', $voucherIds)
             ->where('status', $fullyUsedStatus)
             ->whereColumn('redeemed_balance', '<', 'amount')
+            ->whereNull('deleted_at')
             ->update(['status' => $activeStatus]);
     }
 
@@ -106,10 +113,6 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
 
     // === Legacy API ===
 
-    /**
-     * Port logic CheckoutMarketing::getVoucher cũ. KHÔNG dùng cho flow Shopee
-     * mới — service mới gọi `findByCode` + `VoucherService::validate`.
-     */
     public function resolveVoucher(?string $code): array
     {
         if (! filled($code)) {

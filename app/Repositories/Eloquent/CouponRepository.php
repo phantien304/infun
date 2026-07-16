@@ -77,9 +77,16 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
             ->exists();
     }
 
-    public function incrementUsedCount(int $couponId, int $by = 1): void
+    public function incrementUsedCount(int $couponId, int $by = 1): int
     {
-        DB::table('coupon')->where('id', $couponId)->increment('used_count', $by);
+        return DB::table('coupon')
+            ->where('id', $couponId)
+            ->where(function ($q) use ($by) {
+                $q->whereNull('uses_total')
+                    ->orWhereRaw('used_count + ? <= uses_total', [$by]);
+            })
+            ->whereNull('deleted_at')
+            ->increment('used_count', $by);
     }
 
     public function decrementUsedCount(int $couponId, int $by): void
@@ -87,6 +94,7 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
         DB::table('coupon')
             ->where('id', $couponId)
             ->where('used_count', '>=', $by)
+            ->whereNull('deleted_at')
             ->decrement('used_count', $by);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Web;
 
+use App\Exceptions\CouponExhaustedException;
 use App\Exceptions\InsufficientStockException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\CheckoutAddToCartRequest;
@@ -295,8 +296,18 @@ class CheckoutController extends Controller
             return redirect(route('checkout.index'))
                 ->with('failed', sprintf(trans('messages.ErrorStockProduct'), ''))
                 ->withInput();
+        } catch (CouponExhaustedException $e) {
+            Cache::forget($idemCacheKey);
+            logError($e);
+
+            return redirect(route('checkout.index'))
+                ->with('failed', trans(
+                    $e->scope === CouponExhaustedException::SCOPE_USER
+                        ? 'messages.checkout.coupon.used_up_user'
+                        : 'messages.checkout.coupon.used_up_total'
+                ))
+                ->withInput();
         } catch (QueryException $e) {
-            // Lớp 2 — DB UNIQUE(idempotency_key): 2 request cùng token đua nhau.
             if ($this->isDuplicateKey($e)) {
                 $existing = $this->orderRepo->findByIdempotencyKey($idemKeyMd5);
                 if ($existing) {

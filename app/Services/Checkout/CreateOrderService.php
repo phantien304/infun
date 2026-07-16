@@ -2,8 +2,11 @@
 
 namespace App\Services\Checkout;
 
+use App\Repositories\Interfaces\DistrictRepositoryInterface;
 use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
+use App\Repositories\Interfaces\WardRepositoryInterface;
+use App\Repositories\Interfaces\ZoneRepositoryInterface;
 use App\Services\Affiliate\AffiliateConversionService;
 use App\Services\Currency\CurrencyService;
 use App\Services\Stock\StockService;
@@ -17,6 +20,9 @@ class CreateOrderService
         protected StockService $stockService,
         protected CurrencyService $currencyService,
         protected AffiliateConversionService $affiliateConversion,
+        protected ZoneRepositoryInterface $zoneRepo,
+        protected DistrictRepositoryInterface $districtRepo,
+        protected WardRepositoryInterface $wardRepo,
     ) {
     }
 
@@ -57,11 +63,11 @@ class CreateOrderService
             'telephone'         => $params['telephone'] ?? '',
             'address'           => $params['address'] ?? '',
             'country_id'        => getCoreConfig('zones.country_id_default'),
-            'zone'              => $params['zone_name'] ?? '',
+            'zone'              => $this->geoName([$this->zoneRepo, 'nameById'], $params['zone_id'] ?? null, (string) ($params['zone_name'] ?? '')),
             'zone_id'           => $params['zone_id'] ?? null,
-            'district'          => $params['district_name'] ?? '',
+            'district'          => $this->geoName([$this->districtRepo, 'nameById'], $params['district_id'] ?? null, (string) ($params['district_name'] ?? '')),
             'district_id'       => $params['district_id'] ?? null,
-            'ward'              => $params['ward_name'] ?? '',
+            'ward'              => $this->geoName([$this->wardRepo, 'nameById'], $params['ward_id'] ?? null, (string) ($params['ward_name'] ?? '')),
             'ward_id'           => $params['ward_id'] ?? null,
             'payment_code'      => $params['payment_code'] ?? '',
             'carrier_code'      => $params['carrier_code'] ?? '',
@@ -83,6 +89,16 @@ class CreateOrderService
             'accept_language'   => request()->server('HTTP_ACCEPT_LANGUAGE', ''),
             'ip'                => request()->server('REMOTE_ADDR'),
         ];
+    }
+
+    protected function geoName(callable $resolver, mixed $id, string $fallback): string
+    {
+        $id = (int) ($id ?? 0);
+        if ($id <= 0) {
+            return $fallback;
+        }
+        $name = (string) $resolver($id);
+        return $name !== '' ? $name : $fallback;
     }
 
     protected function writeOrderItems(CheckoutPromotions $promotions, int $orderId): void
@@ -180,12 +196,6 @@ class CreateOrderService
         }
     }
 
-    /**
-     * Hoa hồng affiliate (Phase 3): attribution + tính + ghi conversion
-     * PENDING nằm trong AffiliateConversionService. Lỗi tracking KHÔNG được
-     * phá flow đặt hàng → nuốt exception + logError (đơn vẫn tạo bình thường,
-     * mất 1 conversion còn hơn mất 1 đơn).
-     */
     protected function writeAffiliateConversion(int $orderId, CheckoutPromotions $promotions, array $totalData): void
     {
         try {

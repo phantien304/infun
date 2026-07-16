@@ -20,7 +20,7 @@ interface CouponRepositoryInterface extends BaseRepositoryInterface
 
     public function isActiveForUserGroup(int $couponId, ?int $userGroupId): bool;
 
-    public function incrementUsedCount(int $couponId, int $by = 1): void;
+    public function incrementUsedCount(int $couponId, int $by = 1): int;
 
     public function decrementUsedCount(int $couponId, int $by): void;
 

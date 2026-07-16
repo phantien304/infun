@@ -12,12 +12,9 @@ interface GiftRepositoryInterface extends BaseRepositoryInterface
 
     public function findActiveById(int $giftId): ?Gift;
 
-
-    public function incrementUsedCount(int $giftId, int $by = 1): void;
+    public function incrementUsedCount(int $giftId, int $by = 1): int;
 
     public function decrementUsedCount(int $giftId): void;
-
-
 
     public function flushCache(): void;
 }

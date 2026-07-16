@@ -8,7 +8,6 @@ use Illuminate\Support\Collection;
 
 interface VoucherRepositoryInterface extends BaseRepositoryInterface
 {
-
     public function resolveVoucher(?string $code): array;
 
     public function findByCode(string $code): ?Voucher;
@@ -17,7 +16,7 @@ interface VoucherRepositoryInterface extends BaseRepositoryInterface
 
     public function listForEmail(string $email): Collection;
 
-    public function incrementRedeemed(int $voucherId, float $amount): void;
+    public function incrementRedeemed(int $voucherId, float $amount): int;
 
     public function decrementRedeemed(int $voucherId, float $amount): void;
 

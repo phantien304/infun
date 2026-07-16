@@ -41,4 +41,13 @@ class ZoneRepository extends QueryableRepository implements ZoneRepositoryInterf
     {
         $this->forgetSystem(setting('cache.zones'));
     }
+
+    public function nameById(int $id): string
+    {
+        return (string) ($this->resetModel()->newQuery()
+            ->withTrashed()
+            ->with('description')
+            ->find($id)
+            ?->description?->name ?? '');
+    }
 }

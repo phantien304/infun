@@ -54,7 +54,7 @@
 
 ---
 
-## C. Flash-sale (điểm nóng GHI)
+## C. Flash-sale (điểm nóng GHI) — kế hoạch chi tiết: `docs/FLASH-GATE.md`
 
 - [ ] Nút cổ chai = 1 row `product_stock` bị lock `FOR UPDATE` serialize (đúng, để chống oversell). Muốn chịu tải cao:
   - [ ] **Redis atomic gate** (`DECR stock:{variant}`) làm admission — chỉ người có suất mới vào reservation DB; reconcile Redis↔DB.

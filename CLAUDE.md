@@ -3191,3 +3191,151 @@ seed như mọi khi.
 **Stopgap rẻ nhất nếu chưa làm:** request có `filter[in_stock]` + keyword →
 route về DB pipeline (fallback LIKE) — đúng tuyệt đối nhưng chậm 1-3s.
 
+---
+
+## Hạ tầng scale 30k + chống over-redeem toàn tuyến checkout (2026-07-15)
+
+### Hạ tầng — trỏ file, không lặp
+
+- Checklist + changelog: `docs/SCALE-30K.md`. Staging mô phỏng prod:
+  `docker-compose.scale.yml` (Redis tách 2 instance, MariaDB 1 master + 2
+  replica GTID tự seed qua `docker/mysql/replica-init.sh`, ProxySQL route
+  6033 write / 6034 read, scheduler container). Prod: toàn bộ config + bước
+  triển khai trong `deploy/` (README là bản đồ).
+- `config/database.php`: cache connection nhận `REDIS_CACHE_HOST/PORT/PASSWORD`,
+  mysql nhận `DB_READ_PORT`/`DB_WRITE_PORT` — TẤT CẢ fallback về biến cũ,
+  không set env mới thì chạy y như cũ. Đừng phá tính fallback này.
+- Throttle: named limiter `throttle:add-to-cart` / `throttle:save-order`
+  (định nghĩa `AppServiceProvider::registerRateLimiters`, mức ở
+  `config/throttle.php`, nới qua env khi k6). Key theo user → session → IP,
+  KHÔNG thuần IP; đi kèm `trustProxies` trong `bootstrap/app.php` — thiếu nó
+  thì sau LB cả site chung 1 quota theo IP của nginx.
+
+### Mẫu chuẩn chống over-redeem/oversell — "guard trong chính câu UPDATE"
+
+Mọi tài nguyên đếm được (tồn kho, lượt coupon, suất gift, số dư voucher,
+điểm thưởng) dùng CÙNG một mẫu, KHÔNG check-then-act:
+
+1. **Conditional UPDATE**: điều kiện còn-suất nằm ngay trong WHERE, trả
+   affected rows. 0 = hết đúng thời điểm chốt. Vd
+   `CouponRepository::incrementUsedCount` (`used_count + ? <= uses_total`),
+   `VoucherRepository::incrementRedeemed` (`redeemed + ? <= amount`),
+   `GiftRepository::incrementUsedCount`. Dùng `DB::table` chứ không Eloquent
+   instance (read-modify-write là chính cái race đang diệt; tránh scope ẩn +
+   updated_at + observer chạy trong lúc giữ lock).
+2. **Hết suất thì tùy domain**: tiền sai → THROW rollback cả đơn
+   (`InsufficientStockException`, `CouponExhaustedException`,
+   `RewardExhaustedException`, `VoucherExhaustedException` — catch chain trong
+   `CheckoutController::saveOrder`, mỗi loại một message i18n). Gift hết suất
+   → BỎ quà, đơn vẫn chạy (`droppedGifts` trên `CheckoutPromotions` → cảnh
+   báo trang success) — hết quà không đáng chặn doanh thu.
+3. **Guard per-user / per-balance cần đếm**: locking read (`lockForUpdate`)
+   SAU khi đã giữ X-lock row cha — locking read đọc bản committed mới nhất
+   (không phải snapshot REPEATABLE READ). Vd coupon
+   `countUsedByUserForUpdate` sau incrementUsedCount; reward
+   `recordRedeem` SUM points FOR UPDATE (cùng điều kiện `getTotalPoints`).
+
+### Thứ tự lock TOÀN CỤC trong transaction tạo đơn
+
+`stock → coupon → voucher → gift → reward` — mọi transaction (kể cả
+revert/hủy đơn, `PromotionService::revertForOrder`) phải đi CÙNG chiều.
+Thêm lock mới = nối vào cuối chuỗi, cập nhật comment trong
+`CreateOrderService::create`.
+
+### StockService — release hold idempotent (fix race 2026-07-15)
+
+- **"Ai xóa được hold, người đó mới được trừ reserved"**:
+  `deleteReservationById()` trả affected rows làm khóa idempotent — mọi nơi
+  nhả/tiêu thụ hold (applyDeduction, consumeAllHolderReservations,
+  releaseReservationRow) chỉ trừ `reserved` khi delete affected = 1. Không
+  có nó: job release đua với checkout → double-decrement reserved →
+  `holderAvailable` phình → on_hand âm cả khi Deny + bật kiểm tồn.
+- `releaseReservationRow`: lock stock trước → RE-FETCH reservation fresh dưới
+  lock (row caller đưa vào chỉ là GỢI Ý — có thể đã bị đổi quantity/gia hạn) →
+  `releaseExpired` truyền `onlyIfExpired: true` (không nhả hold khách vừa
+  gia hạn).
+- `on_hand` âm giờ CHỈ còn 2 đường chủ ý: policy Backorder và tắt
+  `config_stock_checkout`. CMS ghi tồn clamp ≥ 0 + đúng kho mặc định
+  (`ProductVariantWriter`, `updateOnHand(?int $warehouseId)`).
+
+### Transaction create order — thin core / lock late / retry
+
+`CreateOrderService::create` cấu trúc 3 vùng, GIỮ NGUYÊN khi sửa:
+
+1. Insert thuần (order, history, items, totals) — không lock.
+2. Vùng lock cuối transaction (stock → promotion → reward redeem) — giữ lock
+   ngắn nhất; throughput hot row = 1/thời-gian-giữ-lock.
+3. `DB::afterCommit`: side effect dẫn xuất (earn điểm, affiliate) — mỗi hàm
+   PHẢI tự nuốt exception (try/catch + logError). afterCommit chạy đồng bộ
+   TRONG lời gọi create() → throw ở đó rơi vào catch của saveOrder = trang
+   lỗi giả cho đơn đã commit + phá idempotency cache. Riêng
+   `writeRewardRedeem` (TIÊU điểm) là tiền → ở lại transaction.
+
+`transaction($closure, attempts: 3)` — deadlock/lock-wait-timeout tự retry
+(BaseRepository::transaction có param `$attempts`). Closure phải re-run an
+toàn: mọi ghi trong transaction, không side effect ngoài DB trước điểm fail.
+
+### saveOrder — 2 giai đoạn, ranh giới là COMMIT
+
+- **Giai đoạn 1 (được phép fail)**: chỉ `create()` + ghi idem cache. Các
+  catch nghiệp vụ trả trang lỗi (đơn chưa tồn tại, rollback sạch).
+- **Giai đoạn 2 `finalizeCreatedOrder` (không bao giờ fail ra ngoài)**: dọn
+  cart/session TRƯỚC (đơn tồn tại mà cart còn + token đổi = khách đặt lại ra
+  đơn đôi thật), rồi email, payment — lỗi chỉ log + gom vào `$warnings` hiển
+  thị trên trang success (`successRedirect()`; success.blade có render flash
+  `failed` dạng alert-warning). Gateway lỗi ≠ trang lỗi.
+- **Idempotency**: token sinh ở trang checkout (`currentIdempotencyToken` —
+  đọc session, trống mới sinh); saveOrder CHỈ ĐỌC token (request → session →
+  fallback chữ ký giỏ), tuyệt đối không gọi hàm sinh — sinh ở nơi tiêu là tự
+  phá khóa. Check `Cache::add` TRƯỚC khi tính giỏ (double-click không tốn
+  compute); `buildCartForOrder(): array|RedirectResponse` + memoize `??=`;
+  fail sau khi giữ lock phải `Cache::forget`. Lớp 2 = DB UNIQUE
+  `orders.idempotency_key`.
+- **`upsertOrder` contract**: id trong $data do SERVER xác định (0 = tạo mới,
+  hoặc id đã qua ownership check như `getOrderForUser`). Checkout ép cứng
+  `'id' => 0` trong buildOrderRow. KHÔNG BAO GIỜ đưa id từ client input vào.
+
+### Voucher — reserve-at-order (phương án A, 2026-07-15)
+
+Số dư voucher hành xử như tồn kho: TRỪ NGAY trong transaction tạo đơn
+(conditional `incrementRedeemed`), history ghi thẳng `Confirmed`, hết dư →
+`VoucherExhaustedException` rollback đơn. `confirmOrderVouchers` ĐÃ XÓA
+(trước đó mồ côi — không ai gọi nên số dư chưa bao giờ bị trừ; rows `Applied`
+cũ trong voucher_history là dữ liệu lịch sử chưa trừ, cần CS đối soát nếu
+quan tâm). Đơn hủy: `revertOrderVouchers` decrement rows Confirmed +
+reactivate — giữ nguyên.
+
+### Enum + i18n cho promotion — nguồn sự thật
+
+- **Giá trị nghiệp vụ ở `app/Enums/`** (KHÔNG còn ở config core):
+  `CouponType`, `CouponApplyScope`, `CouponHistoryStatus`, `GiftTriggerType`,
+  `GiftPickType`, `VoucherStatus`, `VoucherHistoryStatus`. Style chung:
+  int-backed + `fromInput(mixed): ?self` + `label(): string` qua `trans()`.
+  Config core `coupon/gift/voucher` chỉ còn cache key + công tắc hành vi
+  (`stacking`) + TTL.
+- **Chữ hiển thị ở `messages.checkout.{coupon,gift,voucher,reward}`** —
+  template TRỌN CÂU cho sprintf (không nối chuỗi — dịch ngôn ngữ khác đảo
+  trật tự từ); `%` literal phải escape `%%`. So sánh dùng
+  `Enum::Case->value`, label dùng `Enum::fromInput($x)?->label() ?? trans(fallback)`.
+- **Gotcha trùng key lang**: PHP array literal trùng key = key sau thắng
+  LẶNG LẼ (đã dính `checkout.gift` string vs group). Thêm key mới vào group
+  phải soát key cùng tên; script đếm nhanh:
+  `re.findall(r"'([a-z_]+)'\s*=>", block)` + Counter.
+
+### Setting `cms_public` + endpoint public `system/init`
+
+`GET /rcms/system/init` là PUBLIC (trước auth) — chỉ trả setting có
+`setting.cms_public = 1` (`SettingRepository::listPublicCached`, cache key
+riêng, flush chung trong `flushCache`). Key vận hành nguy hiểm
+(`config_stock_checkout`) migration đã set 0. SystemController còn lưới cuối
+chặn pattern credentials. Admin ẩn thêm key = tắt cờ, không sửa code.
+
+### Ảnh — 2 fix nhỏ dễ quên
+
+- `images:migrate-r2` gom path từ 4 bảng: `product`, `product_image`,
+  `product_variant`, `option_value` — thêm nguồn ảnh mới nhớ nối vào đây,
+  không thì thumbnail không được pre-gen → 404 CDN (disk remote không stat).
+- `FileController::disk()` theo `config('media.image_disk')` (env
+  `IMAGE_DISK`), KHÔNG hardcode 'public' — multi-server thì file gốc phải lên
+  storage chung ngay lúc upload.
+

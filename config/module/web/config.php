@@ -29,7 +29,7 @@ return [
     'job_mailer' => [
         'verify_email' => [
             'from' => 'phanvantien0204@gmail.com',
-            'sender' => 'phanvantien0204@gmail.com'
+            'sender' => 'In&Fun Studio'
         ],
         'forgot_password' => [
             'from' => 'phanvantien0204@gmail.com',
@@ -52,28 +52,6 @@ return [
             'sender' => 'In&Fun Studio',
         ],
     ],
-    'seo' => [
-        'home' => [
-            'title' => 'Callmeduy',
-            'description' => 'Callmeduy desc'
-        ],
-        'product_list' => [
-            'title' => 'Sản phẩm',
-            'description' => 'Sản phẩm desc'
-        ],
-        'blog_list' => [
-            'title' => 'Bài viết',
-            'description' => 'Chào các bạn, đây là blog của CallmeDuy, được Duy xây dựng như công cụ hỗ trợ giúp mọi người chủ động phân tích, tìm hiểu mỹ phẩm và bước đầu là dựa trên thành phần của sản phẩm. Đừng quên đồng hành cùng Duy ở các kênh social khác để tìm hiểu thông tin về mỹ phẩm nhé !'
-        ],
-        'ingredient_list' => [
-            'title' => 'Thành phần',
-            'description' => 'Thành phần'
-        ],
-        'blog_tag_list' => [
-            'title' => 'Tags',
-            'description' => 'Tags'
-        ]
-    ],
     'product' => [
         'text_instock' => 'Còn hàng',
         'text_backorder' => 'Đặt trước - giao sau',
@@ -84,41 +62,6 @@ return [
             'hot' => 'Bán chạy',
             'sale' => 'Sale',
             'best' => 'Tốt nhất',
-        ]
-    ],
-    'emotion' => [
-        'text_emotion' => [
-            1 => 'Tệ',
-            2 => 'Không tốt',
-            3 => 'Bình thường',
-            4 => 'Tốt',
-            5 => 'Rất tốt',
-        ],
-        'background' => [
-            1 => '#0071bc',
-            2 => '#0071bc',
-            3 => '#8cc63f',
-            4 => '#f15a24',
-            5 => '#d0021b',
-        ]
-    ],
-    'safety' => [
-        'high' => [7, 8, 9],
-        'medium' => [4, 5, 6],
-        'low' => [1, 2, 3],
-    ],
-    'sort_by' => [
-        'created_at' => [
-            'DESC' => 'Mới nhất',
-            'ASC' => 'Cũ nhất',
-        ],
-        'date_end' => [
-            'DESC' => 'Hết hạn (Mới nhất)',
-            'ASC' => 'Hết hạn (Cũ nhất)',
-        ],
-        'price' => [
-            'DESC' => 'Giá giảm dần',
-            'ASC' => 'Giá tăng dần',
         ]
     ],
     'paginate' => [

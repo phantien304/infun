@@ -7,6 +7,7 @@ use App\Data\Output\ProductDTO;
 use App\Data\Output\ReviewCriteriaDTO;
 use App\Data\Output\ReviewTagDTO;
 use App\Data\Output\StoreReviewDTO;
+use App\Enums\ReviewPolicy;
 use App\Http\Controllers\Controller;
 use App\Models\Entities\UserWishlist;
 use App\Repositories\Interfaces\BlogRepositoryInterface;
@@ -64,7 +65,7 @@ class ProductController extends Controller
                 'hasReviewed'            => $userId > 0
                     ? $this->reviewRepo->hasReviewedFromOrder($userId, $id)
                     : false,
-                'reviewPolicy'           => setting('config_review_policy', getCoreConfig('review.default_policy')),
+                'reviewPolicy'           => setting('config_review_policy', ReviewPolicy::default()->value),
                 'hasVerifiedPurchase'    => $userId > 0
                     ? (bool) $this->reviewRepo->findVerifiedOrderId($userId, $id)
                     : false,

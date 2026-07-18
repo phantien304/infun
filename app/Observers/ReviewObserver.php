@@ -2,29 +2,16 @@
 
 namespace App\Observers;
 
+use App\Enums\ReviewStatus;
 use App\Models\Entities\Review;
 use App\Repositories\Interfaces\ReviewRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Cập nhật aggregate cache trên `product` (review_count, rating_avg,
- * rating_sum, rating_distribution) khi review trạng thái APPROVED thay đổi.
- *
- * Quy tắc trigger:
- *  - created: nếu status = APPROVED ngay khi tạo (admin review trực tiếp)
- *    → cộng vào aggregate.
- *  - updated: nếu status đổi sang/khỏi APPROVED → cộng/trừ; nếu rating đổi
- *    trong khi vẫn APPROVED → diff sum + distribution.
- *  - deleted (soft + force): nếu đã APPROVED → trừ.
- *
- * Performance: dùng incremental UPDATE chứ KHÔNG re-aggregate full table.
- * Tag cache tự invalidate qua repo->forgetProductCache().
- */
 class ReviewObserver
 {
     public function created(Review $review): void
     {
-        if ($review->status === getCoreConfig('review.status.approved')) {
+        if ($review->status === ReviewStatus::Approved->value) {
             $this->applyDelta($review->product_id, $review->rating, +1);
             $this->invalidate($review->product_id);
         }
@@ -32,8 +19,8 @@ class ReviewObserver
 
     public function updated(Review $review): void
     {
-        $wasApproved = (int) ($review->getOriginal('status')) === getCoreConfig('review.status.approved');
-        $isApproved  = $review->status === getCoreConfig('review.status.approved');
+        $wasApproved = (int) ($review->getOriginal('status')) === ReviewStatus::Approved->value;
+        $isApproved  = $review->status === ReviewStatus::Approved->value;
 
         $oldRating = (int) $review->getOriginal('rating');
         $newRating = (int) $review->rating;
@@ -45,7 +32,6 @@ class ReviewObserver
             $this->applyDelta($review->product_id, $oldRating, -1);
             $this->invalidate($review->product_id);
         } elseif ($wasApproved && $isApproved && $oldRating !== $newRating) {
-            // Đổi rating khi vẫn approved: trừ rating cũ, cộng rating mới.
             $this->applyDelta($review->product_id, $oldRating, -1);
             $this->applyDelta($review->product_id, $newRating, +1);
             $this->invalidate($review->product_id);
@@ -54,19 +40,16 @@ class ReviewObserver
 
     public function deleted(Review $review): void
     {
-        if ($review->status === getCoreConfig('review.status.approved')) {
+        if ($review->status === ReviewStatus::Approved->value) {
             $this->applyDelta($review->product_id, $review->rating, -1);
             $this->invalidate($review->product_id);
         }
     }
 
-    /**
-     * Applay incremental delta lên aggregate. $sign = +1 hoặc -1.
-     */
     protected function applyDelta(int $productId, int $rating, int $sign): void
     {
         $rating = max(1, min(5, $rating));
-        $col = "s{$rating}";  // tạm dùng raw JSON_SET cho distribution
+        $col = "s{$rating}";
 
         DB::statement('
             UPDATE product

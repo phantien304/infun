@@ -1,24 +1,7 @@
-{{--
-    Write review form — đa tiêu chí + tags + title + text + media + anonymous.
-    Naming convention: rating[criteria_code] để controller dispatch sang
-    review_rating pivot.
-
-    Policy gate (admin cấu hình qua setting('config_review_policy')):
-      - public   : Bất cứ ai (bao gồm guest chưa login)
-      - login    : Phải đăng nhập, không cần mua hàng
-      - purchase : Phải đăng nhập + đã mua hàng (có order completed)
-    Value đọc từ ProductController::index qua setting('config_review_policy', ...)
-    fallback default review.default_policy trong config/core/config.php.
-    UI phân nhánh:
-      * canSubmit=false + chưa login           → prompt đăng nhập
-      * canSubmit=false + login + chưa mua     → prompt mua hàng (policy verified)
-      * canSubmit=true  + hasReviewed          → khóa form, hiển thị thông báo cảm ơn
-      * canSubmit=true                          → render form đầy đủ
---}}
 @php
-    $policyPublic = getCoreConfig('review.policy.public');
-    $policyLogin = getCoreConfig('review.policy.login');
-    $policyVerified = getCoreConfig('review.policy.purchase');
+    $policyPublic = \App\Enums\ReviewPolicy::Public->value;
+    $policyLogin = \App\Enums\ReviewPolicy::Login->value;
+    $policyVerified = \App\Enums\ReviewPolicy::Purchase->value;
     $effPolicy = $reviewPolicy ?? $policyPublic;
     $isLoggedIn = auth()->check();
     $canSubmit =

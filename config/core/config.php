@@ -233,20 +233,6 @@ return [
     'stock' => [
         'reservation_ttl_minutes' => 6,
     ],
-    'review' => [
-        'status' => [
-            'pending' => 0,
-            'approved' => 1,
-            'rejected' => 2,
-            'hidden' => 3,
-        ],
-        'policy' => [
-            'public'   => 'public',
-            'login'    => 'login',
-            'purchase' => 'purchase',
-        ],
-        'default_policy' => 'public',
-    ],
     'review_report' => [
         'status' => [
             'pending' => 0,

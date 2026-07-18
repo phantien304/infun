@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\ReviewStatus;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -21,7 +22,7 @@ use Illuminate\Support\Facades\DB;
 class RebuildReviewAggregateCommand extends Command
 {
     protected $signature = 'reviews:rebuild-aggregate
-        {--status= : review.status để filter (mặc định = review.status.approved trong config)}';
+        {--status= : review.status để filter (mặc định = ReviewStatus::Approved)}';
 
     protected $description = 'Rebuild product.review_count + rating_avg/sum/distribution từ review (group by SQL, 1 statement).';
 
@@ -29,7 +30,7 @@ class RebuildReviewAggregateCommand extends Command
     {
         $status = $this->option('status');
         if ($status === null) {
-            $status = (int) getCoreConfig('review.status.approved');
+            $status = ReviewStatus::Approved->value;
         }
 
         $started = microtime(true);

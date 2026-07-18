@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\ReviewStatus;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -225,7 +226,7 @@ class SeedReviewsCommand extends Command
                         'title'              => $title ?: null,
                         'text'               => $text,
                         'rating'             => $rating,
-                        'status'             => getCoreConfig('review.status.approved'),
+                        'status'             => ReviewStatus::Approved->value,
                         'is_publish'         => 1,
                         'is_anonymous'       => random_int(1, 10) === 1 ? 1 : 0,
                         'language_code'      => 'vi',
@@ -421,7 +422,7 @@ class SeedReviewsCommand extends Command
                         )
                     END,
                     p.rating_updated_at = NOW()
-            ', [(int) getCoreConfig('review.status.approved')]);
+            ', [ReviewStatus::Approved->value]);
         } finally {
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
         }

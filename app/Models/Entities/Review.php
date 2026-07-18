@@ -2,6 +2,7 @@
 
 namespace App\Models\Entities;
 
+use App\Enums\ReviewStatus;
 use App\Models\Base\Base;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -29,7 +30,7 @@ class Review extends Base
 
     public function scopeApproved($q)
     {
-        return $q->where('status', getCoreConfig('review.status.approved'));
+        return $q->where('status', ReviewStatus::Approved->value);
     }
 
     public function scopeForProduct($q, int $productId)

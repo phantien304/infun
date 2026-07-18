@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Eloquent;
 
+use App\Enums\ReviewStatus;
 use App\Models\Entities\Review;
 use App\Models\Entities\ReviewCriteria;
 use App\Models\Entities\ReviewTag;
@@ -136,7 +137,7 @@ class ReviewRepository extends QueryableRepository implements ReviewRepositoryIn
                     ->join('review as r', 'r.id', '=', 'rr.review_id')
                     ->join('review_criteria as rc', 'rc.id', '=', 'rr.review_criteria_id')
                     ->where('r.product_id', $productId)
-                    ->where('r.status', getCoreConfig('review.status.approved'))
+                    ->where('r.status', ReviewStatus::Approved->value)
                     ->whereNull('r.deleted_at')
                     ->select('rc.code', DB::raw('AVG(rr.rating) as avg_rating'))
                     ->groupBy('rc.code')

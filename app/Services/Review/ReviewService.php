@@ -2,6 +2,8 @@
 
 namespace App\Services\Review;
 
+use App\Enums\ReviewPolicy;
+use App\Enums\ReviewStatus;
 use App\Helpers\Facades\MyStorage;
 use App\Models\Entities\Review;
 use App\Models\Entities\ReviewMedia;
@@ -39,12 +41,12 @@ class ReviewService
             ? $this->reviewRepo->findVerifiedOrderId($userId, $productId)
             : null;
 
-        $policy = setting('config_review_policy', getCoreConfig('review.default_policy'));
+        $policy = setting('config_review_policy', ReviewPolicy::default()->value);
 
-        if ($policy === getCoreConfig('review.policy.login') && ! $isAuthed) {
+        if ($policy === ReviewPolicy::Login->value && ! $isAuthed) {
             throw new \DomainException(trans('messages.review.login_required'));
         }
-        if ($policy === getCoreConfig('review.policy.purchase')) {
+        if ($policy === ReviewPolicy::Purchase->value) {
             if (! $isAuthed) {
                 throw new \DomainException(trans('messages.review.login_required'));
             }
@@ -76,7 +78,7 @@ class ReviewService
                 'title'              => $data['title'] ?? null,
                 'text'               => $data['text'] ?? '',
                 'rating'             => $overallRating,
-                'status'             => getCoreConfig('review.status.pending'),
+                'status'             => ReviewStatus::Pending->value,
                 'is_publish'         => 0,
                 'is_anonymous'       => ! empty($data['is_anonymous']),
                 'language_code'      => app()->getLocale(),
@@ -251,7 +253,7 @@ class ReviewService
             $userId,
             $reasonCode,
             $description,
-            getCoreConfig('review.status.pending'),
+            ReviewStatus::Pending->value,
         );
     }
 }

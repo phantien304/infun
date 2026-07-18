@@ -2,12 +2,9 @@
 
 namespace App\Models\Entities;
 
-use App\Enums\VoucherRewardRuleStatus;
 use App\Models\Base\Base;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
 class VoucherRewardRule extends Base
 {
@@ -35,22 +32,6 @@ class VoucherRewardRule extends Base
     public function grants(): HasMany
     {
         return $this->hasMany(VoucherRewardGrant::class, 'rule_id', 'id');
-    }
-
-    public function scopeRunning(Builder $query, ?Carbon $at = null): Builder
-    {
-        $at ??= Carbon::now();
-
-        return $query
-            ->where("{$this->getTable()}.status", VoucherRewardRuleStatus::Active->value)
-            ->where(function (Builder $q) use ($at) {
-                $q->whereNull("{$this->getTable()}.date_start")
-                    ->orWhere("{$this->getTable()}.date_start", '<=', $at);
-            })
-            ->where(function (Builder $q) use ($at) {
-                $q->whereNull("{$this->getTable()}.date_end")
-                    ->orWhere("{$this->getTable()}.date_end", '>=', $at);
-            });
     }
 
     public function quotaRemaining(): ?int

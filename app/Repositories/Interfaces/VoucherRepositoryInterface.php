@@ -24,5 +24,11 @@ interface VoucherRepositoryInterface extends BaseRepositoryInterface
 
     public function reactivateVouchers(array $voucherIds, int $fullyUsedStatus, int $activeStatus): void;
 
+    public function createVoucher(array $data): Voucher;
+
+    public function revokeUnused(array $voucherIds, int $activeStatus, int $revokedStatus): int;
+
+    public function reactivateRevoked(array $voucherIds, int $revokedStatus, int $activeStatus): int;
+
     public function flushCache(): void;
 }

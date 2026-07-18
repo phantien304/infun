@@ -104,6 +104,40 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->update(['status' => $activeStatus]);
     }
 
+    public function createVoucher(array $data): Voucher
+    {
+        return Voucher::create($data);
+    }
+
+    public function revokeUnused(array $voucherIds, int $activeStatus, int $revokedStatus): int
+    {
+        if (empty($voucherIds)) {
+            return 0;
+        }
+
+        return DB::table('voucher')
+            ->whereIn('id', $voucherIds)
+            ->where('status', $activeStatus)
+            ->where('redeemed_balance', 0)
+            ->whereNull('deleted_at')
+            ->update(['status' => $revokedStatus]);
+    }
+
+    /** Hồi sinh voucher đã Revoked (chưa dùng) — conditional, trả affected. */
+    public function reactivateRevoked(array $voucherIds, int $revokedStatus, int $activeStatus): int
+    {
+        if (empty($voucherIds)) {
+            return 0;
+        }
+
+        return DB::table('voucher')
+            ->whereIn('id', $voucherIds)
+            ->where('status', $revokedStatus)
+            ->where('redeemed_balance', 0)
+            ->whereNull('deleted_at')
+            ->update(['status' => $activeStatus]);
+    }
+
     public function flushCache(): void
     {
         $this->forgetCacheTagged([getCoreConfig('voucher.cache.tag_root')]);

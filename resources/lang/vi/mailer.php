@@ -28,6 +28,8 @@ return [
         'from' => 'Voucher được gửi đến cho bạn từ %s',
         'message' => 'Lời nhắn dành cho bạn:',
         'redeem' => 'Để sử dụng voucher, copy mã <b>%s</b> sau đó nhấn vào liên kết bên dưới và mua sản phẩm. Bạn có thể nhập mã voucher ở trang giỏ hàng trước khi thanh toán.',
+        'expire' => 'Voucher có hiệu lực đến hết ngày %s.',
+        'reward_reason' => 'Cảm ơn bạn đã mua hàng — voucher này là quà tặng cho đơn hàng của bạn, dùng được cho các đơn tiếp theo.',
         'footer' => 'Xin vui lòng trả lời email này nếu bạn có bất kỳ câu hỏi nào.',
     ],
     'consult_sign' => [

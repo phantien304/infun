@@ -12,8 +12,6 @@ return [
     'img_default' => 'data/banner/2021-12-17/infun-thiet-ke-dau-theo-yeu-cau.jpg',
     'url' => [
         'forgot_password' => '/account/change-password?token=',
-        // Phải có prefix /account để khớp route `account/verify-email`
-        // (VerifyEmailJob build link xác thực từ key này).
         'verify_email' => '/account/verify-email?token=',
         'product' => 'p',
         'category' => 'c',
@@ -35,17 +33,21 @@ return [
         ],
         'forgot_password' => [
             'from' => 'phanvantien0204@gmail.com',
-            'sender' => 'phanvantien0204@gmail.com'
+            'sender' => 'In&Fun Studio'
         ],
         'order_create' => [
             'from' => 'phanvantien0204@gmail.com',
-            'sender' => 'phanvantien0204@gmail.com',
+            'sender' => 'In&Fun Studio',
         ],
         'contact_create' => [
             'from' => 'phanvantien0204@gmail.com',
             'sender' => 'In&Fun Studio',
         ],
         'consult_sign' => [
+            'from' => 'phanvantien0204@gmail.com',
+            'sender' => 'In&Fun Studio',
+        ],
+        'voucher' => [
             'from' => 'phanvantien0204@gmail.com',
             'sender' => 'In&Fun Studio',
         ],

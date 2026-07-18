@@ -74,6 +74,17 @@ class JobMailer extends Base
         return $this->sendMail($from, $sender, getConfigDb('config_email_notification'), $subject, $content, $cc, $contentHtml);
     }
 
+    public function voucherReward($voucher)
+    {
+        $from = getModuleConfig('job_mailer.voucher.from');
+        $sender = getModuleConfig('job_mailer.voucher.sender');
+        $subject = sprintf(trans('mailer.voucher.subject'), getConfigDb('config_name'));
+        $content = '';
+        $cc = [];
+        $contentHtml = view('web::mailer.voucher_reward', compact('voucher'));
+        return $this->sendMail($from, $sender, $voucher->to_email, $subject, $content, $cc, $contentHtml);
+    }
+
     public function consultSignToCustomer()
     {
 

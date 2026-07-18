@@ -2,7 +2,8 @@
 
 > Đã có (2026-07-17): migration `voucher_reward_rule` + `voucher_reward_grant`,
 > entity `VoucherRewardRule`/`VoucherRewardGrant`, enum `VoucherRewardRuleStatus`,
-> repo `VoucherRewardRepository` (auto-bind theo convention Interfaces→Eloquent).
+> 2 repo tách theo bảng: `VoucherRewardRuleRepository` (rule + quota) và
+> `VoucherRewardGrantRepository` (grant) — auto-bind theo convention Interfaces→Eloquent.
 > Còn lại là nối vào luồng order — các bước dưới đây.
 
 **Nguyên tắc:** KHÔNG đụng `CreateOrderService` — tặng không xảy ra lúc đặt hàng.
@@ -11,53 +12,47 @@ Tặng khi đơn chuyển sang trạng thái hoàn tất, thu hồi khi hủy �
 
 ---
 
-## Bước 1 — `App\Services\Voucher\VoucherRewardService`
+## Bước 1 — `App\Services\Voucher\VoucherRewardService` ✅ (2026-07-17)
 
-- [ ] `grantForOrder(Orders $order): void`
-  1. `listRunningRules()`; mỗi rule chạy độc lập:
-  2. Check rẻ ngoài transaction: `matchesOrderTotal((float) $order->total)`
-     (cơ sở tính = `orders.total` — tổng cuối; muốn đổi sang sub_total thì sửa 1 chỗ này),
-     `grantExists(rule, order)` → có rồi thì skip (đơn lật status nhiều lần),
-     `max_per_user`: `countGrantsForUser(rule, user_id, email)` ≥ limit → skip.
-  3. Transaction:
-     a. `incrementGrantedCount(rule)` — affected 0 = hết quota → skip (không exception, đơn vẫn bình thường).
-     b. `createGrant([...])` — race 2 process cùng đơn: UNIQUE `uq_vrg_rule_order` ném
-        duplicate-key → catch `QueryException` code 23000 → `decrementGrantedCount` + skip.
-     c. Tạo voucher: `code` = gen 12-16 ký tự A-Z0-9 (retry nếu trúng `uq_voucher_code`),
-        `amount = reward_amount`, `date_expire = today + reward_expire_days`,
-        `to_email/to_name` = email/full_name của đơn, `from_name` = tên shop,
-        `order_id = $order->id`, `status = VoucherStatus::Active`.
-     d. Update `voucher_id` vào grant.
-  4. `DB::afterCommit`: dispatch job gửi mail voucher (bước 3).
-- [ ] `revokeForOrder(Orders $order): void` — đơn hủy sau khi đã tặng:
-  `grantsForOrder(order)` → mỗi grant: voucher `redeemed_balance == 0` →
-  `status = Revoked` + `decrementGrantedCount`; đã dùng một phần → KHÔNG revoke,
-  log warning cho CS xử tay (khách đã tiêu tiền thưởng của đơn bị hủy).
-- [ ] Complete lại sau khi hủy (lật qua lại): grant đã tồn tại → nếu voucher đang
-  `Revoked` và chưa dùng → reactivate `Active` + `incrementGrantedCount` lại
-  (guard quota như 3a).
+- [x] `grantForOrder()`: check rẻ ngoài transaction (`matchesOrderTotal` trên
+  `orders.total`, `rewardGrantExists`, `max_per_user` theo user_id/email) → transaction
+  {chiếm quota conditional → tạo voucher → insert grant}. Race duplicate-key →
+  **rollback cả transaction** (quota + voucher tự hoàn, KHÔNG decrement tay như
+  plan gốc — increment nằm cùng transaction nên rollback là đủ, sạch hơn).
+- [x] `revokeForOrder()`: `revokeUnused` conditional (status Active + redeemed = 0)
+  → affected > 0 mới `decrementRewardRuleCount`; đã dùng một phần → log CS xử tay.
+- [x] Reactivate khi đơn complete lại: chiếm quota lại → `reactivateRevoked`
+  conditional; noop → sentinel exception rollback quota. Giữ date_expire gốc.
+- [x] Code gen: 12 ký tự, alphabet bỏ 0/O/1/I, pre-check `findByCode` + retry 5 lần,
+  `uq_voucher_code` là chốt cuối.
+- [x] Repo hỗ trợ thêm vào `VoucherRepository`(+interface): `createVoucher`,
+  `revokeUnused`, `reactivateRevoked` (pattern `markFullyUsed` có sẵn).
+- ⚠ **Voucher tặng KHÔNG set `order_id`** (khác plan gốc): `resolveVoucher` coi
+  voucher có `order_id` là "voucher MUA trong đơn" → đòi link `orders_voucher`
+  (legacy) → sẽ không redeem được. Truy vết đơn gốc = `voucher_reward_grant.order_id`.
+- Mail: hook `notifyGranted()` để sẵn — TODO Bước 3.
 
-## Bước 2 — Observer nối vào luồng order
+## Bước 2 — Observer nối vào luồng order ✅ (2026-07-17)
 
-- [ ] `App\Observers\OrderVoucherRewardObserver` — copy đúng skeleton `OrderRewardObserver`:
-  `updated()` + `wasChanged('order_status_id')`;
-  status ∈ `getConfigDb('order_complete_status_all')` → `grantForOrder`;
-  status == `getConfigDb('order_cancel_status_id')` → `revokeForOrder`.
-- [ ] Đăng ký trong `AppServiceProvider::registerObservers()` (cạnh dòng
-  `Orders::observe(OrderRewardObserver::class)`).
-- [ ] ⚠ Observer chỉ bắn khi update qua Eloquent `save()`. Rà các chỗ đổi
-  `order_status_id` bằng `DB::table('orders')->update(...)` (nếu có) — những chỗ đó
-  observer câm. `OrderRewardObserver` sống được với hiện trạng nên rủi ro thấp,
-  nhưng vẫn grep xác nhận một lần.
-- [ ] Thân observer nên chỉ `dispatch(new GrantVoucherRewardJob($order->id))`
-  (queue redis có sẵn) thay vì chạy sync — CMS đổi status hàng loạt không bị chậm;
-  job idempotent nhờ `uq_vrg_rule_order` nên retry vô hại.
+- [x] `OrderVoucherRewardObserver` (skeleton `OrderRewardObserver`) — đăng ký trong
+  `AppServiceProvider::registerObservers()`. Thân observer CHỈ dispatch
+  `SyncVoucherRewardJob` (`$afterCommit = true` — chờ transaction đổi status commit).
+- [x] `SyncVoucherRewardJob`: đọc lại đơn từ DB lúc worker chạy rồi mới quyết định
+  grant/revoke theo status HIỆN TẠI (không tin status lúc dispatch — đơn lật
+  nhiều lần vẫn khớp trạng thái cuối). Idempotent, retry vô hại.
+- [x] Đã grep xác nhận: KHÔNG có `DB::table('orders')->update(...)` nào trong `app/`;
+  mọi chỗ đổi status (CMS API, hủy đơn `AccountService`, callback ZaloPay
+  `CheckoutPaymentService`) đều qua `orderRepo->upsertOrder` = `fill()->save()`
+  Eloquent → observer bắt đủ.
 
-## Bước 3 — Thông báo cho khách
+## Bước 3 — Thông báo cho khách ✅ (2026-07-17)
 
-- [ ] Job/Mailable gửi mã voucher vào `to_email`, set `voucher.sent_at` sau khi gửi
-  (cột có sẵn). Template nêu rõ: mệnh giá, mã, HSD, "áp dụng cho đơn tiếp theo".
-- [ ] Khách đăng nhập: voucher tự hiện ở "voucher của tôi" (`listForEmail` có sẵn) — không cần code thêm.
+- [x] `VoucherRewardSendEmailJob`: chỉ gửi khi voucher còn Active + claim `sent_at`
+  bằng conditional UPDATE (`whereNull('sent_at')`) → dispatch/retry trùng không gửi 2 lần.
+- [x] `JobMailer::voucherReward` + view `web::mailer.voucher_reward` — tận dụng khối
+  trans `mailer.voucher` có sẵn, thêm key `expire` + `reward_reason`; config
+  `job_mailer.voucher.from/sender` trong `config/module/web/config.php`.
+- [x] Khách đăng nhập: voucher tự hiện ở "voucher của tôi" (`listForEmail` có sẵn) — không cần code thêm.
 
 ## Bước 4 — Chiều SỬ DỤNG: không sửa gì
 
@@ -67,6 +62,22 @@ Voucher tặng là row `voucher` bình thường → flow redeem hiện tại
 **đơn dùng voucher 50k có được tính `min_order_total` cho lần tặng tiếp theo không?**
 (hiện tại: có, vì so trên `orders.total` sau khi đã trừ voucher — nếu muốn chặn
 "xài voucher vẫn được tặng tiếp" thì đổi cơ sở tính ở Bước 1.2).
+
+## Bước 4b — Nguồn chuyển trạng thái đơn (đặc biệt COD)
+
+Observer không quan tâm AI đổi status — 2 con đường cùng đi qua 1 cửa:
+
+- **Tay (go-live ngay)**: CMS React gọi API infun → Eloquent `save()` → observer bắn.
+  Admin xác nhận "giao thành công + đã thu COD" → grant; khách bom hàng → set hủy → revoke.
+- **Tự động (phase sau)**: tích hợp API/webhook ĐVVC (GHN/GHTK/VTP). Schema legacy ĐÃ CÓ
+  khung map `carrier_order_status` ↔ `orders_status_carrier_order` (chưa có code dùng):
+  webhook carrier → tra map → update `order_status_id` qua Eloquent → observer voucher
+  tự bắn, KHÔNG sửa code voucher. Carrier không có webhook → scheduled command poll
+  API mỗi X phút cho đơn đang giao.
+- ⚠ Ràng buộc cho cả 2: (1) đổi status phải qua Eloquent `save()`, không
+  `DB::table()->update()`; (2) với COD, "hoàn tất" (`order_complete_status_all`) phải
+  nghĩa là ĐÃ THU TIỀN — trạng thái "delivered" từ carrier nên map vào trạng thái
+  trung gian, đối soát COD xong mới đẩy lên hoàn tất.
 
 ## Bước 5 — CMS quản trị rule (phase sau, không chặn go-live)
 

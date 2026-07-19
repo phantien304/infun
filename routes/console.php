@@ -20,6 +20,15 @@ Schedule::command('stock:release-expired')
     ->runInBackground()
     ->description('Nhả hold tồn kho hết hạn (chống giữ tồn ảo khi flash sale)');
 
+// Thoát nhanh khi index gate rỗng — chạy mỗi phút không tốn kém.
+// Chỉ clamp XUỐNG (gate = min(gate, sellable DB)); nhập thêm hàng giữa sale
+// thì chạy lại flash-gate:seed. Xem docs/FLASH-GATE.md Phase 2.
+Schedule::command('flash-gate:reconcile')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->description('Cân quota Redis flash-gate theo sellable DB (chống leak suất)');
+
 Schedule::command('affiliate:prune-clicks')
     ->dailyAt('02:10')
     ->withoutOverlapping()

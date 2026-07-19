@@ -190,6 +190,7 @@ return [
     'ErrorProductOrder' => 'Không có sản phẩm trong đơn hàng của bạn.',
     'ErrorMinimum' => 'Số lượng đặt tối thiểu cho %s là %s',
     'ErrorCreateOrder' => 'Opt, có lỗi đã xảy ra, bạn không thể tạo đơn hàng.',
+    'ErrorSystemBusy' => 'Hệ thống đang có rất nhiều người đặt hàng cùng lúc, vui lòng thử lại sau ít giây.',
     'OrderProcessing' => 'Đơn hàng của bạn đang được xử lý, vui lòng không đóng trang hay bấm đặt hàng lại. Trang sẽ tự chuyển khi hoàn tất.',
     'OrderProcessingTitle' => 'Đang xử lý đơn hàng...',
     'ErrorAction' => 'Opt, có lỗi đã xảy ra.',
@@ -483,9 +484,6 @@ return [
             'confirm' => 'Nhập lại mật khẩu',
             'submit' => 'Đổi mật khẩu'
         ],
-        // Thông báo validation cho FormRequest auth (login / register /
-        // forgot / reset). KHÔNG hardcode tiếng Việt trong PHP — đọc qua
-        // trans('messages.auth.validation.*').
         'validation' => [
             'email_required'    => 'Vui lòng nhập email.',
             'email_invalid'     => 'Email không hợp lệ.',
@@ -498,19 +496,15 @@ return [
             'confirm_required'  => 'Vui lòng nhập lại mật khẩu.',
             'confirm_mismatch'  => 'Mật khẩu nhập lại không khớp.',
         ],
-        // Thông báo flash khi login/register thất bại.
         'login_failed'      => 'Email hoặc mật khẩu không đúng, hoặc tài khoản chưa được kích hoạt.',
         'register_failed'   => 'Đăng ký không thành công. Vui lòng thử lại.',
-        // Social login flash.
         'social_failed'     => 'Đăng nhập :provider thất bại. Vui lòng thử lại.',
         'social_success'    => 'Đăng nhập :provider thành công.',
-        // Verify email / forgot / reset flash.
         'verify_email_sent' => 'Một email xác nhận đã được gửi vào địa chỉ email của bạn. Vui lòng kích hoạt trước khi đăng nhập.',
         'email_not_found'   => 'Email không tồn tại.',
         'reset_link_sent'   => 'Một email đã được gửi vào địa chỉ email của bạn.',
         'token_invalid'     => 'Liên kết lỗi, vui lòng kiểm tra lại.',
         'password_changed'  => 'Thay đổi mật khẩu thành công.',
-        // Rate-limit đăng nhập.
         'throttle'          => 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau :seconds giây.',
     ]
 ];

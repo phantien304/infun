@@ -10,6 +10,8 @@ interface ProductStockRepositoryInterface extends BaseRepositoryInterface
 {
     public function lockSellableProductStocks(int $variantId, array $warehouseIds): EloquentCollection;
 
+    public function sellableProductStocks(int $variantId, array $warehouseIds): EloquentCollection;
+
     public function lockProductStock(int $variantId, int $warehouseId): ?ProductStock;
 
     public function save(ProductStock $stock): void;

@@ -64,7 +64,9 @@ class CheckoutController extends Controller
             $reserve = $this->reserveCheckout($items);
             if (! ($reserve['ok'] ?? true)) {
                 $failed = $reserve['failed'] ?? [];
-                $error = sprintf(trans('messages.ErrorStockProduct'), (string) ($failed['name'] ?? ''));
+                $error = ! empty($reserve['busy'])
+                    ? trans('messages.ErrorSystemBusy')
+                    : sprintf(trans('messages.ErrorStockProduct'), (string) ($failed['name'] ?? ''));
             }
         }
 
@@ -317,7 +319,13 @@ class CheckoutController extends Controller
             }
             Cache::forget($idemCacheKey);
             logError($e);
-            return redirect(route('checkout.index'))->with('failed', trans('messages.ErrorCreateOrder'))->withInput();
+            return redirect(route('checkout.index'))
+                ->with('failed', trans(
+                    \App\Helpers\ConcurrencyRetry::isLockContention($e)
+                        ? 'messages.ErrorSystemBusy'
+                        : 'messages.ErrorCreateOrder'
+                ))
+                ->withInput();
         } catch (\Throwable $e) {
             Cache::forget($idemCacheKey);
             logError($e);

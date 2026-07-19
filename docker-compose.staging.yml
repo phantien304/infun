@@ -1,0 +1,217 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# STAGING HOÀN CHỈNH — image BẤT BIẾN, KHÔNG mount code, DB/Redis/Meili RIÊNG.
+#
+# Đây là file ĐỘC LẬP (không layer lên docker-compose.yml) để chắc chắn KHÔNG
+# kế thừa bind-mount `./:/var/www/html` của bản dev. Chạy bằng đúng 1 -f:
+#
+#   # 1. Set APP_KEY (lấy từ .env dev hoặc: php artisan key:generate --show)
+#   #    PowerShell: $env:STAGING_APP_KEY = "base64:....="
+#   #    bash:       export STAGING_APP_KEY="base64:....="
+#
+#   # 2. Build image (nướng code hiện tại trong folder vào image)
+#   docker compose -f docker-compose.staging.yml build
+#
+#   # 3. Chạy
+#   docker compose -f docker-compose.staging.yml up -d
+#
+#   # (tuỳ chọn) 3 PHP worker sau LB để test tải:
+#   docker compose -f docker-compose.staging.yml up -d --scale infun-php=3
+#
+# ĐẨY CODE MỚI LÊN STAGING = build lại rồi up (xem docs/STAGING.md):
+#   docker compose -f docker-compose.staging.yml build \
+#     && docker compose -f docker-compose.staging.yml up -d
+#
+# Truy cập:  http://localhost:8100   (đổi STAGING_WEB_PORT nếu cần)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── ENV chung cho app / queue / scheduler ──────────────────────────────────
+x-app-env: &app-env
+  APP_ENV: staging
+  APP_DEBUG: "false"
+  # BẮT BUỘC: image không có .env nên APP_KEY phải truyền qua env.
+  APP_KEY: "${STAGING_APP_KEY:?Chua set STAGING_APP_KEY - xem docs/STAGING.md}"
+  # base URL cho các ngữ cảnh NGOÀI request (mail, sitemap, queue). Thẻ <base>
+  # trong request tự bám host thật (đã sửa ở head.blade.php).
+  APP_URL: "${STAGING_APP_URL:-http://localhost:8000}"
+
+  # BẮT BUỘC: image không ship .env nên config('app.locale') fallback về default
+  # cứng trong config/app.php ('en') nếu thiếu biến này — resources/lang/ CHỈ có
+  # 'vi' (không có 'en') nên mọi trans() sẽ ra raw key/rỗng. Dự án dùng vi duy nhất.
+  APP_LOCALE: vi
+  APP_LOCALES: vi
+  APP_FALLBACK_LOCALE: vi
+
+  DB_CONNECTION: mysql
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  DB_DATABASE: infun
+  DB_USERNAME: root
+  DB_PASSWORD: root
+
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+
+  SCOUT_DRIVER: meilisearch
+  MEILISEARCH_HOST: http://meilisearch:7700
+  MEILISEARCH_KEY: ""
+
+  MAIL_MAILER: smtp
+  MAIL_HOST: mailpit
+  MAIL_PORT: "1025"
+  LOG_CHANNEL: stderr
+
+services:
+  # ── App PHP-FPM (image bất biến, scale được) ─────────────────────────────
+  infun-php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.staging
+      target: app
+    image: infun-app:staging
+    restart: unless-stopped
+    # KHÔNG container_name → cho phép `--scale infun-php=N`
+    environment:
+      <<: *app-env
+    volumes:
+      - staging_logs:/var/www/html/storage/logs   # chỉ log, KHÔNG mount code
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+    networks: [infun-net]
+
+  # ── Queue worker (cùng image) ────────────────────────────────────────────
+  infun-queue:
+    image: infun-app:staging
+    restart: unless-stopped
+    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=90 --max-time=3600
+    environment:
+      <<: *app-env
+    depends_on:
+      infun-php: { condition: service_started }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [infun-net]
+
+  # ── Scheduler (schedule:work — CHỈ 1 instance, không scale) ──────────────
+  infun-scheduler:
+    image: infun-app:staging
+    container_name: infun-scheduler-staging
+    restart: unless-stopped
+    command: php artisan schedule:work
+    environment:
+      <<: *app-env
+    depends_on:
+      infun-php: { condition: service_started }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [infun-net]
+
+  # ── Nginx (public/ nướng sẵn trong image, cấu hình LB) ───────────────────
+  infun-web:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.staging
+      target: web
+    image: infun-web:staging
+    container_name: infun-web-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_WEB_PORT:-8100}:80"   # 8100 để không đụng web dev (8000)
+    depends_on:
+      - infun-php
+    networks: [infun-net]
+
+  # ── MySQL RIÊNG cho staging (volume độc lập, không đụng dev/Herd) ─────────
+  mysql:
+    image: mariadb:10.11
+    container_name: infun-mysql-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_DB_PORT:-3307}:3306"   # 3307 để không đụng MySQL dev (3306)
+    environment:
+      MARIADB_DATABASE: infun
+      MARIADB_ROOT_PASSWORD: root
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=1G
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-connections=300
+    volumes:
+      - staging_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [infun-net]
+
+  # ── Redis RIÊNG (session + queue + cache) ────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: infun-redis-staging
+    restart: always
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "512mb"
+      - --maxmemory-policy
+      - "noeviction"
+    volumes:
+      - staging_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks: [infun-net]
+
+  # ── Meilisearch RIÊNG (Scout) ────────────────────────────────────────────
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: infun-meili-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_MEILI_PORT:-7701}:7700"   # 7701 để không đụng dev (7700)
+    environment:
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - staging_meili_data:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "meilisearch --version >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [infun-net]
+
+  # ── Mailpit (bắt mail staging, không gửi thật) ───────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: infun-mailpit-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_MAIL_UI_PORT:-8026}:8025"   # UI (8026 tránh đụng dev 8025)
+    environment:
+      MP_MAX_MESSAGES: "500"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    networks: [infun-net]
+
+volumes:
+  staging_mysql_data:
+  staging_redis_data:
+  staging_meili_data:
+  staging_logs:
+
+networks:
+  infun-net:

@@ -1,0 +1,115 @@
+# syntax=docker/dockerfile:1
+# ═══════════════════════════════════════════════════════════════════════════
+# STAGING image cho infun (Laravel 12) — BẤT BIẾN, KHÔNG mount code.
+# Code + vendor + asset build đều được NƯỚNG vào image lúc `docker build`.
+# Muốn đổi code trên staging ⇒ build lại image (xem docs/STAGING.md).
+#
+# 3 stage:
+#   assets  → node build Vite ra public/build
+#   app     → php-fpm + code + vendor(--no-dev) + asset  (target chạy PHP)
+#   web     → nginx bake sẵn public/  (target chạy nginx, không cần mount)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────────────────────
+# STAGE 1 — build asset frontend (Vite → public/build)
+# ───────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS assets
+WORKDIR /app
+# Cài dependency trước (cache layer khi package.json không đổi)
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund
+# Copy phần source cần cho Vite build (dockerignore đã loại node_modules/vendor)
+COPY . .
+# vite build đọc vite.config.js (input: resources/web/css/app.css + resources/cms/js/app.jsx)
+RUN npm run build
+
+# ───────────────────────────────────────────────────────────────────────────
+# STAGE 2 — app: PHP-FPM 8.2 + code + vendor prod + opcache prod
+# ───────────────────────────────────────────────────────────────────────────
+FROM php:8.2-fpm-alpine AS app
+
+# Extension (giống Dockerfile dev để hành vi khớp)
+RUN apk add --no-cache \
+        bash git curl icu-libs libpng libjpeg-turbo freetype libzip oniguruma \
+        mariadb-client \
+    && apk add --no-cache --virtual .build-deps \
+        autoconf g++ make linux-headers \
+        icu-dev libpng-dev libjpeg-turbo-dev freetype-dev libzip-dev oniguruma-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" \
+        pdo_mysql mysqli mbstring bcmath intl zip gd exif pcntl \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del .build-deps \
+    && rm -rf /tmp/* /var/cache/apk/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# php.ini STAGING/PROD: opcache khoá timestamp (code bất biến) + JIT.
+# Khác dev ở validate_timestamps=0 → không stat file mỗi request, nhanh hơn,
+# nhưng ĐỔI CODE PHẢI BUILD LẠI IMAGE (không hot reload).
+RUN { \
+        echo "memory_limit=512M"; \
+        echo "upload_max_filesize=64M"; \
+        echo "post_max_size=64M"; \
+        echo "max_execution_time=60"; \
+        echo "expose_php=0"; \
+        echo "date.timezone=Asia/Ho_Chi_Minh"; \
+        echo "realpath_cache_size=4096k"; \
+        echo "realpath_cache_ttl=600"; \
+        echo ""; \
+        echo "[opcache]"; \
+        echo "opcache.enable=1"; \
+        echo "opcache.enable_cli=0"; \
+        echo "opcache.memory_consumption=256"; \
+        echo "opcache.interned_strings_buffer=16"; \
+        echo "opcache.max_accelerated_files=20000"; \
+        echo "opcache.validate_timestamps=0"; \
+        echo "opcache.fast_shutdown=1"; \
+        echo "opcache.jit_buffer_size=128M"; \
+        echo "opcache.jit=tracing"; \
+    } > /usr/local/etc/php/conf.d/zz-staging.ini
+
+WORKDIR /var/www/html
+
+# 1) Copy source (dockerignore loại .env, vendor, node_modules, .git, logs)
+COPY . .
+
+# 2) Cài vendor bản PROD (bỏ dev deps, autoloader tối ưu).
+#    --no-scripts: image build KHÔNG có .env nên không chạy artisan package:discover
+#    lúc này; manifest sẽ tự dựng ở runtime (entrypoint) khi đã có ENV thật.
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress --no-scripts \
+    && composer clear-cache
+
+# 3) Ghi đè asset đã build từ stage assets (thắng public/build cũ nếu có)
+COPY --from=assets /app/public/build ./public/build
+
+# 4) Thư mục ghi được cho www-data (FPM worker chạy user này)
+RUN mkdir -p storage/framework/cache storage/framework/sessions \
+             storage/framework/views storage/logs bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R ug+rwX storage bootstrap/cache
+
+COPY docker/php/entrypoint.staging.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# php-fpm pool tuning — cùng file docker/php/www.pool.conf dùng cho
+# docker-compose.scale.yml (ở đó mount qua volume; ảnh bất biến nên bake
+# thẳng vào build). Thiếu bước này pool chạy default stock Alpine
+# (pm.max_children=5) — quá thấp để test load/LB thực tế với nhiều replica.
+# zz- prefix đảm bảo nạp SAU www.conf gốc trong /usr/local/etc/php-fpm.d/*.conf.
+COPY docker/php/www.pool.conf /usr/local/etc/php-fpm.d/zz-www.conf
+
+EXPOSE 9000
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["php-fpm"]
+
+# ───────────────────────────────────────────────────────────────────────────
+# STAGE 3 — web: nginx phục vụ public/ đã nướng sẵn (KHÔNG mount code)
+# public/ lấy thẳng từ stage app (đã gồm build asset). Dùng cấu hình LB để
+# scale nhiều infun-php (`--scale infun-php=N`) ra sau upstream fpm_pool.
+# ───────────────────────────────────────────────────────────────────────────
+FROM nginx:1.27-alpine AS web
+COPY --from=app /var/www/html/public /var/www/html/public
+COPY docker/nginx/default.lb.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

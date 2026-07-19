@@ -123,7 +123,6 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             ->update(['status' => $revokedStatus]);
     }
 
-    /** Hồi sinh voucher đã Revoked (chưa dùng) — conditional, trả affected. */
     public function reactivateRevoked(array $voucherIds, int $revokedStatus, int $activeStatus): int
     {
         if (empty($voucherIds)) {

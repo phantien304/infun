@@ -166,16 +166,39 @@ class ProductData extends Data
                     'option_value_ids' => $valueIds,
                 ];
             })->values()->all(),
-            product_variants: $p->productVariants->map(fn ($v) => [
-                'id'               => $v->id,
-                'price'            => $v->price,
-                'sku'              => $v->sku,
-                'sort_order'       => $v->sort_order,
-                'is_default'       => $v->is_default,
-                'on_hand'          => $v->productStocks?->sum('on_hand') ?? 0,
-                'option_value_ids' => $v->productVariantAttributes
-                    ->pluck('option_value_id')->values()->all(),
-            ])->values()->all(),
+            product_variants: $p->productVariants->map(function ($v) {
+                $special = $v->productVariantSpecials
+                    ?->firstWhere('user_group_id', 1);
+
+                $defaultWarehouseId = (int) (getConfigDb('config_warehouse_id') ?: 1);
+                $stocks   = $v->productStocks ?? collect();
+                $onHand   = (int) ($stocks->sum('on_hand') ?? 0);
+                $reserved = (int) ($stocks->sum('reserved') ?? 0);
+                $policyStock = $stocks->firstWhere('warehouse_id', $defaultWarehouseId)
+                    ?? $stocks->first();
+                $policy = $policyStock?->inventory_policy instanceof \App\Enums\StockPolicy
+                    ? $policyStock->inventory_policy->value
+                    : (int) ($policyStock?->inventory_policy ?? 0);
+
+                return [
+                    'id'                 => $v->id,
+                    'price'              => $v->price,
+                    'regular_price'      => $v->regular_price !== null ? (string) $v->regular_price : '',
+                    'sku'                => $v->sku,
+                    'minimum'            => $v->minimum !== null ? (int) $v->minimum : 1,
+                    'sort_order'         => $v->sort_order,
+                    'is_default'         => $v->is_default,
+                    'on_hand'            => $onHand,
+                    'reserved'           => $reserved,
+                    'available'          => max(0, $onHand - $reserved),
+                    'inventory_policy'   => $policy,
+                    'special_price'      => $special?->price !== null ? (string) $special->price : '',
+                    'special_date_start' => $special?->date_start?->toDateString() ?? '',
+                    'special_date_end'   => $special?->date_end?->toDateString() ?? '',
+                    'option_value_ids'   => $v->productVariantAttributes
+                        ->pluck('option_value_id')->values()->all(),
+                ];
+            })->values()->all(),
         );
     }
 }

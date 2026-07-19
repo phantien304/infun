@@ -1,10 +1,20 @@
 .git
 node_modules
 vendor
+# Manifest cache sinh trên máy dev (package:discover với đủ require-dev,
+# vd barryvdh/laravel-debugbar) — mang vào image `composer install --no-dev`
+# sẽ trỏ tới class không còn trong vendor → fatal lúc bootstrap framework.
+bootstrap/cache/*.php
 storage/logs/*
 storage/framework/cache/data/*
 storage/framework/sessions/*
 storage/framework/views/*
+# Cache chẩn đoán chỉ dùng khi dev (APP_DEBUG=true local) — barryvdh/debugbar,
+# itsgoingd/clockwork đều require-dev, ảnh staging/prod không cần. Máy dev tích
+# luỹ vài GB (clockwork lưu full request/response/query dump) → mang vào image
+# vừa phình dung lượng vừa treo `chown -R` trong entrypoint hàng chục giây.
+storage/clockwork/*
+storage/debugbar/*
 .env
 .env.*
 !.env.example

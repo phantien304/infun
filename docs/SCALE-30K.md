@@ -42,35 +42,35 @@
 
 ### Search / Images / CDN
 - [ ] **Meilisearch** instance riêng, scale độc lập (đã offload search khỏi DB).
-- [ ] R2 + **Cloudflare CDN** (custom domain `cdn.lartisan.vn`); cân nhắc **Cloudflare Image Resizing** để khỏi pre-gen từng size.
+- [~] R2 + **Cloudflare CDN** (custom domain `cdn.lartisan.vn`); **Cloudflare Image Resizing: code sẵn** *(2026-07-18)* — `config/media.php` khối `cf_resizing` + `MyStorage::cloudflareResizeUrl()` (URL `/cdn-cgi/image/width=,height=,fit=cover,format=auto/...`). Bật bằng `CF_IMAGE_RESIZING=true` SAU khi zone CF enable Image Resizing (trả phí theo lượt resize gốc); tắt là quay về pre-gen như cũ.
 
 ### Queue / Scheduler
 - [x] **Queue worker** chạy bền: staging `infun-queue` (compose, `--max-time=3600` recycle chống leak); prod `deploy/systemd/infun-queue.service` (Restart=always). Horizon = nâng cấp tuỳ chọn (`composer require laravel/horizon`).
 - [x] **Scheduler**: staging container `infun-scheduler` (`schedule:work`, CHỈ 1 instance); prod `deploy/systemd/infun-scheduler.service` hoặc cron. **Đã xác nhận `stock:release-expired` schedule `everyMinute()` + `withoutOverlapping()` trong `routes/console.php`** (Laravel 12 — không dùng Kernel.php).
 
 ### Middleware / config prod
-- [ ] **Gắn lại `cache_page`** (đang tắt để test) — dùng Redis để chia sẻ giữa các app server; cân nhắc invalidate khi sản phẩm đổi.
+- [x] **Gắn lại `cache_page`** *(2026-07-18)*: group `['maintenance', 'cache_page', 'limit_access']` trong `routes/web.php`. Store mới `CacheGate::pageStore()` — Redis tag KÉP `[GLOBAL_TAG, PAGE_TAG]` share giữa app server; **invalidate khi content đổi**: `CacheFlushObserver::flush()` gọi `CacheGate::flushPages()` (chỉ xoá tag page, giữ repo cache) cho mọi model trong `$cacheMap` (Product/Category/Menu/Blog…); đổi setting vẫn `flushAll()` quét cả hai. TTL giữ 24h (invalidation chủ động lo phần stale).
 - [x] Chỉnh **throttle** cho prod: named limiter `throttle:add-to-cart` (30/phút) + `throttle:save-order` (10/phút) — mức đặt trong `config/throttle.php`, nới qua env khi chạy k6 (`THROTTLE_ADD_TO_CART=100000`). Key theo **user → session → IP** thay vì thuần IP (sau LB/CGNAT cả văn phòng chung IP sẽ không chặn nhầm khách thật). Kèm `trustProxies` trong `bootstrap/app.php` để `request->ip()` ra IP client thật sau LB.
 
 ---
 
 ## C. Flash-sale (điểm nóng GHI) — kế hoạch chi tiết: `docs/FLASH-GATE.md`
 
-- [ ] Nút cổ chai = 1 row `product_stock` bị lock `FOR UPDATE` serialize (đúng, để chống oversell). Muốn chịu tải cao:
-  - [ ] **Redis atomic gate** (`DECR stock:{variant}`) làm admission — chỉ người có suất mới vào reservation DB; reconcile Redis↔DB.
-  - [ ] hoặc **Waiting room** (Cloudflare Waiting Room / hàng đợi xử lý tuần tự).
-- [ ] `innodb_lock_wait_timeout` hợp lý + **retry khi lock timeout** (tránh 5xx).
-- [ ] Reservation TTL (`cart_applied_ttl_minutes`) + job dọn hạn phải chạy đủ dày.
+- [x] Nút cổ chai = 1 row `product_stock` bị lock `FOR UPDATE` serialize (đúng, để chống oversell). Đã triển khai *(2026-07-18)*:
+  - [x] **Redis atomic gate** (Lua, `FlashGateService`) làm admission trước transaction trong `reserveCheckout` — debit theo delta hold, credit khi hold nhả (afterCommit), fail-open khi Redis lỗi; vận hành: `flash-gate:seed/status/teardown/reconcile` (reconcile schedule `everyMinute`, CHỈ clamp xuống). Key trên Redis session/queue (noeviction) — KHÔNG đặt instance cache.
+  - Waiting room (Cloudflare) = ngoài phạm vi, chỉ cân nhắc nếu k6 cho thấy gate + retry chưa đủ.
+- [x] `innodb_lock_wait_timeout=10` (prod `deploy/mysql/master.cnf` đã có; staging thêm vào `docker-compose.scale.yml`) + **retry lock 1205/1213** jitter 50-150ms (`App\Helpers\ConcurrencyRetry`) trong `reserveCheckout` + `CreateOrderService::create` (thay `attempts:3`); hết retry → `messages.ErrorSystemBusy`, không 5xx.
+- [ ] Reservation TTL (`cart_applied_ttl_minutes`) + job dọn hạn phải chạy đủ dày — `stock:release-expired` đã `everyMinute()`; khi sale lớn cân nhắc TTL ngắn hơn + `--limit` cao hơn 500.
 
 ---
 
-## D. Kiểm thử tải (k6)
+## D. Kiểm thử tải (k6) — runbook đầy đủ: `k6/DISTRIBUTED.md` *(2026-07-18)*
 
-- [ ] 30k thật cần **k6 phân tán**: k6-operator (k8s) hoặc **Grafana Cloud k6** (một máy không kéo nổi 30k VU).
+- [~] 30k thật cần **k6 phân tán**: 3 phương án (Grafana Cloud k6 / k6-operator / N máy chia `TARGET`) — so sánh + lệnh trong `k6/DISTRIBUTED.md`. **Chạy thật = việc vận hành, chưa chạy.**
 - [ ] Chạy trên **staging giống prod** (DB/Redis/nhiều app server) — không phải local.
-- [ ] Kịch bản: `mixed-30k.js` với `-e TARGET=30000` + tỷ lệ nhánh; nới throttle, `payment_code=cod`, `MAIL_MAILER=log`, DB staging (truncate order sau test).
-- [ ] **Verify oversell** sau test (SQL): số đơn thành công × qty ≤ tồn ban đầu; `product_stock.reserved ≤ on_hand`; `on_hand ≥ 0`.
-- [ ] Quan sát server-side: RAM, CPU, php-fpm busy workers, DB `SHOW PROCESSLIST`/lag, Redis.
+- [ ] Kịch bản: `mixed-30k.js` với `-e TARGET=30000` + tỷ lệ nhánh; nới throttle, `payment_code=cod`, `MAIL_MAILER=log`, DB staging (truncate order sau test). Ma trận **gate OFF vs ON** cho `cart-contention.js` (FLASH-GATE Phase 4) trong runbook.
+- [x] **Verify oversell**: `k6/verify-oversell.sql` — 4 nhóm bất biến (on_hand/reserved không âm, Σ bán ≤ tồn đầu, đối soát movement, hold mồ côi) + công thức gate-leak (`gate còn + đã bán + hold sống = seed`).
+- [ ] Quan sát server-side: RAM, CPU, php-fpm busy workers, DB `SHOW PROCESSLIST`/lag, Redis — lệnh cụ thể trong runbook mục 3.
 
 ---
 
@@ -90,9 +90,9 @@
 2. ✅ **Read/write split** — replica staging tự dựng (GTID); prod theo `deploy/mysql/` + `deploy/README.md`.
 3. ✅ **Nhiều app server + LB + ProxySQL** + **php-fpm tuning** — hoàn tất (ProxySQL: `docker/proxysql/` staging + `deploy/proxysql/` prod).
 4. ✅ **Queue worker + scheduler** — compose services + systemd units; Horizon = nâng cấp sau.
-5. **Gắn lại cache_page (Redis)** + Cloudflare Image Resizing.
-6. **Flash-sale gate (Redis/waiting room)** — chỉ khi kịch bản flash thật sự lớn.
-7. **k6 phân tán trên staging** để đo & verify oversell.
+5. ✅ **Gắn lại cache_page (Redis)** + Cloudflare Image Resizing (code sẵn, bật bằng env) — đợt 2026-07-18.
+6. ✅ **Flash-sale gate (Redis)** — FlashGateService + commands + retry lock; đo thật ở bước 7. Waiting room = dự phòng nếu đo chưa đủ.
+7. ⏳ **k6 phân tán trên staging** — runbook `k6/DISTRIBUTED.md` + `k6/verify-oversell.sql` sẵn; VIỆC CHẠY cần staging + tay người (xem checklist trong runbook).
 
 ---
 
@@ -155,3 +155,44 @@ php artisan tinker --execute="dd(DB::selectOne('select @@hostname h')->h, DB::co
 `app/Providers/AppServiceProvider.php`, `bootstrap/app.php`, `routes/web.php`;
 và `docker compose -f docker-compose.yml -f docker-compose.lb.yml -f docker-compose.scale.yml config -q`
 để Docker tự validate merge.
+
+---
+
+## Đợt 3 — mục 5-7 (2026-07-18)
+
+**Mục 5 — cache_page:** gắn lại vào group web (`routes/web.php`); `CacheGate` thêm
+`PAGE_TAG` + `pageStore()` (tag kép) + `flushPages()`; `CachePage` dùng `pageStore()`;
+`CacheFlushObserver` flush page khi content model đổi. **CF Image Resizing:**
+`config/media.php` khối `cf_resizing` + `MyStorage::cloudflareResizeUrl()` — opt-in
+qua `CF_IMAGE_RESIZING=true` (mặc định tắt, giữ pre-gen).
+
+**Mục 6 — flash gate (docs/FLASH-GATE.md Phase 1-3):**
+`config/flash_gate.php`, `app/Services/Stock/FlashGateService.php` (Lua
+acquire/release/clamp-down, fail-open, index SET), hook `StockService`
+(`flashGatePrePass` delta-debit trước transaction; credit `afterCommit` khi hold
+nhả trong `releaseReservationRow`; `deductForOrder` không credit), 4 command
+`flash-gate:*` + reconcile schedule `everyMinute`, repo thêm
+`sellableProductStocks()` (không lock). Retry lock: `App\Helpers\ConcurrencyRetry`
+(1205/1213, jitter 50-150ms) trong `reserveCheckout` + `CreateOrderService::create`
+(bỏ `attempts:3`); message mới `messages.ErrorSystemBusy`; staging thêm
+`--innodb-lock-wait-timeout=10` (prod cnf đã có sẵn).
+
+**Mục 7 — k6:** `k6/DISTRIBUTED.md` (3 phương án phân tán, chuẩn bị staging, ma
+trận gate OFF/ON, lệnh quan sát, ngưỡng đạt) + `k6/verify-oversell.sql`.
+
+**⚠ Verify bằng Herd (sandbox không có PHP):**
+
+```bash
+php -l app/Services/Stock/FlashGateService.php app/Services/Stock/StockService.php \
+       app/Helpers/ConcurrencyRetry.php app/Helpers/CacheGate.php app/Helpers/MyStorage.php \
+       app/Http/Middleware/CachePage.php app/Observers/CacheFlushObserver.php \
+       app/Http/Controllers/Web/CheckoutController.php app/Services/Checkout/CreateOrderService.php \
+       app/Console/Commands/FlashGate*.php config/flash_gate.php config/media.php \
+       routes/web.php routes/console.php
+php artisan config:clear && php artisan route:list > /dev/null   # bind + route OK?
+php artisan schedule:list | grep flash-gate                       # reconcile có mặt?
+```
+
+**Còn treo sau đợt 3:** unit test Pest cho gate (Lua debit/credit floor-0, delta,
+fail-open, reconcile clamp — FLASH-GATE Phase 4); chạy k6 thật trên staging;
+gắn Cloudflare Image Resizing trên dashboard CF rồi mới bật env.

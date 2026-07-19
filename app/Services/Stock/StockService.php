@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\Enums\StockMovementType;
 use App\Enums\StockPolicy;
 use App\Exceptions\InsufficientStockException;
+use App\Helpers\ConcurrencyRetry;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\StockReservation;
 use App\Repositories\Interfaces\ProductStockRepositoryInterface;
@@ -12,6 +13,7 @@ use App\Repositories\Interfaces\StockMovementRepositoryInterface;
 use App\Repositories\Interfaces\StockReservationRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class StockService
 {
@@ -20,6 +22,7 @@ class StockService
         protected StockReservationRepositoryInterface $stockReservationRepo,
         protected StockMovementRepositoryInterface $stockMovementRepo,
         protected WarehouseService $warehouseService,
+        protected FlashGateService $flashGate,
     ) {
     }
 
@@ -58,8 +61,22 @@ class StockService
             return ['ok' => true];
         }
 
+        // ── Flash-gate pre-pass (docs/FLASH-GATE.md Phase 1) ──
+        // Admission TRƯỚC khi mở transaction: variant được seed mà hết suất →
+        // từ chối ngay bằng Redis (~µs), không mở transaction / không xếp hàng
+        // FOR UPDATE trên row product_stock. Debit theo DELTA so với hold đang
+        // có để bấm lại / đổi qty không bị double-debit. Fail thì hoàn các
+        // debit đã lấy trong pre-pass. Variant không gated / Redis lỗi →
+        // fail-open, đi thẳng đường DB như cũ.
+        $gateDebits = $this->flashGatePrePass($items, $sessionHolder);
+        if (isset($gateDebits['failed'])) {
+            return ['ok' => false, 'failed' => $gateDebits['failed']];
+        }
+
         try {
-            return $this->productStockRepo->transaction(function () use ($items, $sessionHolder, $userId) {
+            // ConcurrencyRetry: 1205/1213 (lock dồn trên product_stock) →
+            // rollback + jitter 50-150ms + thử lại tối đa 2 lần, thay vì 5xx.
+            return ConcurrencyRetry::run(fn () => $this->productStockRepo->transaction(function () use ($items, $sessionHolder, $userId) {
                 foreach ($items as $item) {
                     $variantId = (int) ($item['product_variant_id'] ?? 0);
                     $quantity = (int) ($item['quantity'] ?? 0);
@@ -78,9 +95,102 @@ class StockService
                 }
 
                 return ['ok' => true];
-            });
+            }));
         } catch (ReservationUnavailable $e) {
+            // DB (tầng chống oversell cuối) từ chối → hoàn suất gate đã debit
+            $this->refundGateDebits($gateDebits['debits'] ?? []);
+
             return ['ok' => false, 'failed' => $e->info];
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Hết retry vẫn kẹt lock (hoặc lỗi query khác) → hoàn suất gate.
+            // Kẹt lock trả busy=true để controller hiện ErrorSystemBusy
+            // thay vì báo "hết hàng" sai sự thật; lỗi khác ném tiếp.
+            $this->refundGateDebits($gateDebits['debits'] ?? []);
+            if (! ConcurrencyRetry::isLockContention($e)) {
+                throw $e;
+            }
+            logError('reserveCheckout lock contention sau retry: ' . $e->getMessage());
+
+            return ['ok' => false, 'busy' => true, 'failed' => [
+                'name' => '', 'available' => 0, 'requested' => 0,
+            ]];
+        }
+    }
+
+    /**
+     * Pre-pass gate cho reserveCheckout. Trả:
+     *  - ['debits' => [variantId => qty đã debit]] khi qua hết (rỗng nếu gate
+     *    tắt / không item nào gated),
+     *  - ['failed' => [...]] cùng shape với ReservationUnavailable khi 1 item
+     *    hết suất (các debit trước đó đã được hoàn bên trong).
+     */
+    private function flashGatePrePass(array $items, string $sessionHolder): array
+    {
+        if (! $this->flashGate->enabled()) {
+            return ['debits' => []];
+        }
+
+        $debits = [];
+        foreach ($items as $item) {
+            $variantId = (int) ($item['product_variant_id'] ?? 0);
+            $quantity = (int) ($item['quantity'] ?? 0);
+            if ($variantId <= 0 || $quantity <= 0) {
+                continue;
+            }
+
+            // GET rẻ trước, khỏi tốn query DB đếm hold cho variant thường
+            if ($this->flashGate->isGated($variantId) !== true) {
+                continue;
+            }
+
+            $held = $this->holderHeldQty($sessionHolder, $variantId);
+            $delta = $quantity - $held;
+
+            if ($delta < 0) {
+                // Giảm qty: trả suất ngay (transaction dưới sẽ shrink hold DB).
+                // Nếu transaction sau đó fail → gate over-credit tạm thời,
+                // reconcile everyMinute clamp lại — chấp nhận (DB vẫn chặn).
+                $this->flashGate->release($variantId, -$delta);
+                continue;
+            }
+            if ($delta === 0) {
+                continue; // bấm lại cùng qty — suất đã debit từ lần trước
+            }
+
+            $acquired = $this->flashGate->tryAcquire($variantId, $delta);
+            if ($acquired === false) {
+                $this->refundGateDebits($debits);
+
+                return ['failed' => [
+                    'name'      => (string) ($item['name'] ?? ''),
+                    'available' => max(0, $held + (int) ($this->flashGate->remaining($variantId) ?? 0)),
+                    'requested' => $quantity,
+                ]];
+            }
+            if ($acquired === true) {
+                $debits[$variantId] = ($debits[$variantId] ?? 0) + $delta;
+            }
+            // null = key vừa teardown / Redis lỗi → fail-open
+        }
+
+        return ['debits' => $debits];
+    }
+
+    private function holderHeldQty(string $holder, int $variantId): int
+    {
+        if ($holder === '') {
+            return 0;
+        }
+
+        return (int) $this->stockReservationRepo
+            ->reservationsForVariant($holder, $variantId)
+            ->sum('quantity');
+    }
+
+    private function refundGateDebits(array $debits): void
+    {
+        foreach ($debits as $variantId => $qty) {
+            $this->flashGate->release((int) $variantId, (int) $qty);
         }
     }
 
@@ -208,6 +318,13 @@ class StockService
         $quantity = (int) $freshStockReservation->quantity;
         if ($this->stockReservationRepo->deleteReservationById((int) $freshStockReservation->id) !== 1) {
             return;
+        }
+
+        // Flash gate: hold nhả ra (hủy giỏ / hết hạn) → trả suất admission,
+        // credit CHỈ sau commit (rollback thì không trả nhầm). deductForOrder
+        // cố ý KHÔNG credit — suất đó đã tiêu thụ thành hàng bán thật.
+        if ($quantity > 0) {
+            DB::afterCommit(fn () => $this->flashGate->release($variantId, $quantity));
         }
 
         if ($productStock && $quantity > 0) {

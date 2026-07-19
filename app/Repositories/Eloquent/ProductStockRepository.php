@@ -23,6 +23,14 @@ class ProductStockRepository extends QueryableRepository implements ProductStock
             ->get();
     }
 
+    public function sellableProductStocks(int $variantId, array $warehouseIds): Collection
+    {
+        return $this->resetModel()
+            ->where('product_variant_id', $variantId)
+            ->whereIn('warehouse_id', $warehouseIds)
+            ->get();
+    }
+
     public function lockProductStock(int $variantId, int $warehouseId): ?ProductStock
     {
         return $this->resetModel()

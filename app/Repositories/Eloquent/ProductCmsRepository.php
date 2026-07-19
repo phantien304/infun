@@ -39,6 +39,7 @@ class ProductCmsRepository extends QueryableRepository implements ProductCmsRepo
             'productOptions.option',
             'productVariants.productVariantAttributes',
             'productVariants.productStocks',
+            'productVariants.productVariantSpecials',
             'defaultVariant',
         ];
     }

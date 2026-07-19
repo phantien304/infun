@@ -7,6 +7,7 @@ use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 use App\Repositories\Interfaces\WardRepositoryInterface;
 use App\Repositories\Interfaces\ZoneRepositoryInterface;
+use App\Helpers\ConcurrencyRetry;
 use App\Services\Affiliate\AffiliateConversionService;
 use App\Services\Currency\CurrencyService;
 use App\Services\Stock\StockService;
@@ -29,7 +30,7 @@ class CreateOrderService
 
     public function create(CheckoutPromotions $promotions, array $params, array $totalData, int $total): int
     {
-        return $this->orderRepo->transaction(function () use ($promotions, $params, $totalData, $total) {
+        return ConcurrencyRetry::run(fn () => $this->orderRepo->transaction(function () use ($promotions, $params, $totalData, $total) {
             $uniqid = strtoupper(uniqid());
 
             $order = $this->orderRepo->upsertOrder($this->buildOrderRow($params, $total, $uniqid));
@@ -51,7 +52,7 @@ class CreateOrderService
             });
 
             return $order->id;
-        }, attempts: 3);
+        }));
     }
 
     protected function buildOrderRow(array $params, int $total, string $uniqid): array

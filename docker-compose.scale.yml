@@ -226,6 +226,10 @@ services:
       - --max-connections=300
       - --tmp-table-size=64M
       - --max-heap-table-size=64M
+      # Flash-sale: FOR UPDATE dồn trên row product_stock — timeout ngắn để
+      # request không treo giữ connection; app tự retry (ConcurrencyRetry,
+      # SQLSTATE 1205/1213). Khớp deploy/mysql/master.cnf (prod =10).
+      - --innodb-lock-wait-timeout=10
       # ── Replication (master) ──
       - --server-id=1
       - --log-bin=mysql-bin

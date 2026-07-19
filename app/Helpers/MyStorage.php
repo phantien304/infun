@@ -76,6 +76,31 @@ class MyStorage
         return urldecode($url);
     }
 
+    private function cloudflareResizeUrl(string $path, int $width, int $height): ?string
+    {
+        $cf = (array) config('media.cf_resizing', []);
+        if (empty($cf['enabled'])) {
+            return null;
+        }
+
+        $base = rtrim((string) ($cf['base'] ?? ''), '/');
+        $sourcePath = ltrim($path, '/');
+
+        if ($base === '') {
+            $parts = parse_url((string) $this->url($path));
+            if (empty($parts['host'])) {
+                return null;
+            }
+            $base = ($parts['scheme'] ?? 'https') . '://' . $parts['host'];
+            $sourcePath = ltrim((string) ($parts['path'] ?? ''), '/');
+        }
+
+        $options = trim((string) ($cf['options'] ?? ''), ',');
+        $options = 'width=' . $width . ',height=' . $height . ($options !== '' ? ',' . $options : '');
+
+        return $base . '/cdn-cgi/image/' . $options . '/' . $sourcePath;
+    }
+
     public function resizeImage(?string $path, $width = 50, $height = 50, $module = 'web')
     {
         if (!$path) {
@@ -93,6 +118,11 @@ class MyStorage
             if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'svg') {
                 return $this->url($path);
             }
+
+            if ($cfUrl = $this->cloudflareResizeUrl($path, (int) $width, (int) $height)) {
+                return $cfUrl;
+            }
+
             $cachePath = trim((string) (setting('folder_cache') ?: 'cache'), '/')
                 . '/' . $width . 'x' . $height . '/' . $path;
 

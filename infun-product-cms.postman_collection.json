@@ -1,0 +1,409 @@
+{
+  "info": {
+    "name": "INFUN — Product CMS (rcms)",
+    "_postman_id": "00000000-0000-4000-8000-000000000001",
+    "description": "CMS Product API (prefix /rcms, Sanctum Bearer). Chạy \"Auth - Login\" trước để tự lưu {{token}}. Sửa {{base_url}} theo môi trường (vd http://localhost:8000/rcms khi `php artisan serve`).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/rcms"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "product_id",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@infun.vn\",\n  \"password\": \"password\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Trả { data: { token, account, permissions } }. Test script tự lưu token vào {{token}}."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const j = pm.response.json();",
+              "if (j && j.data && j.data.token) {",
+              "  pm.collectionVariables.set('token', j.data.token);",
+              "  console.log('Saved token');",
+              "} else {",
+              "  console.log('No token in response');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resource - dropdown (list_for_product)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/resource?list_for_product=true",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "resource"
+          ],
+          "query": [
+            {
+              "key": "list_for_product",
+              "value": "true"
+            }
+          ]
+        },
+        "description": "Nguồn dropdown cho form: resource.option[] (kèm option_values), tax_class, stock_status, length_class, weight_class, user_group... Lấy option_id + option_value_id ở đây để tạo product có biến thể."
+      }
+    },
+    {
+      "name": "Product - List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product?per_page=20&keyword=&sort=id&order=desc&deleted_at=-1",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product"
+          ],
+          "query": [
+            {
+              "key": "per_page",
+              "value": "20"
+            },
+            {
+              "key": "keyword",
+              "value": ""
+            },
+            {
+              "key": "sort",
+              "value": "id"
+            },
+            {
+              "key": "order",
+              "value": "desc"
+            },
+            {
+              "key": "deleted_at",
+              "value": "-1"
+            }
+          ]
+        },
+        "description": "deleted_at: -1 = tất cả, 0 = chỉ đã xoá, 1 = chưa xoá. sort: id|model|badge|quantity|name."
+      }
+    },
+    {
+      "name": "Product - Create (Simple)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"SP-TEST-001\",\n  \"sku\": \"SKU-TEST-001\",\n  \"stock_status_id\": 7,\n  \"shipping\": 1,\n  \"is_add_cart\": 1,\n  \"is_custom\": 0,\n  \"is_review\": 1,\n  \"weight\": 0.5,\n  \"weight_class_id\": 2,\n  \"length_class_id\": 1,\n  \"tax_class_id\": 0,\n  \"sort_order\": 0,\n  \"badge\": \"sale\",\n  \"date_available\": \"2026-07-19\",\n  \"link_sale\": \"\",\n  \"link_sale_custom\": [],\n  \"product_descriptions\": [\n    {\n      \"language_code\": \"vi\",\n      \"name\": \"Sản phẩm test đơn giản\",\n      \"description\": \"Mô tả ngắn\",\n      \"content\": \"<p>Nội dung</p>\",\n      \"tag\": \"\",\n      \"meta_title\": \"\",\n      \"meta_description\": \"\",\n      \"meta_keyword\": \"\"\n    }\n  ],\n  \"product_categories\": [],\n  \"product_filters\": [],\n  \"product_related\": [],\n  \"product_ingredients\": [],\n  \"product_attributes\": [],\n  \"product_images\": [],\n  \"product_discounts\": [],\n  \"product_rewards\": [],\n  \"product_options\": [],\n  \"product_variants\": [\n    {\n      \"id\": 0,\n      \"price\": 150000,\n      \"regular_price\": 200000,\n      \"sku\": \"SKU-TEST-001\",\n      \"minimum\": 1,\n      \"on_hand\": 100,\n      \"inventory_policy\": 0,\n      \"sort_order\": 0,\n      \"is_default\": 1,\n      \"special_price\": 129000,\n      \"special_date_start\": \"2026-07-19\",\n      \"special_date_end\": \"2026-08-19\",\n      \"option_value_ids\": []\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Sản phẩm đơn giản: product_options rỗng + đúng 1 product_variants[is_default=1]. Backend ghi price/regular_price/minimum vào product_variant, on_hand/inventory_policy vào product_stock, special_* vào product_variant_special. Trả 201 { data }."
+      }
+    },
+    {
+      "name": "Product - Create (With Variants)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"SP-TEST-VAR-001\",\n  \"sku\": \"SKU-VAR-001\",\n  \"stock_status_id\": 7,\n  \"shipping\": 1,\n  \"is_add_cart\": 1,\n  \"is_custom\": 0,\n  \"is_review\": 1,\n  \"weight\": 0.5,\n  \"weight_class_id\": 2,\n  \"length_class_id\": 1,\n  \"tax_class_id\": 0,\n  \"sort_order\": 0,\n  \"product_descriptions\": [\n    {\n      \"language_code\": \"vi\",\n      \"name\": \"Sản phẩm test có biến thể\",\n      \"description\": \"\",\n      \"content\": \"\",\n      \"tag\": \"\",\n      \"meta_title\": \"\",\n      \"meta_description\": \"\",\n      \"meta_keyword\": \"\"\n    }\n  ],\n  \"product_categories\": [],\n  \"product_filters\": [],\n  \"product_related\": [],\n  \"product_ingredients\": [],\n  \"product_attributes\": [],\n  \"product_images\": [],\n  \"product_discounts\": [],\n  \"product_rewards\": [],\n  \"product_options\": [\n    {\n      \"option_id\": 1,\n      \"role\": 1,\n      \"required\": 0,\n      \"value\": \"\",\n      \"option_value_ids\": [\n        11,\n        12\n      ]\n    }\n  ],\n  \"product_variants\": [\n    {\n      \"id\": 0,\n      \"price\": 150000,\n      \"regular_price\": 200000,\n      \"sku\": \"VAR-S\",\n      \"minimum\": 1,\n      \"on_hand\": 50,\n      \"inventory_policy\": 0,\n      \"sort_order\": 0,\n      \"is_default\": 1,\n      \"special_price\": \"\",\n      \"special_date_start\": \"\",\n      \"special_date_end\": \"\",\n      \"option_value_ids\": [\n        11\n      ]\n    },\n    {\n      \"id\": 0,\n      \"price\": 160000,\n      \"regular_price\": 210000,\n      \"sku\": \"VAR-M\",\n      \"minimum\": 2,\n      \"on_hand\": 30,\n      \"inventory_policy\": 1,\n      \"sort_order\": 1,\n      \"is_default\": 0,\n      \"special_price\": 139000,\n      \"special_date_start\": \"2026-07-19\",\n      \"special_date_end\": \"2026-08-19\",\n      \"option_value_ids\": [\n        12\n      ]\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "CẢNH BÁO: option_id và option_value_ids trong body là ví dụ — thay bằng id thật từ GET /resource. role=1 là option tạo biến thể."
+      }
+    },
+    {
+      "name": "Product - Detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product/{{product_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product",
+            "{{product_id}}"
+          ]
+        },
+        "description": "Trả product + product_variants[] gồm: price, regular_price, minimum, on_hand, reserved, available, inventory_policy, special_price, special_date_start, special_date_end, option_value_ids[]."
+      }
+    },
+    {
+      "name": "Product - Update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product/{{product_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product",
+            "{{product_id}}"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"SP-TEST-001-EDIT\",\n  \"sku\": \"SKU-TEST-001\",\n  \"stock_status_id\": 7,\n  \"shipping\": 1,\n  \"is_add_cart\": 1,\n  \"is_custom\": 0,\n  \"is_review\": 1,\n  \"weight\": 0.5,\n  \"weight_class_id\": 2,\n  \"length_class_id\": 1,\n  \"tax_class_id\": 0,\n  \"sort_order\": 0,\n  \"badge\": \"sale\",\n  \"date_available\": \"2026-07-19\",\n  \"link_sale\": \"\",\n  \"link_sale_custom\": [],\n  \"product_descriptions\": [\n    {\n      \"language_code\": \"vi\",\n      \"name\": \"Sản phẩm test đơn giản\",\n      \"description\": \"Mô tả ngắn\",\n      \"content\": \"<p>Nội dung</p>\",\n      \"tag\": \"\",\n      \"meta_title\": \"\",\n      \"meta_description\": \"\",\n      \"meta_keyword\": \"\"\n    }\n  ],\n  \"product_categories\": [],\n  \"product_filters\": [],\n  \"product_related\": [],\n  \"product_ingredients\": [],\n  \"product_attributes\": [],\n  \"product_images\": [],\n  \"product_discounts\": [],\n  \"product_rewards\": [],\n  \"product_options\": [],\n  \"product_variants\": [\n    {\n      \"id\": 0,\n      \"price\": 150000,\n      \"regular_price\": 200000,\n      \"sku\": \"SKU-TEST-001\",\n      \"minimum\": 1,\n      \"on_hand\": 100,\n      \"inventory_policy\": 0,\n      \"sort_order\": 0,\n      \"is_default\": 1,\n      \"special_price\": 129000,\n      \"special_date_start\": \"2026-07-19\",\n      \"special_date_end\": \"2026-08-19\",\n      \"option_value_ids\": []\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Body giống Create. Với biến thể đã có, truyền đúng id của variant để update thay vì tạo mới."
+      }
+    },
+    {
+      "name": "Product - Delete (soft)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product/{{product_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product",
+            "{{product_id}}"
+          ]
+        },
+        "description": "Xoá mềm (soft delete). Trả 204."
+      }
+    },
+    {
+      "name": "Product - Restore",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product/{{product_id}}/restore",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product",
+            "{{product_id}}",
+            "restore"
+          ]
+        },
+        "description": "Khôi phục sản phẩm đã xoá mềm."
+      }
+    },
+    {
+      "name": "Product - Bulk (delete/restore)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product/bulk",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product",
+            "bulk"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"delete\",\n  \"ids\": [\n    1,\n    2,\n    3\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "action: delete | restore. ids: mảng product id."
+      }
+    },
+    {
+      "name": "Product - Bulk Update (inline)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/product/bulk-update",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "product",
+            "bulk-update"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"id\": 1,\n      \"model\": \"M-EDIT\",\n      \"badge\": \"hot\",\n      \"price\": 175000,\n      \"quantity\": 90\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Sửa nhanh từ trang list: price → default variant, quantity → tồn kho default warehouse."
+      }
+    }
+  ]
+}

@@ -23,13 +23,7 @@
                                     <a href="{!! route('account.wishlist') !!}" title="Yêu thích" class="block">
                                         <img class="svgInject" alt="Sản phẩm yêu thích"
                                             src="/web/images/theme/icons/icon-heart.svg">
-                                        <span class="pro-count blue" id="count-wishlist">
-                                            @if (auth()->check())
-                                                {{ session()->get(getCoreConfig('session.total_wishlist'), 0) }}
-                                            @else
-                                                0
-                                            @endif
-                                        </span>
+                                        <span class="pro-count blue" id="count-wishlist" data-wishlist-badge>0</span>
                                     </a>
                                     <a href="{!! route('account.wishlist') !!}" title="Yêu thích">
                                         <span class="lable">Yêu thích</span>
@@ -39,7 +33,7 @@
                                     <a class="mini-cart-icon block" href="{{ route('checkout.cart') }}"
                                         title="Giỏ hàng">
                                         <img alt="Giỏ hàng" src="/web/images/theme/icons/icon-cart.svg">
-                                        <span class="pro-count blue" id="cart-total">{!! session()->get('total_cart_header', 0) !!}</span>
+                                        <span class="pro-count blue" id="cart-total" data-cart-badge>0</span>
                                     </a>
                                     <a class="mini-cart-icon" href="{{ route('checkout.cart') }}" title="Giỏ hàng">
                                         <span class="lable">Giỏ hàng</span>
@@ -130,20 +124,14 @@
                             <div class="header-action-icon-2 relative">
                                 <a href="{!! route('account.wishlist') !!}" class="block">
                                     <img alt="Sản phẩm yêu thích" src="/web/images/theme/icons/icon-heart.svg">
-                                    <span class="pro-count white" id="count-wishlist">
-                                        @if (auth()->check())
-                                            {{ session()->get(getCoreConfig('session.total_wishlist'), 0) }}
-                                        @else
-                                            0
-                                        @endif
-                                    </span>
+                                    <span class="pro-count white" id="count-wishlist" data-wishlist-badge>0</span>
                                 </a>
                             </div>
                             <div class="header-action-icon-2 relative">
                                 <a class="mini-cart-icon block" href="{{ route('checkout.cart') }}"
                                     title="Giỏ hàng">
                                     <img alt="Giỏ hàng" src="/web/images/theme/icons/icon-cart.svg">
-                                    <span class="pro-count white" id="cart-total">{!! session()->get('total_cart_header', 0) !!}</span>
+                                    <span class="pro-count white" id="cart-total" data-cart-badge>0</span>
                                 </a>
                             </div>
                         </div>
@@ -247,3 +235,32 @@
         display: none !important;
     }
 </style>
+{{-- Phương án B item 1: badge giỏ/wishlist hydrate client-side (SSR để 0) --}}
+{{-- → HTML header user-agnostic, cache_page / CF Cache Everything không dính số của guest khác. --}}
+<script>
+    (function () {
+        function setBadges(sel, value) {
+            document.querySelectorAll(sel).forEach(function (el) { el.textContent = value; });
+        }
+        function hydrateBadges() {
+            fetch('{{ route('cart.badge') }}', {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin',
+                cache: 'no-store'
+            })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (json) {
+                    var d = (json && json.data) || null;
+                    if (!d) return;
+                    setBadges('[data-cart-badge]', d.cart);
+                    setBadges('[data-wishlist-badge]', d.wishlist);
+                })
+                .catch(function () { /* im lặng — badge giữ 0 */ });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', hydrateBadges);
+        } else {
+            hydrateBadges();
+        }
+    })();
+</script>

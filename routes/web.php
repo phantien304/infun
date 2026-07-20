@@ -17,6 +17,7 @@ Route::get('l/{slug}', 'AffiliateRedirectController@show')
 // bật lại. Middleware CachePage + alias + các ->withoutMiddleware(['cache_page'])
 // từng route GIỮ NGUYÊN để bật lại chỉ cần thêm 'cache_page' vào mảng dưới đây.
 Route::middleware(['maintenance', 'limit_access'])->group(function () {
+    Route::get('/cart/badge', 'CartBadgeController@index')->name('cart.badge')->withoutMiddleware(['cache_page']);
     Route::get('/san-pham', 'ProductController@getList')->name('product.getList');
     Route::get('/khuyen-mai', 'ProductController@special')->name('product.special');
     Route::get('/san-pham/get-list-review', 'ProductController@getListReview')->name('product.getListReview');

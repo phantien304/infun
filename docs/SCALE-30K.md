@@ -96,6 +96,21 @@
 
 ---
 
+## Đợt điều tra hiệu năng staging + fix k6 (2026-07-20)
+
+Chi tiết đầy đủ: `docs/CHANGELOG-2026-07-20-staging-perf.md`. Tóm tắt: fail
+rate cao ở k6 `TARGET=50` ban đầu tưởng do server chậm, hoá ra phần lớn do
+**bắn k6 từ máy dev đang bận** (không phải máy target) + **2 bug trong chính
+`k6/mixed-30k.js`** (sai URL `add-to-cart` thiếu prefix `checkout/`, CSRF
+token cache cả đời VU → 419 giữa chừng). Ngoài ra fix được 3 vấn đề performance
+thật trong app: N+1 Redis ở `HasSchemaCache` (giảm 97%), cache
+`Collection<Model>` tốn CPU unserialize (đổi sang cache mảng thuần), thiếu
+index `product.date_available` (full table scan 492k dòng/query). Sau khi sửa
+hết, đo sạch: `TARGET=300` mọi latency PASS threshold + 0 lỗi 5xx; `TARGET=1500`
+bắt đầu queue thật ở nhánh browse (CPU ~11.4/12 lõi) nhưng vẫn 0 lỗi 5xx.
+
+---
+
 ## Đợt triển khai hạ tầng 2026-07-15 (ưu tiên 1-4)
 
 **Staging (Docker, mô phỏng topology prod):**

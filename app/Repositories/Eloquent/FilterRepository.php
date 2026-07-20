@@ -22,7 +22,7 @@ class FilterRepository extends QueryableRepository implements FilterRepositoryIn
      */
     public function listAllCached(): Collection
     {
-        return $this->rememberSystem(
+        return $this->rememberSystemModels(
             setting('cache.filters'),
             fn () => $this->listAll()
         );

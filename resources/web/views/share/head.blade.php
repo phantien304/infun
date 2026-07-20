@@ -7,7 +7,7 @@
 @if (isset($descriptionSeo))
     <meta name="description" content="{{ $descriptionSeo }}" />
 @endif
-<base href="{{ request()->getSchemeAndHttpHost() }}/">
+<base href="{{ rtrim(config('app.url'), '/') }}/">
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">

@@ -31,7 +31,7 @@ class ZoneRepository extends QueryableRepository implements ZoneRepositoryInterf
 
     public function listAllCached(): Collection
     {
-        return $this->rememberSystem(
+        return $this->rememberSystemModels(
             setting('cache.zones'),
             fn () => $this->listAll()
         );

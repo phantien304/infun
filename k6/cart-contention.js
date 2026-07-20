@@ -63,22 +63,16 @@ const addLatency   = new Trend('add_latency', true);
 
 const csrfByVu = {}; // mỗi VU 1 session (cookie jar riêng) → 1 holder riêng
 
-function ensureCsrf() {
-  if (csrfByVu[__VU]) return csrfByVu[__VU];
+function ensureCsrf(forceRefresh) {
+  if (!forceRefresh && csrfByVu[__VU]) return csrfByVu[__VU];
   const res = http.get(PRODUCT_URL, { tags: { name: 'get_csrf' } });
   const m = res.body ? res.body.match(/<meta name="csrf-token" content="([^"]+)"/i) : null;
   csrfByVu[__VU] = m ? m[1] : '';
   return csrfByVu[__VU];
 }
 
-export default function () {
-  if (!PRODUCT_ID) {
-    throw new Error('Thiếu -e PRODUCT_ID=<id sản phẩm đơn giản, tồn nhỏ>');
-  }
-
-  const token = ensureCsrf();
-
-  const res = http.post(`${BASE_URL}/add-to-cart`, {
+function postAdd(token) {
+  return http.post(`${BASE_URL}/checkout/add-to-cart`, {
     product_id: String(PRODUCT_ID),
     quantity: String(QTY),
   }, {
@@ -89,6 +83,20 @@ export default function () {
     },
     tags: { name: 'add_to_cart' },
   });
+}
+
+export default function () {
+  if (!PRODUCT_ID) {
+    throw new Error('Thiếu -e PRODUCT_ID=<id sản phẩm đơn giản, tồn nhỏ>');
+  }
+
+  // VU sống nhiều phút, lặp rất nhiều request — token cache-1-lần-cho-cả-đời-VU
+  // dính 419 khi session/token phía server đổi giữa chừng. Retry 1 lần với
+  // token mới trước khi tính là contention thật (addCsrf).
+  let res = postAdd(ensureCsrf());
+  if (res.status === 419) {
+    res = postAdd(ensureCsrf(true));
+  }
 
   addLatency.add(res.timings.duration);
 

@@ -21,6 +21,64 @@ trait CacheableRepository
         return $this->doRemember(CacheGate::systemStore(), $key, $resolver, $ttl, $perLocale, []);
     }
 
+    /**
+     * Như rememberSystem() nhưng cho resolver trả Collection<Model> — lưu Redis
+     * dạng mảng thuần (attributes + relations) thay vì để cache driver
+     * serialize() nguyên object graph Eloquent. Đọc lại rehydrate Collection<Model>
+     * y hệt bản gốc (kể cả relation đã eager-load) nên caller KHÔNG cần đổi gì.
+     *
+     * Lý do: unserialize() 1 object Eloquent phải tái tạo toàn bộ state nội bộ
+     * (fillable/guarded/casts/relations/...) cho TỪNG instance — với collection
+     * vài trăm row (category/manufacturer/filter/zone load mọi page) chi phí
+     * CPU này nhân lên đáng kể dưới tải đồng thời (đo thực tế qua k6).
+     * newFromBuilder() rẻ hơn nhiều vì chỉ gán thẳng attributes, đúng cách
+     * Eloquent tự hydrate từ DB.
+     */
+    protected function rememberSystemModels(string $key, \Closure $resolver, $ttl = null, bool $perLocale = true): \Illuminate\Database\Eloquent\Collection
+    {
+        $rows = $this->rememberSystem($key, function () use ($resolver) {
+            return $resolver()->map(fn (Model $model) => $this->modelToCacheArray($model))->all();
+        }, $ttl, $perLocale);
+
+        return new \Illuminate\Database\Eloquent\Collection(
+            collect($rows)->map(fn (array $row) => $this->modelFromCacheArray($row))->all()
+        );
+    }
+
+    private function modelToCacheArray(Model $model): array
+    {
+        return [
+            'class' => get_class($model),
+            'attributes' => $model->getAttributes(),
+            'relations' => collect($model->getRelations())->map(function ($relation) {
+                if ($relation instanceof \Illuminate\Database\Eloquent\Collection) {
+                    return ['type' => 'many', 'items' => $relation->map(fn (Model $m) => $this->modelToCacheArray($m))->all()];
+                }
+                if ($relation instanceof Model) {
+                    return ['type' => 'one', 'item' => $this->modelToCacheArray($relation)];
+                }
+                return ['type' => 'raw', 'value' => $relation];
+            })->all(),
+        ];
+    }
+
+    private function modelFromCacheArray(array $row): Model
+    {
+        $model = (new $row['class'])->newFromBuilder($row['attributes']);
+
+        foreach ($row['relations'] as $name => $relation) {
+            $model->setRelation($name, match ($relation['type']) {
+                'many' => new \Illuminate\Database\Eloquent\Collection(
+                    collect($relation['items'])->map(fn (array $r) => $this->modelFromCacheArray($r))->all()
+                ),
+                'one' => $this->modelFromCacheArray($relation['item']),
+                default => $relation['value'],
+            });
+        }
+
+        return $model;
+    }
+
     protected function rememberEntity(
         Model $entity,
         string $prefix,

@@ -68,10 +68,6 @@ LUA;
         return (bool) config('flash_gate.enabled');
     }
 
-    /**
-     * Variant có đang được gate không. true/false theo key tồn tại,
-     * null = Redis lỗi (fail-open, caller bỏ qua gate).
-     */
     public function isGated(int $variantId): ?bool
     {
         try {
@@ -193,12 +189,6 @@ LUA;
         return Redis::connection((string) config('flash_gate.redis_connection', 'default'));
     }
 
-    /**
-     * EVAL chạy được cả 2 client: phpredis eval($script, $args, $numKeys)
-     * vs predis eval($script, $numKeys, ...$keysAndArgs). Cả hai đều tự áp
-     * prefix (database.redis.options.prefix) lên KEYS khi khai báo numKeys
-     * → key nhất quán với GET/SET/DEL qua cùng connection.
-     */
     private function evalLua(string $script, string $key, int|string ...$args): mixed
     {
         $connection = $this->redis();

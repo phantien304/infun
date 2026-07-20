@@ -30,9 +30,11 @@ x-app-env: &app-env
   APP_DEBUG: "false"
   # BẮT BUỘC: image không có .env nên APP_KEY phải truyền qua env.
   APP_KEY: "${STAGING_APP_KEY:?Chua set STAGING_APP_KEY - xem docs/STAGING.md}"
-  # base URL cho các ngữ cảnh NGOÀI request (mail, sitemap, queue). Thẻ <base>
-  # trong request tự bám host thật (đã sửa ở head.blade.php).
-  APP_URL: "${STAGING_APP_URL:-http://localhost:8000}"
+  # Base URL DUY NHẤT cho toàn app: <base href> + publicUrl() + mail/sitemap/queue
+  # đều lấy từ đây (head.blade.php & Common.php đã chuyển sang config('app.url')).
+  # Default = cổng web-staging (8100). Truy cập staging bằng host khác (LAN IP,
+  # domain riêng) thì BẮT BUỘC set STAGING_APP_URL khớp host đó trước khi up.
+  APP_URL: "${STAGING_APP_URL:-http://localhost:8100}"
 
   # BẮT BUỘC: image không ship .env nên config('app.locale') fallback về default
   # cứng trong config/app.php ('en') nếu thiếu biến này — resources/lang/ CHỈ có
@@ -59,7 +61,33 @@ x-app-env: &app-env
   MEILISEARCH_HOST: http://meilisearch:7700
   MEILISEARCH_KEY: ""
 
-  MAIL_MAILER: smtp
+  # R2 + Cloudflare CDN (ảnh) — thiếu block này disk `image` fallback driver
+  # 'local' (default config/filesystems.php) → resizeImage() build URL local
+  # (localhost:8100/storage/...) thay vì CDN. Giá trị lấy từ .env dev, truyền
+  # qua biến STAGING_AWS_* trước khi `up` (không hardcode secret vào file này).
+  IMAGE_DISK_DRIVER: "${STAGING_IMAGE_DISK_DRIVER:-s3}"
+  AWS_ACCESS_KEY_ID: "${STAGING_AWS_ACCESS_KEY_ID:?Chua set STAGING_AWS_ACCESS_KEY_ID - xem .env dev}"
+  AWS_SECRET_ACCESS_KEY: "${STAGING_AWS_SECRET_ACCESS_KEY:?Chua set STAGING_AWS_SECRET_ACCESS_KEY - xem .env dev}"
+  AWS_DEFAULT_REGION: "${STAGING_AWS_DEFAULT_REGION:-auto}"
+  AWS_BUCKET: "${STAGING_AWS_BUCKET:-infun-media}"
+  AWS_ENDPOINT: "${STAGING_AWS_ENDPOINT:?Chua set STAGING_AWS_ENDPOINT - xem .env dev}"
+  AWS_URL: "${STAGING_AWS_URL:-https://cdn.lartisan.vn}"
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+
+  # Throttle nới cho staging (docs/SCALE-30K.md mục D — "BẮT BUỘC trước khi
+  # chạy k6: nới/tắt throttle add-to-cart/save-order, không thì chỉ đo 429").
+  # Default 100000 (coi như tắt) vì staging = bãi load-test; PROD thật set qua
+  # deploy/env.production.example (giữ 30/10). Cần siết lại để test throttle
+  # itself thì override STAGING_THROTTLE_* khi `up`.
+  THROTTLE_ADD_TO_CART: "${STAGING_THROTTLE_ADD_TO_CART:-100000}"
+  THROTTLE_SAVE_ORDER: "${STAGING_THROTTLE_SAVE_ORDER:-100000}"
+
+  # log thay vì smtp khi chạy k6 checkout — mỗi order dispatch 1 job gửi mail,
+  # đẩy qua mailpit thật vẫn tốn overhead + dễ chạm MP_MAX_MESSAGES=500. `log`
+  # ghi nội dung mail vào log Laravel (stderr, xem LOG_CHANNEL dưới), không gọi
+  # SMTP nào cả — nhẹ nhất cho load test. Cần xem mail thật thì override lại
+  # STAGING_MAIL_MAILER=smtp khi `up`.
+  MAIL_MAILER: "${STAGING_MAIL_MAILER:-log}"
   MAIL_HOST: mailpit
   MAIL_PORT: "1025"
   LOG_CHANNEL: stderr

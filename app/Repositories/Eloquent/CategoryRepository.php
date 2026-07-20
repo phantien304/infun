@@ -23,7 +23,7 @@ class CategoryRepository extends QueryableRepository implements CategoryReposito
 
     public function listAllCached(): Collection
     {
-        return $this->rememberSystem(
+        return $this->rememberSystemModels(
             setting('cache.categories'),
             fn () => $this->listAll()
         );

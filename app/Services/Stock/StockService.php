@@ -138,7 +138,6 @@ class StockService
                 continue;
             }
 
-            // GET rẻ trước, khỏi tốn query DB đếm hold cho variant thường
             if ($this->flashGate->isGated($variantId) !== true) {
                 continue;
             }
@@ -147,14 +146,11 @@ class StockService
             $delta = $quantity - $held;
 
             if ($delta < 0) {
-                // Giảm qty: trả suất ngay (transaction dưới sẽ shrink hold DB).
-                // Nếu transaction sau đó fail → gate over-credit tạm thời,
-                // reconcile everyMinute clamp lại — chấp nhận (DB vẫn chặn).
                 $this->flashGate->release($variantId, -$delta);
                 continue;
             }
             if ($delta === 0) {
-                continue; // bấm lại cùng qty — suất đã debit từ lần trước
+                continue;
             }
 
             $acquired = $this->flashGate->tryAcquire($variantId, $delta);

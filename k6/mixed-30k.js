@@ -82,6 +82,14 @@ const csrfByVu = {}; // mỗi VU 1 session (cookie jar riêng) → 1 holder riê
 
 function csrf() {
   if (csrfByVu[__VU]) return csrfByVu[__VU];
+  return refreshCsrf();
+}
+// VU sống nhiều phút, lặp hàng chục request — token cache-1-lần-cho-cả-đời-VU
+// dính 419 khi session/token phía server đổi giữa chừng (cookie jar k6 vẫn
+// đúng, chỉ là token cũ không còn khớp). refreshCsrf() lấy token mới, dùng
+// làm bước retry-1-lần trong postAdd/checkoutCod bên dưới — đúng hành vi
+// browser thật (trang nào cũng có token hiện hành, không cache xuyên session).
+function refreshCsrf() {
   const r = http.get(`${BASE_URL}/`, { tags: { name: 'get_csrf' } });
   const m = r.body ? r.body.match(/<meta name="csrf-token" content="([^"]+)"/i) : null;
   csrfByVu[__VU] = m ? m[1] : '';
@@ -97,22 +105,34 @@ function listUrl() {
   const q = Object.keys(p).map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(p[k])).join('&');
   return `${BASE_URL}/san-pham?${q}`;
 }
-function postAdd(productId, token) {
-  return http.post(`${BASE_URL}/add-to-cart`, { product_id: String(productId), quantity: '1' },
-    { ...headers(token), tags: { name: 'add_to_cart', action: 'add' } });
+function postAdd(productId) {
+  const body = { product_id: String(productId), quantity: '1' };
+  const opts = { tags: { name: 'add_to_cart', action: 'add' } };
+  let res = http.post(`${BASE_URL}/checkout/add-to-cart`, body, { ...headers(csrf()), ...opts });
+  if (res.status === 419) {
+    res = http.post(`${BASE_URL}/checkout/add-to-cart`, body, { ...headers(refreshCsrf()), ...opts });
+  }
+  return res;
 }
 
 // Checkout COD đầy đủ — kích ĐÚNG 2 điểm lock:
 //   GET /checkout   → reserveCheckout()  (FOR UPDATE, giữ chỗ product_stock.reserved)
 //   POST save-order → deductForOrder()   (FOR UPDATE, trừ on_hand, guard oversell)
-// Trả về response của save-order để phân loại.
-function checkoutCod(token) {
+// Trả về response của save-order để phân loại. Retry 1 lần khi 419 (xem
+// refreshCsrf()) — cùng lý do với postAdd().
+function checkoutCod() {
   http.get(`${BASE_URL}/checkout`, { tags: { name: 'checkout_page', action: 'order' } });
-  return http.post(`${BASE_URL}/checkout/save-order`, {
+  const body = {
     full_name: 'K6 Tester', telephone: '0900000000', email: 'k6@test.local',
     address: 'Load test address', zone_id: ZONE_ID, district_id: DISTRICT_ID, ward_id: WARD_ID,
     payment_code: 'cod',
-  }, { ...headers(token), tags: { name: 'save_order', action: 'order' } });
+  };
+  const opts = { tags: { name: 'save_order', action: 'order' } };
+  let res = http.post(`${BASE_URL}/checkout/save-order`, body, { ...headers(csrf()), ...opts });
+  if (res.status === 419) {
+    res = http.post(`${BASE_URL}/checkout/save-order`, body, { ...headers(refreshCsrf()), ...opts });
+  }
+  return res;
 }
 
 // ── Nhánh READ (đa số) ──────────────────────────────────────────────────────
@@ -125,7 +145,7 @@ export function browse() {
 
 // ── Thêm giỏ ────────────────────────────────────────────────────────────────
 export function addToCart() {
-  const res = postAdd(randomItem(PRODUCT_IDS), csrf());
+  const res = postAdd(randomItem(PRODUCT_IDS));
   if (res.status === 201) addOk.add(1);
   else if (res.status === 422) addRejected.add(1);
   else if (res.status === 429) throttled.add(1);
@@ -134,9 +154,8 @@ export function addToCart() {
 
 // ── Đặt hàng COD hoàn chỉnh ──────────────────────────────────────────────────
 export function checkout() {
-  const token = csrf();
-  postAdd(randomItem(PRODUCT_IDS), token);
-  const res = checkoutCod(token);
+  postAdd(randomItem(PRODUCT_IDS));
+  const res = checkoutCod();
 
   if (res.status >= 200 && res.status < 300) orderOk.add(1);
   else if (res.status === 422) orderRejected.add(1);
@@ -149,9 +168,8 @@ export function checkout() {
 // ── Flash sale: dồn 1 variant tồn nhỏ (tranh chấp lock) ──────────────────────
 export function flashSale() {
   if (!FLASH_PRODUCT_ID) return;
-  const token = csrf();
-  postAdd(FLASH_PRODUCT_ID, token);   // nạp giỏ (session)
-  const res = checkoutCod(token);     // GET /checkout (hold) → save-order (deduct) — 2 điểm đua lock
+  postAdd(FLASH_PRODUCT_ID);   // nạp giỏ (session)
+  const res = checkoutCod();  // GET /checkout (hold) → save-order (deduct) — 2 điểm đua lock
 
   if (res.status >= 200 && res.status < 300) flashOk.add(1);   // đặt được 1 suất tồn
   else if (res.status === 422) flashReject.add(1);             // hết hàng (ĐÚNG — chống oversell)

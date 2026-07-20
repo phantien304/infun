@@ -287,16 +287,7 @@ function publicUrl($url)
     if (strpos($url, 'http') !== false) {
         return $url;
     }
-
-    $appURL = request()->getSchemeAndHttpHost();
-    $str = substr($appURL, strlen($appURL) - 1, 1);
-    if ($str != '/') {
-        $appURL .= '/';
-    }
-    if (\Illuminate\Support\Facades\Request::secure()) {
-        $appURL = str_replace('http://', 'https://', $appURL);
-    }
-    return $appURL . $url;
+    return rtrim(config('app.url'), '/') . '/' . $url;
 }
 function getIpVisitor()
 {

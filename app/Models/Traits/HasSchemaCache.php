@@ -4,13 +4,19 @@ namespace App\Models\Traits;
 
 trait HasSchemaCache
 {
+    protected static array $schemaCacheMemo = [];
+
     public function getTableColumnAndTypeList(): array
     {
         $key = $this->schemaCacheKey();
 
+        if (array_key_exists($key, static::$schemaCacheMemo)) {
+            return static::$schemaCacheMemo[$key];
+        }
+
         $cached = cache()->get($key);
         if (!empty($cached)) {
-            return $cached;
+            return static::$schemaCacheMemo[$key] = $cached;
         }
 
         $columns = $this->fetchTableColumns();
@@ -18,8 +24,9 @@ trait HasSchemaCache
             cache()->forever($key, $columns);
         }
 
-        return $columns;
+        return static::$schemaCacheMemo[$key] = $columns;
     }
+
     public function getFillable(): array
     {
         $fields = parent::getFillable();
@@ -35,6 +42,7 @@ trait HasSchemaCache
 
         return $fields;
     }
+
     protected function schemaCacheKey(): string
     {
         $conn = $this->getConnection();
@@ -46,6 +54,7 @@ trait HasSchemaCache
             $this->getTable(),
         ]);
     }
+
     protected function fetchTableColumns(): array
     {
         $conn  = $this->getConnection();
@@ -59,6 +68,7 @@ trait HasSchemaCache
             default   => [],
         };
     }
+
     protected function fetchMysqlColumns($conn, string $table): array
     {
         $columns = [];
@@ -73,6 +83,7 @@ trait HasSchemaCache
 
         return $columns;
     }
+
     protected function fetchPgsqlColumns($conn, string $table): array
     {
         $dbName  = $conn->getDatabaseName();
@@ -93,6 +104,7 @@ trait HasSchemaCache
 
         return $columns;
     }
+
     protected function fetchSqliteColumns($conn, string $table): array
     {
         $columns = [];
@@ -108,6 +120,7 @@ trait HasSchemaCache
 
         return $columns;
     }
+
     protected function fetchSqlsrvColumns($conn, string $table): array
     {
         $dbName  = $conn->getDatabaseName();

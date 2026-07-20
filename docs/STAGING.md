@@ -132,10 +132,12 @@ docker compose -f docker-compose.staging.yml down -v
 
 ## Base URL trên staging
 
-- Thẻ `<base>` trong request: tự bám host thật (`request()->getSchemeAndHttpHost()`
-  ở `resources/web/views/share/head.blade.php`) → vào bằng URL nào ra base URL đó.
-- URL tuyệt đối NGOÀI request (mail, sitemap, job queue): lấy từ `APP_URL`. Đổi qua
-  biến `STAGING_APP_URL` trước khi `up` nếu staging có domain riêng:
+- TOÀN BỘ base URL (thẻ `<base>`, `publicUrl()`, mail, sitemap, queue) lấy từ
+  `config('app.url')` = `APP_URL` — KHÔNG còn bám host request (đã đổi ở
+  `head.blade.php` + `Common.php` để HTML host-independent, cache/CDN an toàn).
+- Hệ quả: mỗi môi trường có 1 host canonical. Truy cập staging bằng host khác
+  default (`http://localhost:8100`) — LAN IP hay domain riêng — thì BẮT BUỘC
+  set `STAGING_APP_URL` khớp trước khi `up`:
 
 ```powershell
 $env:STAGING_APP_URL = "https://staging.infun.vn"

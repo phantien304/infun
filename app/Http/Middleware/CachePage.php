@@ -7,25 +7,12 @@ use Closure;
 
 class CachePage
 {
-    protected $except = [
-        'cart*',
-        'checkout*',
-        'account*',
-        'api/*',
-    ];
+    protected array $except = ['cart*', 'checkout*', 'account*', 'api/*'];
 
-    protected $ignoredQueryParams = [
-        'aff', 'aff_click', 'ref',
+    protected array $ignoredQueryParams = [
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
-        'gclid', 'fbclid',
+        'gclid', 'fbclid', 'aff', 'aff_click', 'ref',
     ];
-
-    protected $allowedQueryParams = [
-        'page', 'sort', 'order', 'filter',
-        'rating', 'in_stock', 'tag', 'brand', 'manufacturer',
-    ];
-
-    protected $maxCacheablePage = 500;
 
     public function handle($request, Closure $next)
     {
@@ -38,85 +25,53 @@ class CachePage
             return $next($request);
         }
 
-        foreach ($this->except as $path) {
-            if ($request->is($path)) {
-                return $next($request);
-            }
-        }
-
-        if ($this->hasDisallowedParams($request) || ! $this->pageWithinCap($request)) {
+        if ($this->isExcepted($request) || $this->hasMeaningfulQuery($request)) {
             return $next($request)->header('X-Cache', 'BYPASS');
         }
 
-        $device = isMobile() ? 'mobile' : 'desktop';
-        $locale = app()->getLocale();
-        $currency = strtoupper((string) $request->cookie(
-            (string) getCoreConfig('currency.cookie', 'currency'),
-            (string) getCoreConfig('currency.base_code', 'VND'),
-        ));
-        $key = 'page_cache_' . md5($this->normalizedUrl($request) . '_' . $device . '_' . $locale . '_' . $currency);
+        $key = $this->cacheKey($request);
 
-        if ($cachedContent = $store->get($key)) {
-            return response($cachedContent)
-                ->withHeaders([
-                    'Content-Type' => 'text/html; charset=UTF-8',
-                    'X-Cache' => 'HIT',
-                    'X-Cache-Device' => $device,
-                ]);
+        if ($cached = $store->get($key)) {
+            return response($cached)->withHeaders([
+                'Content-Type' => 'text/html; charset=UTF-8',
+                'X-Cache'      => 'HIT',
+            ]);
         }
 
         $response = $next($request);
 
-        if ($response->getStatusCode() === 200 && $this->shouldCache($response)) {
+        if ($response->getStatusCode() === 200
+            && str_contains((string) $response->headers->get('Content-Type'), 'text/html')) {
             $store->put($key, $response->getContent(), now()->addHours(24));
         }
 
         return $response->header('X-Cache', 'MISS');
     }
 
-    /** Còn param nào (đã trừ tracking) không nằm trong allowlist? */
-    protected function hasDisallowedParams($request): bool
+    protected function isExcepted($request): bool
     {
-        $query = $request->query();
-        if (! is_array($query)) {
-            $query = [];
+        foreach ($this->except as $pattern) {
+            if ($request->is($pattern)) {
+                return true;
+            }
         }
-        $query = array_diff_key($query, array_flip($this->ignoredQueryParams));
-        $extra = array_diff(array_keys($query), $this->allowedQueryParams);
 
-        return ! empty($extra);
+        return false;
     }
 
-    /** `page` (nếu có) phải là số nguyên và <= trần. */
-    protected function pageWithinCap($request): bool
+    protected function hasMeaningfulQuery($request): bool
     {
-        $page = $request->query('page');
-        if ($page === null) {
-            return true;
-        }
-        if (is_array($page) || ! ctype_digit((string) $page)) {
-            return false;
-        }
-
-        return (int) $page >= 1 && (int) $page <= $this->maxCacheablePage;
+        return ! empty(array_diff_key($request->query(), array_flip($this->ignoredQueryParams)));
     }
 
-    protected function normalizedUrl($request): string
+    protected function cacheKey($request): string
     {
-        $query = $request->query();
-        if (! is_array($query)) {
-            $query = [];
-        }
-        // Chỉ giữ param allowlist (tự động loại tracking + mọi param khác).
-        $query = array_intersect_key($query, array_flip($this->allowedQueryParams));
-        ksort($query);
+        $locale   = app()->getLocale();
+        $currency = strtoupper((string) $request->cookie(
+            (string) getCoreConfig('currency.cookie', 'currency'),
+            (string) getCoreConfig('currency.base_code', 'VND'),
+        ));
 
-        return $request->url() . (empty($query) ? '' : '?' . http_build_query($query));
-    }
-
-    protected function shouldCache($response)
-    {
-        return $response->getStatusCode() === 200
-            && str_contains((string) $response->headers->get('Content-Type'), 'text/html');
+        return 'pc:' . md5($request->path() . '|' . $locale . '|' . $currency);
     }
 }

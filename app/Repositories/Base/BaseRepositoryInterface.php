@@ -3,6 +3,7 @@
 namespace App\Repositories\Base;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -12,7 +13,7 @@ interface BaseRepositoryInterface
 
     public function getDetail(int $id);
 
-    public function list(?Request $request = null, ?int $perPage = null): LengthAwarePaginator;
+    public function list(?Request $request = null, ?int $perPage = null): Paginator;
 
     public function listAll(?Request $request = null): Collection;
 

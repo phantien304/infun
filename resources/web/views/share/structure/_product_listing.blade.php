@@ -1,20 +1,5 @@
-{{--
-    Shared product listing layout: filter toolbar + product grid +
-    pagination + side bar. Used by product list, special, category, and
-    manufacturer pages — everything that renders a paginated product feed.
-
-    Required parent variables:
-      $titlePage    — string used by the breadcrumb header
-      $entities     — LengthAwarePaginator of ProductDTO
-
-    Optional:
-      $totalLabel        — noun to follow the count ("sản phẩm" by default)
-      $hideManufacturer  — boolean, suppress the manufacturer facet when
-                           we are already scoped by manufacturer at the
-                           controller level (manufacturer landing page).
---}}
 @php
-    $totalLabel       = $totalLabel       ?? 'sản phẩm';
+    $totalLabel = $totalLabel ?? 'sản phẩm';
     $hideManufacturer = $hideManufacturer ?? false;
 @endphp
 
@@ -31,9 +16,11 @@
         </div>
         <div class="lg:col-span-3 lg:order-1 order-2">
             <div class="shop-product-fillter flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                {{--
                 <div class="totall-product">
                     <p>Có <strong class="text-brand">{{ $entities->total() }}</strong> {{ $totalLabel }}!</p>
                 </div>
+                --}}
                 @include('web::product.structure._sort_by')
             </div>
             {{-- Product grid: 1 col mobile, 2 sm, 3 md, 4 lg.
@@ -45,7 +32,25 @@
             </div>
             <div class="pagination-area mt-20 mb-20">
                 <nav aria-label="Phân trang">
-                    {!! $entities->links('web::share.structure._paging') !!}
+                    {{-- {!! $entities->links('web::share.structure._paging') !!} --}}
+                    @if ($entities->currentPage() > 1 || $entities->hasMorePages())
+                        <ul class="pagination flex flex-wrap items-center gap-2 justify-center list-none p-0 m-0">
+                            @if ($entities->currentPage() > 1)
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ $entities->previousPageUrl() }}" rel="prev"
+                                        title="Trang trước">‹ Trước</a>
+                                </li>
+                            @endif
+                            <li class="page-item active"><span class="page-link">Trang
+                                    {{ $entities->currentPage() }}</span></li>
+                            @if ($entities->hasMorePages())
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ $entities->nextPageUrl() }}" rel="next"
+                                        title="Trang sau">Sau ›</a>
+                                </li>
+                            @endif
+                        </ul>
+                    @endif
                 </nav>
             </div>
         </div>

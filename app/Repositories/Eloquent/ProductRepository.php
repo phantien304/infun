@@ -3,6 +3,7 @@
 namespace App\Repositories\Eloquent;
 
 use App\Enums\StockPolicy;
+use App\Helpers\CacheGate;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductRelated;
 use App\Repositories\Base\QueryableRepository;
@@ -11,6 +12,7 @@ use App\Repositories\Interfaces\ProductRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\AllowedSort;
@@ -18,6 +20,9 @@ use Spatie\QueryBuilder\AllowedSort;
 class ProductRepository extends QueryableRepository implements ProductRepositoryInterface
 {
     use CacheableRepository;
+
+    /** TTL (giây) cache COUNT phân trang list — nới/tắt qua setting config_list_count_ttl (0 = tắt). */
+    protected const LIST_COUNT_TTL = 120;
 
     public function model(): string
     {
@@ -188,13 +193,13 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $relations;
     }
 
-    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): LengthAwarePaginator
+    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): \Illuminate\Contracts\Pagination\Paginator
     {
         $request ??= request();
         $keyword = trim((string) $request->input('filter.keyword', ''));
 
         if ($keyword === '' || config('scout.driver') !== 'meilisearch') {
-            return parent::list($request, $perPage, $modifyBase);
+            return $this->simpleDbList($request, $perPage, $modifyBase);
         }
 
         $perPage ??= (int) $request->get('per_page', $this->defaultPerPage);
@@ -210,8 +215,61 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 'message'   => $e->getMessage(),
             ]);
 
-            return parent::list($request, $perPage, $modifyBase);
+            return $this->simpleDbList($request, $perPage, $modifyBase);
         }
+    }
+
+    protected function simpleDbList(Request $request, ?int $perPage, ?\Closure $modifyBase): \Illuminate\Contracts\Pagination\Paginator
+    {
+        $perPage ??= (int) $request->get('per_page', $this->defaultPerPage);
+        $perPage = max(1, min($perPage, $this->maxPerPage));
+
+        return $this->buildQueryForList($request, $modifyBase)
+            ->simplePaginate($perPage)
+            ->appends($request->query());
+    }
+
+    protected function listDbCachedCount(Request $request, ?int $perPage, ?\Closure $modifyBase): LengthAwarePaginator
+    {
+        $perPage ??= (int) $request->get('per_page', $this->defaultPerPage);
+        $perPage = max(1, min($perPage, $this->maxPerPage));
+
+        $page = Paginator::resolveCurrentPage('page');
+        $total = $this->cachedListCount($request, $modifyBase);
+
+        return $this->buildQueryForList($request, $modifyBase)
+            ->paginate($perPage, ['*'], 'page', $page, $total)
+            ->appends($request->query());
+    }
+
+    protected function cachedListCount(Request $request, ?\Closure $modifyBase): int
+    {
+        $compute = fn (): int => (int) $this->buildQueryForList($request, $modifyBase)
+            ->toBase()
+            ->getCountForPagination();
+
+        $store = CacheGate::store();
+        $ttlSetting = setting('config_list_count_ttl');
+        $ttl = ($ttlSetting === null || $ttlSetting === '') ? self::LIST_COUNT_TTL : (int) $ttlSetting;
+        if (! $store || $ttl <= 0) {
+            return $compute();
+        }
+
+        $key = 'plist:count:' . md5($request->path() . '|' . $this->countSignature($request));
+
+        return (int) $store->remember($key, now()->addSeconds($ttl), $compute);
+    }
+
+    protected function countSignature(Request $request): string
+    {
+        $filter = (array) $request->input('filter', []);
+        unset($filter['keyword']);
+        ksort($filter);
+        array_walk_recursive($filter, function (&$v) {
+            $v = (string) $v;
+        });
+
+        return (string) json_encode($filter);
     }
 
     protected function searchViaMeilisearch(
@@ -376,7 +434,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $this->getProductRelated($relatedIds);
     }
 
-    public function getListSpecial(?Request $request = null): LengthAwarePaginator
+    public function getListSpecial(?Request $request = null): \Illuminate\Contracts\Pagination\Paginator
     {
         return $this->list($request, null, fn (Builder $q) => $q->hasActiveSpecial());
     }

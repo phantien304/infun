@@ -4,7 +4,7 @@ namespace App\Repositories\Interfaces;
 
 use App\Models\Entities\Product;
 use App\Repositories\Base\BaseRepositoryInterface;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Http\Request;
 
 interface ProductRepositoryInterface extends BaseRepositoryInterface
@@ -27,7 +27,7 @@ interface ProductRepositoryInterface extends BaseRepositoryInterface
 
     public function getProductRelated(array $productIds);
 
-    public function getListSpecial(?Request $request = null): LengthAwarePaginator;
+    public function getListSpecial(?Request $request = null): Paginator;
 
     public function getProductVariantSpecialLatest(int $limit = 8);
 

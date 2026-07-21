@@ -7,11 +7,11 @@ use Illuminate\Http\Request;
 use Tests\TestCase;
 
 /**
- * Cache key của CachePage sau rà soát 2026-07:
- *   - Bỏ param tracking (aff/utm/ref/gclid/fbclid) nhưng vẫn cache.
- *   - Chỉ giữ param ALLOWLIST (page/sort/filter...) trong key.
- *   - Param lạ ngoài allowlist ⇒ BYPASS (hasDisallowedParams = true).
- *   - `page` phải là số và <= trần (pageWithinCap).
+ * CachePage bản 80/20:
+ *   - Chỉ cache trang SẠCH (không query có nghĩa). Có filter/sort/page/search → BYPASS.
+ *   - Param tracking (utm/aff/ref/gclid/fbclid) KHÔNG tính là query → vẫn cache, chung key.
+ *   - Trang cart/checkout/account/api → không cache (except).
+ *   - Key theo path (+locale+currency), KHÔNG kèm query/device.
  */
 class CachePageKeyTest extends TestCase
 {
@@ -24,81 +24,59 @@ class CachePageKeyTest extends TestCase
         return $ref->invoke($middleware, Request::create($url));
     }
 
-    private function normalize(string $url): string
+    // ---- hasMeaningfulQuery: chỉ trang sạch mới được cache ----
+
+    public function test_trang_khong_query_thi_cache(): void
     {
-        return $this->invoke('normalizedUrl', $url);
+        $this->assertFalse($this->invoke('hasMeaningfulQuery', '/san-pham'));
+        $this->assertFalse($this->invoke('hasMeaningfulQuery', '/gau-bong-p12'));
     }
 
-    // ---- Tracking params: bỏ khỏi key, vẫn cache ----
+    public function test_chi_co_tracking_thi_van_cache(): void
+    {
+        $this->assertFalse($this->invoke('hasMeaningfulQuery', '/san-pham?utm_source=a&ref=b&gclid=c&fbclid=d'));
+    }
 
-    public function test_bo_param_tracking_giu_param_noi_dung(): void
+    public function test_co_filter_sort_page_search_thi_bypass(): void
+    {
+        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?page=2'));
+        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?sort=price'));
+        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?q=abc'));
+        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?filter[in_stock]=1'));
+    }
+
+    // ---- isExcepted: trang động / theo-user ----
+
+    public function test_except_cart_checkout_account_api(): void
+    {
+        $this->assertTrue($this->invoke('isExcepted', '/cart/badge'));
+        $this->assertTrue($this->invoke('isExcepted', '/checkout/cart'));
+        $this->assertTrue($this->invoke('isExcepted', '/account/wishlist'));
+        $this->assertTrue($this->invoke('isExcepted', '/api/v1/x'));
+    }
+
+    public function test_trang_cong_khai_khong_except(): void
+    {
+        $this->assertFalse($this->invoke('isExcepted', '/san-pham'));
+        $this->assertFalse($this->invoke('isExcepted', '/gau-bong-p12'));
+        $this->assertFalse($this->invoke('isExcepted', '/'));
+    }
+
+    // ---- cacheKey: tracking không đổi key; path khác → key khác ----
+
+    public function test_affiliate_va_khach_thuong_chung_key(): void
     {
         $this->assertSame(
-            'http://localhost/san-pham?page=2',
-            $this->normalize('/san-pham?page=2&aff=kol1&aff_click=tok123&utm_source=aff_kol1&utm_medium=affiliates&fbclid=x'),
+            $this->invoke('cacheKey', '/gau-bong-p12'),
+            $this->invoke('cacheKey', '/gau-bong-p12?ref=kol9&utm_campaign=abc&gclid=zzz'),
         );
     }
 
-    public function test_url_khong_query_giu_nguyen(): void
+    public function test_path_khac_nhau_key_khac_nhau(): void
     {
-        $this->assertSame('http://localhost/san-pham', $this->normalize('/san-pham'));
-    }
-
-    public function test_khach_affiliate_va_khach_thuong_chung_key(): void
-    {
-        $this->assertSame(
-            $this->normalize('/gau-bong-p12'),
-            $this->normalize('/gau-bong-p12?ref=kol9&utm_campaign=link_abc&gclid=zzz'),
+        $this->assertNotSame(
+            $this->invoke('cacheKey', '/gau-bong-p12'),
+            $this->invoke('cacheKey', '/gau-bong-p13'),
         );
-    }
-
-    // ---- Allowlist: giữ param nội dung, key ổn định bất kể thứ tự ----
-
-    public function test_giu_param_allowlist_on_dinh_thu_tu(): void
-    {
-        $this->assertSame(
-            'http://localhost/san-pham?page=2&sort=price',
-            $this->normalize('/san-pham?sort=price&page=2'),
-        );
-        $this->assertSame(
-            $this->normalize('/san-pham?sort=price&page=2'),
-            $this->normalize('/san-pham?page=2&sort=price'),
-        );
-    }
-
-    public function test_param_ngoai_allowlist_bi_loai_khoi_key(): void
-    {
-        // 'a','b' không thuộc allowlist ⇒ rơi khỏi key (chỉ dùng để so key ổn định).
-        $this->assertSame(
-            $this->normalize('/x?b=2&a=1'),
-            $this->normalize('/x?a=1&b=2'),
-        );
-        $this->assertSame('http://localhost/x', $this->normalize('/x?a=1&b=2'));
-    }
-
-    // ---- BYPASS: param lạ / search tự do ----
-
-    public function test_param_la_bi_coi_la_disallowed(): void
-    {
-        $this->assertTrue($this->invoke('hasDisallowedParams', '/san-pham?q=abc'));
-        $this->assertTrue($this->invoke('hasDisallowedParams', '/san-pham?page=2&search=xyz'));
-    }
-
-    public function test_param_allowlist_va_tracking_khong_disallowed(): void
-    {
-        $this->assertFalse($this->invoke('hasDisallowedParams', '/san-pham?page=2&sort=price&filter=mau-do'));
-        $this->assertFalse($this->invoke('hasDisallowedParams', '/san-pham?utm_source=a&ref=b&gclid=c'));
-        $this->assertFalse($this->invoke('hasDisallowedParams', '/san-pham'));
-    }
-
-    // ---- Trần số trang ----
-
-    public function test_page_hop_le_va_qua_tran(): void
-    {
-        $this->assertTrue($this->invoke('pageWithinCap', '/san-pham'));
-        $this->assertTrue($this->invoke('pageWithinCap', '/san-pham?page=2'));
-        $this->assertFalse($this->invoke('pageWithinCap', '/san-pham?page=51'));
-        $this->assertFalse($this->invoke('pageWithinCap', '/san-pham?page=abc'));
-        $this->assertFalse($this->invoke('pageWithinCap', '/san-pham?page=0'));
     }
 }

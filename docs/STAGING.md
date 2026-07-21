@@ -148,8 +148,96 @@ $env:STAGING_APP_URL = "https://staging.infun.vn"
 | Dịch vụ | Cổng host mặc định | Biến override |
 |---|---|---|
 | Web | 8100 | `STAGING_WEB_PORT` |
-| MySQL | 3307 | `STAGING_DB_PORT` |
+| MySQL (writer) | 3307 | `STAGING_DB_PORT` |
+| MySQL replica 1 | 3311 | `STAGING_DB_REPLICA1_PORT` |
+| MySQL replica 2 | 3312 | `STAGING_DB_REPLICA2_PORT` |
+| ProxySQL admin | 6032 | `STAGING_PROXYSQL_ADMIN_PORT` |
+| ProxySQL write | 6033 | `STAGING_PROXYSQL_WRITE_PORT` |
+| ProxySQL read | 6034 | `STAGING_PROXYSQL_READ_PORT` |
 | Meilisearch | 7701 | `STAGING_MEILI_PORT` |
 | Mailpit UI | 8026 | `STAGING_MAIL_UI_PORT` |
 
 Đặt để tránh đụng stack dev (3306/7700/8025) khi chạy song song.
+
+---
+
+## DB Read Replica + ProxySQL (2026-07-21)
+
+Staging hỗ trợ **1 write + 2 read replica** qua ProxySQL — cùng pattern đã
+kiểm chứng ở `docker-compose.scale.yml` (dev stack), copy sang đây tái sử
+dụng nguyên `docker/mysql/replica-init.sh` + `docker/proxysql/proxysql.cnf`
+(không sửa gì 2 file đó — chúng hard-code tên service `mysql`/`mysql-replica1`/
+`mysql-replica2`, service key trong `docker-compose.staging.yml` đã khớp).
+`config/database.php` không cần sửa — đã có sẵn logic đọc `DB_WRITE_HOST`/
+`DB_WRITE_PORT`/`DB_READ_HOST1`/`DB_READ_PORT`.
+
+**⚠️ Đây là tính năng LUÔN BẬT trong `docker-compose.staging.yml`** (không có
+cờ tắt riêng) — `x-app-env` mặc định trỏ `DB_WRITE_HOST=proxysql`/
+`DB_READ_HOST1=proxysql`. Muốn quay lại 1 DB đơn (bỏ qua ProxySQL) thì đổi
+tạm 2 dòng đó trong `x-app-env` về `DB_HOST`/`DB_PORT` (bỏ `DB_WRITE_HOST`/
+`DB_READ_HOST1`) rồi recreate `infun-php`/`infun-queue`/`infun-scheduler` —
+`mysql-replica1`/`mysql-replica2`/`proxysql` vẫn chạy nền, không ảnh hưởng gì
+(có thể `docker compose stop mysql-replica1 mysql-replica2 proxysql` nếu
+muốn tiết kiệm tài nguyên máy).
+
+### Bring-up lần đầu (DB đã có data thật — theo thứ tự, KHÔNG gộp `up -d`)
+
+```bash
+# 1. Backup trước khi đổi gì
+docker compose -f docker-compose.staging.yml exec -T mysql \
+  mariadb-dump -uroot -proot --single-transaction --routines --events --triggers infun \
+  > infun_staging_backup_$(date +%Y%m%d).sql
+
+# 2. Recreate CHỈ mysql (thêm flag replication — server-id/log-bin/gtid-domain-id).
+#    Volume staging_mysql_data GIỮ NGUYÊN (gắn theo tên, không theo container
+#    instance) — đây KHÔNG phải reset data.
+docker compose -f docker-compose.staging.yml up -d mysql
+docker compose -f docker-compose.staging.yml ps mysql   # chờ healthy
+
+# 3. Replica TUẦN TỰ — không song song (tránh dồn tải dump lên master 2 lần
+#    cùng lúc). DB lớn (~vài GB) → dump+import lần đầu có thể mất nhiều phút.
+docker compose -f docker-compose.staging.yml up -d mysql-replica1
+docker compose -f docker-compose.staging.yml logs -f mysql-replica1
+# chờ tới khi thấy "Slave_IO_Running: Yes" / "Slave_SQL_Running: Yes", healthy
+docker compose -f docker-compose.staging.yml up -d mysql-replica2
+docker compose -f docker-compose.staging.yml logs -f mysql-replica2
+# chờ tương tự
+
+# 4. ProxySQL (đợi cả 2 replica healthy)
+docker compose -f docker-compose.staging.yml up -d proxysql
+
+# 5. Recreate tầng app để nhận DB_WRITE_HOST/DB_READ_HOST1 mới
+docker compose -f docker-compose.staging.yml up -d infun-php infun-queue infun-scheduler
+```
+
+**Tuyệt đối không `down -v` ở bất kỳ bước nào** — xoá cả `staging_mysql_data`
+(data thật). Lỗi 1 replica giữa chừng: chỉ `stop`/`rm -f`/`volume rm` riêng
+replica đó, không đụng `mysql`.
+
+### Verify
+
+```bash
+# 1. Replication mỗi replica
+docker compose -f docker-compose.staging.yml exec mysql-replica1 \
+  mariadb -uroot -proot -e "SHOW SLAVE STATUS\G" | grep -E "Slave_IO_Running|Slave_SQL_Running|Seconds_Behind_Master|Last_Error"
+# (lặp cho mysql-replica2) — Running: Yes cả 2, Last_Error rỗng
+
+# 2. ProxySQL nhận đúng writer/reader
+docker compose -f docker-compose.staging.yml exec proxysql \
+  mysql -h127.0.0.1 -P6032 -uradmin -pradmin \
+  -e "SELECT hostgroup, srv_host, status FROM stats_mysql_connection_pool;"
+# HG10 = mysql ONLINE; HG20 = mysql-replica1 + mysql-replica2 ONLINE
+
+# 3. Laravel thấy đúng 2 connection khác nhau
+docker compose -f docker-compose.staging.yml exec infun-php php artisan tinker --execute="dd(DB::connection()->getPdo()->query('select @@hostname')->fetchColumn(), DB::connection()->getReadPdo()->query('select @@hostname')->fetchColumn());"
+```
+
+### Rủi ro cần nhớ
+
+- `mariadb-dump --single-transaction` không khoá bảng nhưng vẫn tốn CPU/IO
+  trên writer đang chạy — nên làm lúc ít traffic staging.
+- `--log-bin` trên writer ghi binlog liên tục (`expire-logs-days=3`) — theo
+  dõi dung lượng đĩa vài ngày đầu.
+- `--scale infun-php=N` bị reset về 1 instance nếu chỉ `up -d infun-php` mà
+  không kèm `--scale` — nhớ thêm lại `--scale infun-php=3` (hay N tuỳ trước
+  đó) ở bước recreate app nếu đang test tải.

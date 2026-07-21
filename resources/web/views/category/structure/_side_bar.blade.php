@@ -6,46 +6,11 @@
 @stop
 
 @php
-    $currentCategoryId = request()->input('filter.category_id');
     $hideManufacturer = $hideManufacturer ?? false;
-    $byParent = collect();
-    $byId = collect();
-    foreach ($categories ?? [] as $cat) {
-        $byId->put($cat->id, $cat);
-        $byParent->put($cat->parent_id, ($byParent->get($cat->parent_id) ?? collect())->push($cat));
-    }
-    $rootCategories = $byParent->get(0) ?? collect();
-    $openIds = [];
-    $activeId = null;
-    foreach ($categories ?? [] as $cat) {
-        if ((int) $currentCategoryId === (int) $cat->id || $cat->url === request()->url()) {
-            $activeId = (int) $cat->id;
-            $cursor = $cat;
-            while ($cursor && (int) $cursor->parent_id !== 0) {
-                $openIds[(int) $cursor->parent_id] = true;
-                $cursor = $byId->get((int) $cursor->parent_id);
-            }
-            break;
-        }
-    }
 @endphp
 <div class="primary-sidebar sticky-sidebar">
-    @if ($rootCategories->isNotEmpty())
-        <div class="sidebar-widget mb-30">
-            <h5 class="section-title style-1 mb-30 wow fadeIn animated">Danh mục</h5>
-            <ul class="category-tree list-none m-0 p-0">
-                @foreach ($rootCategories as $root)
-                    @include('web::category.structure._side_bar_node', [
-                        'node' => $root,
-                        'byParent' => $byParent,
-                        'openIds' => $openIds,
-                        'activeId' => $activeId,
-                        'depth' => 0,
-                    ])
-                @endforeach
-            </ul>
-        </div>
-    @endif
+
+    {!! \App\View\FragmentCache::categoryTree() !!}
 
     <form method="get" action="{{ request()->url() }}">
         @foreach (collect(request()->query())->except(['filter', 'page'])->dot() as $name => $value)
@@ -107,10 +72,85 @@
                 });
             });
         }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', hydrateFacets);
-        } else {
+        // --- Cây danh mục (item 3b): toggle + active + bung nhánh tổ tiên ---
+        function openNode(li) {
+            var ul = li.querySelector(':scope > .cat-tree-children');
+            if (ul) ul.style.display = 'block';
+            var caret = li.querySelector(':scope > .cat-tree-row .cat-tree-caret');
+            if (caret) caret.style.transform = 'rotate(90deg)';
+            var btn = li.querySelector(':scope > .cat-tree-row .cat-tree-toggle');
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+        }
+
+        function toggleNode(li) {
+            var ul = li.querySelector(':scope > .cat-tree-children');
+            if (!ul) return;
+            var open = ul.style.display !== 'none' && ul.style.display !== '';
+            ul.style.display = open ? 'none' : 'block';
+            var caret = li.querySelector(':scope > .cat-tree-row .cat-tree-caret');
+            if (caret) caret.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+            var btn = li.querySelector(':scope > .cat-tree-row .cat-tree-toggle');
+            if (btn) btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+        }
+
+        function hydrateTree() {
+            var tree = document.querySelector('[data-cat-tree]');
+            if (!tree) return;
+
+            // Toggle mở/đóng (thay Alpine cũ) — delegate 1 listener.
+            tree.addEventListener('click', function(e) {
+                var btn = e.target.closest('.cat-tree-toggle');
+                if (!btn || !tree.contains(btn)) return;
+                e.preventDefault();
+                toggleNode(btn.closest('[data-cat-node]'));
+            });
+
+            // Node đang active: khớp filter.category_id hoặc pathname với data-cat-url.
+            var catId = new URLSearchParams(location.search).get('filter[category_id]');
+            var here = location.pathname.replace(/\/+$/, '');
+            var active = null;
+            tree.querySelectorAll('[data-cat-node]').forEach(function(li) {
+                if (active) return;
+                if (catId && li.getAttribute('data-cat-id') === String(catId)) {
+                    active = li;
+                    return;
+                }
+                var url = li.getAttribute('data-cat-url');
+                if (url) {
+                    try {
+                        if (new URL(url, location.origin).pathname.replace(/\/+$/, '') === here) active =
+                            li;
+                    } catch (err) {}
+                }
+            });
+            if (!active) return;
+
+            var row = active.querySelector(':scope > .cat-tree-row');
+            if (row) {
+                row.classList.remove('border-gray-200', 'hover:border-brand', 'hover:shadow');
+                row.classList.add('bg-brand', 'border-brand', 'text-white');
+                var link = row.querySelector('.cat-tree-link');
+                if (link) {
+                    link.classList.remove('text-gray-800');
+                    link.classList.add('text-white', 'font-semibold', 'hover:text-white');
+                }
+            }
+            // Bung mọi nhánh tổ tiên để node active hiện ra.
+            var parent = active.parentElement ? active.parentElement.closest('[data-cat-node]') : null;
+            while (parent) {
+                openNode(parent);
+                parent = parent.parentElement ? parent.parentElement.closest('[data-cat-node]') : null;
+            }
+        }
+
+        function init() {
             hydrateFacets();
+            hydrateTree();
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
         }
     })();
 </script>

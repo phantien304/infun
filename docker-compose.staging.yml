@@ -49,6 +49,12 @@ x-app-env: &app-env
   DB_DATABASE: infun
   DB_USERNAME: root
   DB_PASSWORD: root
+  # ── Read/write split qua ProxySQL (6033=writer HG10, 6034=reader HG20) ──
+  # config/database.php connection `mysql` đã sẵn logic đọc các biến này.
+  DB_WRITE_HOST: proxysql
+  DB_WRITE_PORT: "6033"
+  DB_READ_HOST1: proxysql
+  DB_READ_PORT: "6034"
 
   REDIS_CLIENT: phpredis
   REDIS_HOST: redis
@@ -108,6 +114,7 @@ services:
       - staging_logs:/var/www/html/storage/logs   # chỉ log, KHÔNG mount code
     depends_on:
       mysql: { condition: service_healthy }
+      proxysql: { condition: service_healthy }
       redis: { condition: service_healthy }
       meilisearch: { condition: service_healthy }
     networks: [infun-net]
@@ -122,6 +129,7 @@ services:
     depends_on:
       infun-php: { condition: service_started }
       mysql: { condition: service_healthy }
+      proxysql: { condition: service_healthy }
       redis: { condition: service_healthy }
     networks: [infun-net]
 
@@ -136,6 +144,7 @@ services:
     depends_on:
       infun-php: { condition: service_started }
       mysql: { condition: service_healthy }
+      proxysql: { condition: service_healthy }
       redis: { condition: service_healthy }
     networks: [infun-net]
 
@@ -154,7 +163,9 @@ services:
       - infun-php
     networks: [infun-net]
 
-  # ── MySQL RIÊNG cho staging (volume độc lập, không đụng dev/Herd) ─────────
+  # ── MySQL WRITER cho staging (volume độc lập, không đụng dev/Herd) ────────
+  # CHỨA DATA THẬT đã copy từ dev (500k sản phẩm, ~3.4GB) — volume
+  # staging_mysql_data KHÔNG BAO GIỜ được xoá/reset khi đổi command này.
   mysql:
     image: mariadb:10.11
     container_name: infun-mysql-staging
@@ -170,6 +181,13 @@ services:
       - --innodb-buffer-pool-size=1G
       - --innodb-flush-log-at-trx-commit=2
       - --max-connections=300
+      # ── Replication (master/writer) — xem docker/mysql/replica-init.sh ──
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --expire-logs-days=3
+      - --gtid-domain-id=1
+      - --sync-binlog=0
     volumes:
       - staging_mysql_data:/var/lib/mysql
     healthcheck:
@@ -177,6 +195,106 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks: [infun-net]
+
+  # ── MySQL READ REPLICA 1/2 — tự seed từ writer lần đầu qua replica-init.sh ─
+  # Service KEY phải đúng "mysql-replica1"/"mysql-replica2" (không hậu tố) vì
+  # docker/proxysql/proxysql.cnf hard-code tên này trong mysql_servers (Docker
+  # DNS resolve theo service key, không theo container_name).
+  mysql-replica1:
+    image: mariadb:10.11
+    container_name: infun-mysql-replica1-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_DB_REPLICA1_PORT:-3311}:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MASTER_HOST: mysql
+      MASTER_ROOT_PASSWORD: root
+      MASTER_DB: infun
+      REPL_USER: repl
+      REPL_PASSWORD: repl_secret
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=512M
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-connections=300
+      - --server-id=2
+      - --read-only=1
+      - --skip-name-resolve
+    volumes:
+      - staging_mysql_replica1_data:/var/lib/mysql
+      - ./docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      timeout: 5s
+      retries: 60         # DB thật ~3.4GB — dump+import lần đầu lâu hơn dev
+      start_period: 180s
+    networks: [infun-net]
+
+  mysql-replica2:
+    image: mariadb:10.11
+    container_name: infun-mysql-replica2-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_DB_REPLICA2_PORT:-3312}:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MASTER_HOST: mysql
+      MASTER_ROOT_PASSWORD: root
+      MASTER_DB: infun
+      REPL_USER: repl
+      REPL_PASSWORD: repl_secret
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=512M
+      - --innodb-flush-log-at-trx-commit=2
+      - --max-connections=300
+      - --server-id=3
+      - --read-only=1
+      - --skip-name-resolve
+    volumes:
+      - staging_mysql_replica2_data:/var/lib/mysql
+      - ./docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      timeout: 5s
+      retries: 60
+      start_period: 180s
+    networks: [infun-net]
+
+  # ── ProxySQL — route 6033(write)→writer, 6034(read)→2 replica cân tải ────
+  # Dùng chung docker/proxysql/proxysql.cnf (không sửa) — file đó hard-code
+  # tên service mysql/mysql-replica1/mysql-replica2, đã khớp ở trên.
+  proxysql:
+    image: proxysql/proxysql:2.6.6
+    container_name: infun-proxysql-staging
+    restart: unless-stopped
+    ports:
+      - "${STAGING_PROXYSQL_ADMIN_PORT:-6032}:6032"
+      - "${STAGING_PROXYSQL_WRITE_PORT:-6033}:6033"
+      - "${STAGING_PROXYSQL_READ_PORT:-6034}:6034"
+    volumes:
+      - ./docker/proxysql/proxysql.cnf:/etc/proxysql.cnf:ro
+      - staging_proxysql_data:/var/lib/proxysql
+    depends_on:
+      mysql: { condition: service_healthy }
+      mysql-replica1: { condition: service_healthy }
+      mysql-replica2: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "proxysql", "--version"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
     networks: [infun-net]
 
   # ── Redis RIÊNG (session + queue + cache) ────────────────────────────────
@@ -237,6 +355,9 @@ services:
 
 volumes:
   staging_mysql_data:
+  staging_mysql_replica1_data:
+  staging_mysql_replica2_data:
+  staging_proxysql_data:
   staging_redis_data:
   staging_meili_data:
   staging_logs:

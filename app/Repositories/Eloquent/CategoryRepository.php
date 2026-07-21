@@ -32,6 +32,7 @@ class CategoryRepository extends QueryableRepository implements CategoryReposito
     public function flushCache(): void
     {
         $this->forgetSystem(setting('cache.categories'));
+        \App\View\FragmentCache::forgetTree();
     }
 
     public function getCategoryDetail(int $id): ?Category

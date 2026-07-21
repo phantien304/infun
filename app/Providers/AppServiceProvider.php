@@ -33,19 +33,10 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->optimizes('repository:cache', 'repository:clear', 'repositories');
         $this->registerViewNamespaces();
-        $this->registerViewComposers();
         $this->registerRouteMacros();
         $this->registerRateLimiters();
         // $this->logSql();
         $this->registerObservers();
-    }
-
-    protected function registerViewComposers(): void
-    {
-        View::composer(
-            'web::category.structure._side_bar',
-            \App\View\Composers\ProductSidebarComposer::class,
-        );
     }
 
     protected function registerRateLimiters(): void

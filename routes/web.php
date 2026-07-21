@@ -13,10 +13,10 @@ Route::get('l/{slug}', 'AffiliateRedirectController@show')
     ->name('affiliate.redirect')
     ->middleware(['maintenance', 'throttle:60,1'])
     ->where('slug', '[A-Za-z0-9]{1,10}');
-// cache_page: TẠM GỠ khỏi group — đo concurrency backend trần (k6) xong mới quyết
-// bật lại. Middleware CachePage + alias + các ->withoutMiddleware(['cache_page'])
-// từng route GIỮ NGUYÊN để bật lại chỉ cần thêm 'cache_page' vào mảng dưới đây.
-Route::middleware(['maintenance', 'limit_access'])->group(function () {
+// cache_page: BẬT LẠI (Phương án B đã xử các per-user footgun: badge giỏ/wishlist
+// → JS, menu active-state → JS, CSRF token refresh từ /give-me-csrf). cache_page
+// chỉ cache guest+GET; các route động (badge/csrf/checkout...) đã ->withoutMiddleware.
+Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function () {
     Route::get('/cart/badge', 'CartBadgeController@index')->name('cart.badge')->withoutMiddleware(['cache_page']);
     Route::get('/san-pham', 'ProductController@getList')->name('product.getList');
     Route::get('/khuyen-mai', 'ProductController@special')->name('product.special');

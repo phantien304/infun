@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
-import { Counter, Trend } from 'k6/metrics';
+import { Counter, Trend, Rate } from 'k6/metrics';
 import { randomItem, randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
 
 /**
@@ -39,6 +39,19 @@ const ZONE_ID          = __ENV.ZONE_ID || '230';
 const DISTRICT_ID      = __ENV.DISTRICT_ID || '1';
 const WARD_ID          = __ENV.WARD_ID || '1';
 
+// Trang guest browse để đo cache_page (cacheable). ĐẶT slug thật để giống production:
+//   -e BROWSE_PATHS="/,/san-pham,/ao-thun-c12,/qua-tang-p101,/khuyen-mai"
+// Phân bố Zipf 80/20: 80% traffic dồn vào 20% path đầu (trang hot) — giống thật,
+// tạo HIT cache thay vì random đều (né cache) như bản cũ.
+const BROWSE_PATHS     = (__ENV.BROWSE_PATHS || '/,/san-pham,/khuyen-mai').split(',');
+
+function zipfPath() {
+  const hot = Math.max(1, Math.ceil(BROWSE_PATHS.length * 0.2));
+  const pool = Math.random() < 0.8 ? BROWSE_PATHS.slice(0, hot) : BROWSE_PATHS.slice(hot);
+  const list = pool.length ? pool : BROWSE_PATHS;
+  return list[randomIntBetween(0, list.length - 1)];
+}
+
 export const options = {
   scenarios: {
     browse: {
@@ -65,6 +78,8 @@ export const options = {
     'http_req_duration{action:order}':  ['p(95)<3000'],
     order_error:                        ['count<1'], // 5xx khi đặt hàng = deadlock/lỗi thật
     flash_error:                        ['count<1'],
+    // HIT ratio guest browse — cả run (kể cả MISS lúc warm). Tune theo BROWSE_PATHS.
+    cache_hit:                          ['rate>0.5'],
   },
 };
 
@@ -77,6 +92,7 @@ const flashOk      = new Counter('flash_ok');
 const flashReject  = new Counter('flash_reject');
 const flashError   = new Counter('flash_error');
 const throttled    = new Counter('throttled_429');
+const cacheHit     = new Rate('cache_hit'); // tỉ lệ browse trúng cache_page (X-Cache: HIT)
 
 const csrfByVu = {}; // mỗi VU 1 session (cookie jar riêng) → 1 holder riêng
 
@@ -90,10 +106,13 @@ function csrf() {
 // làm bước retry-1-lần trong postAdd/checkoutCod bên dưới — đúng hành vi
 // browser thật (trang nào cũng có token hiện hành, không cache xuyên session).
 function refreshCsrf() {
-  const r = http.get(`${BASE_URL}/`, { tags: { name: 'get_csrf' } });
-  const m = r.body ? r.body.match(/<meta name="csrf-token" content="([^"]+)"/i) : null;
-  csrfByVu[__VU] = m ? m[1] : '';
-  return csrfByVu[__VU];
+  // Lấy token từ /give-me-csrf (route NGOÀI group cache_page → luôn tươi). KHÔNG
+  // scrape <meta> của GET / vì trang đó có thể bị cache_page → token guest khác.
+  const r = http.get(`${BASE_URL}/give-me-csrf`, { tags: { name: 'get_csrf' }, headers: { 'Accept': 'application/json' } });
+  let token = '';
+  try { token = r.json('data') || ''; } catch (e) { token = ''; }
+  csrfByVu[__VU] = token;
+  return token;
 }
 function headers(token) {
   return { headers: { 'X-CSRF-TOKEN': token, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } };
@@ -138,7 +157,13 @@ function checkoutCod() {
 // ── Nhánh READ (đa số) ──────────────────────────────────────────────────────
 export function browse() {
   group('browse', () => {
-    http.get(listUrl(), { tags: { name: 'list', action: 'browse' } });
+    // Zipf: đa số hit trang hot (cache_page HIT). ~20% pha keyword/filter (MISS/BYPASS)
+    // để vẫn đo đường backend thật khi không trúng cache.
+    const url = Math.random() < 0.8 ? `${BASE_URL}${zipfPath()}` : listUrl();
+    const res = http.get(url, { tags: { name: 'list', action: 'browse' }, headers: { 'Accept': 'text/html' } });
+    const xcache = res.headers['X-Cache'] || res.headers['x-cache'] || '';
+    cacheHit.add(xcache === 'HIT');
+    check(res, { 'browse 200': (r) => r.status === 200 }, { action: 'browse' });
   });
   sleep(randomIntBetween(2, 5));
 }

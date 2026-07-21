@@ -921,6 +921,7 @@ $(document).ready(function () {
                 }
             },
             error: function (xhr) {
+                if (xhr && xhr.status === 419) return;
                 handleCartAjaxError(xhr);
             },
             complete: function () {
@@ -949,6 +950,7 @@ $(document).ready(function () {
                 $('#dialog-consult-sign').html(d.notice || (json && json.message) || '');
             },
             error: function (xhr) {
+                if (xhr && xhr.status === 419) return;
                 handleCartAjaxError(xhr);
             },
             complete: function () {

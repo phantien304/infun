@@ -5,20 +5,6 @@ namespace App\Http\Middleware;
 use App\Helpers\CacheGate;
 use Closure;
 
-/**
- * Full-page cache cho khách vãng lai (guest, GET). Sau rà soát 2026-07:
- *
- *  - KEYING theo ALLOWLIST param thay vì blacklist. Chỉ param nội dung đã biết
- *    (phân trang/lọc/sắp xếp) mới vào cache key; param lạ (vd ?q=<tự do>, param
- *    bot ngẫu nhiên) → BYPASS (đi thẳng, không cache) để tránh:
- *      + Vỡ đúng đắn: gộp nhầm nhiều nội dung vào 1 key.
- *      + Nổ cardinality → phình Redis/đĩa → tràn RAM.
- *  - `page` phải là số và <= maxCacheablePage; ngoài ngưỡng → BYPASS (chặn
- *    trục vô hạn ?page=1..∞ của bot; trang sâu traffic thấp, bỏ cache vô hại).
- *  - BỎ minifyHtml: preg_replace toàn trang rủi ro (đụng <pre>/<textarea>/
- *    <script>, có thể trả null → cache trang trắng) mà lợi ích ~1-3% thua xa
- *    gzip/brotli ở tầng web server/CDN. Cache thẳng HTML gốc.
- */
 class CachePage
 {
     protected $except = [
@@ -28,21 +14,18 @@ class CachePage
         'api/*',
     ];
 
-    /** Param tracking: BỎ khỏi key nhưng VẪN cache (không coi là "lạ"). */
     protected $ignoredQueryParams = [
         'aff', 'aff_click', 'ref',
         'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
         'gclid', 'fbclid',
     ];
 
-    /** Param nội dung được phép vào cache key. Param ngoài danh sách ⇒ BYPASS. */
     protected $allowedQueryParams = [
         'page', 'sort', 'order', 'filter',
         'rating', 'in_stock', 'tag', 'brand', 'manufacturer',
     ];
 
-    /** Trần số trang được cache; vượt ⇒ BYPASS (chặn ?page=1..∞). */
-    protected $maxCacheablePage = 50;
+    protected $maxCacheablePage = 500;
 
     public function handle($request, Closure $next)
     {
@@ -61,7 +44,6 @@ class CachePage
             }
         }
 
-        // Param lạ ngoài allowlist ⇒ không cache (tránh gộp key + nổ cardinality).
         if ($this->hasDisallowedParams($request) || ! $this->pageWithinCap($request)) {
             return $next($request)->header('X-Cache', 'BYPASS');
         }

@@ -26,7 +26,12 @@
     --font-sans: 'Quicksand', ui-sans-serif, system-ui, -apple-system, sans-serif;
     --font-heading: 'Quicksand', 'Lato', ui-sans-serif, system-ui, sans-serif;
 
-    /* Brand palette — mirror Bootstrap text-brand/btn primary của theme cũ. */
+    /* Brand palette — mirror Bootstrap text-brand/btn primary của theme cũ.
+       --color-brand (base, không shade) BẮT BUỘC có để Tailwind v4 sinh các
+       utility shade-less: bg-brand / border-brand / text-brand / ring-brand /
+       hover:border-brand ... (15 blade dùng chúng — thiếu var này chúng KHÔNG
+       được generate → mất màu brand → "vỡ" giao diện). = brand-500. */
+    --color-brand:     #f4a883;
     --color-brand-50:  #fff5ef;
     --color-brand-100: #ffe4d3;
     --color-brand-200: #fbcab0;

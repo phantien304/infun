@@ -32,10 +32,6 @@ trait MenusClient
         return $store->get($cacheKey);
     }
 
-    /**
-     * Build raw menu tree từ DB. Tách khỏi `getMenus()` để cả 2 nhánh
-     * cache/bypass chia sẻ logic build mà không lặp code.
-     */
     protected function buildMenus(): array
     {
         $menus = [];

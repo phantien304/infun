@@ -1,8 +1,3 @@
-{{--
-    Pagination — sliding window ±3 pages quanh current.
-    Class `.pagination`, `.page-item`, `.page-link`, `.active` đã có rule
-    trong main.css (Bootstrap-like skin). Wrapper `<ul>` dùng flex inline.
---}}
 @if ($paginator->hasPages())
     @php
         $query = request()->query();
@@ -18,7 +13,8 @@
                     <li class="page-item active"><span class="page-link">{{ $i }}</span></li>
                 @else
                     <li class="page-item">
-                        <a class="page-link" href="{{ $paginator->url($i) }}" title="{{ $i }}">{{ $i }}</a>
+                        <a class="page-link" href="{{ $paginator->url($i) }}"
+                            title="{{ $i }}">{{ $i }}</a>
                     </li>
                 @endif
             @endif

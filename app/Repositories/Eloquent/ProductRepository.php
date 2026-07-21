@@ -22,7 +22,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
     use CacheableRepository;
 
     /** TTL (giây) cache COUNT phân trang list — nới/tắt qua setting config_list_count_ttl (0 = tắt). */
-    protected const LIST_COUNT_TTL = 120;
+    protected const LIST_COUNT_TTL = 600;
 
     public function model(): string
     {
@@ -193,13 +193,13 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $relations;
     }
 
-    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): \Illuminate\Contracts\Pagination\Paginator
+    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): LengthAwarePaginator
     {
         $request ??= request();
         $keyword = trim((string) $request->input('filter.keyword', ''));
 
         if ($keyword === '' || config('scout.driver') !== 'meilisearch') {
-            return $this->simpleDbList($request, $perPage, $modifyBase);
+            return $this->listDbCachedCount($request, $perPage, $modifyBase);
         }
 
         $perPage ??= (int) $request->get('per_page', $this->defaultPerPage);
@@ -215,7 +215,7 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 'message'   => $e->getMessage(),
             ]);
 
-            return $this->simpleDbList($request, $perPage, $modifyBase);
+            return $this->listDbCachedCount($request, $perPage, $modifyBase);
         }
     }
 

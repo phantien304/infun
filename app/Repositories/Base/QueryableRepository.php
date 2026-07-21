@@ -4,7 +4,7 @@ namespace App\Repositories\Base;
 
 use App\Repositories\Base\BaseRepository;
 use App\Repositories\Concerns\HasListFilterToolbar;
-use Illuminate\Contracts\Pagination\Paginator;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Collection;
@@ -58,7 +58,7 @@ abstract class QueryableRepository extends BaseRepository
         return $query;
     }
 
-    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): Paginator
+    public function list(?Request $request = null, ?int $perPage = null, ?\Closure $modifyBase = null): LengthAwarePaginator
     {
         $request ??= request();
 

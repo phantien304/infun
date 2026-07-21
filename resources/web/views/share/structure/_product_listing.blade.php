@@ -23,8 +23,6 @@
                 --}}
                 @include('web::product.structure._sort_by')
             </div>
-            {{-- Product grid: 1 col mobile, 2 sm, 3 md, 4 lg.
-                 `product-grid` is kept so legacy slick/animation hooks bind. --}}
             <div class="product-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-5">
                 @foreach ($entities as $product)
                     @include('web::product.structure._product')
@@ -32,25 +30,7 @@
             </div>
             <div class="pagination-area mt-20 mb-20">
                 <nav aria-label="Phân trang">
-                    {{-- {!! $entities->links('web::share.structure._paging') !!} --}}
-                    @if ($entities->currentPage() > 1 || $entities->hasMorePages())
-                        <ul class="pagination flex flex-wrap items-center gap-2 justify-center list-none p-0 m-0">
-                            @if ($entities->currentPage() > 1)
-                                <li class="page-item">
-                                    <a class="page-link" href="{{ $entities->previousPageUrl() }}" rel="prev"
-                                        title="Trang trước">‹ Trước</a>
-                                </li>
-                            @endif
-                            <li class="page-item active"><span class="page-link">Trang
-                                    {{ $entities->currentPage() }}</span></li>
-                            @if ($entities->hasMorePages())
-                                <li class="page-item">
-                                    <a class="page-link" href="{{ $entities->nextPageUrl() }}" rel="next"
-                                        title="Trang sau">Sau ›</a>
-                                </li>
-                            @endif
-                        </ul>
-                    @endif
+                    {!! $entities->links('web::share.structure._paging') !!}
                 </nav>
             </div>
         </div>

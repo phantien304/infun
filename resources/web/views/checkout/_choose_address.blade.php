@@ -10,10 +10,6 @@
     $userAddressId = old('id', data_get($addressVisitor, 'id', 0));
     $zoneIdCookie = getCookie(setting('cookie.shipping_zone'), '');
     $zoneNameCookie = '';
-    if (filled($zoneIdCookie)) {
-        $zoneCookie = $zones->firstWhere('id', $zoneIdCookie);
-        $zoneNameCookie = $zoneCookie ? $zoneCookie->name : '';
-    }
     $zoneId = old('zone_id', data_get($addressVisitor, 'zone_id', $zoneIdCookie));
     $fullName = old('full_name', data_get($addressVisitor, 'full_name', ''));
     $telephone = old('telephone', data_get($addressVisitor, 'telephone', ''));
@@ -39,8 +35,7 @@
                         @if (auth()->check())
                             @if (empty($address))
                                 Bạn chưa có địa chỉ, vui lòng
-                                <a
-                                    href="{{ route('account.address.create', ['redirect_url' => url()->current()]) }}">
+                                <a href="{{ route('account.address.create', ['redirect_url' => url()->current()]) }}">
                                     <b>Thêm địa chỉ</b>
                                 </a>
                             @else
@@ -88,12 +83,6 @@
                                     <select id="popupInputZone" name="zone_id" onchange="changeZone(this)"
                                         class="form-control @if ($errors->has('zone_id')) is-invalid @endif">
                                         <option value="">Chọn Thành phố/Tỉnh</option>
-                                        @foreach ($zones as $item)
-                                            <option value="{{ $item->id }}" name="{!! $item->name !!}"
-                                                @selected($zoneId == $item->id)>
-                                                {!! $item->name !!}
-                                            </option>
-                                        @endforeach
                                     </select>
                                     <input type="hidden" name="zone_name" id="popupZoneName"
                                         value="{{ $zoneName }}">
@@ -179,8 +168,35 @@
         var oldZoneId = '<?php echo $zoneId; ?>';
         var oldDistrictId = '<?php echo $districtId; ?>';
         var oldWardId = '<?php echo $wardId; ?>';
+        callResourceZone(oldZoneId);
         callResourceDistrict(oldZoneId);
         callResourceWard(oldDistrictId);
+
+        function callResourceZone(selectedId) {
+            if (!$('#popupInputZone').length) return;
+            $.ajax({
+                url: '/resource/zone',
+                type: 'get',
+                success: function(json) {
+                    if (json && json.success === true) {
+                        let input = '<option value="">Chọn Thành phố/Tỉnh</option>';
+                        let data = json.data || [];
+                        let selectedName = '';
+                        for (let i = 0; i < data.length; i++) {
+                            let selected = '';
+                            if (String(data[i].id) === String(selectedId)) {
+                                selected = ' selected';
+                                selectedName = data[i].name;
+                            }
+                            input += '<option value="' + data[i].id + '" name="' + data[i].name + '"' +
+                                selected + '>' + data[i].name + '</option>';
+                        }
+                        $('#popupInputZone').html(input);
+                        if (selectedName) $('input#popupZoneName').val(selectedName);
+                    }
+                },
+            });
+        }
 
         function changeZone(obj) {
             $('input#popupZoneName').val(obj.options[obj.selectedIndex].text);

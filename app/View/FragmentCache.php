@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\View;
+namespace App\View;
 
 use App\Data\Output\FilterDTO;
 use App\Data\Output\ManufacturerDTO;

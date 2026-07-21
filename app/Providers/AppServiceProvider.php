@@ -33,21 +33,21 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->optimizes('repository:cache', 'repository:clear', 'repositories');
         $this->registerViewNamespaces();
+        $this->registerViewComposers();
         $this->registerRouteMacros();
         $this->registerRateLimiters();
-        $this->logSql();
+        // $this->logSql();
         $this->registerObservers();
     }
 
-    /**
-     * Named rate limiter cho endpoint nóng (routes dùng throttle:add-to-cart...).
-     * Mức limit đọc từ config/throttle.php — nới được qua env khi load test.
-     *
-     * Key theo user đăng nhập → session → IP (thứ tự ưu tiên). KHÔNG key
-     * thuần IP: sau LB/CGNAT cả văn phòng chung 1 IP → chặn nhầm khách thật.
-     * Lưu ý: cần trustProxies (bootstrap/app.php) để ->ip() ra IP client
-     * thật thay vì IP của nginx LB.
-     */
+    protected function registerViewComposers(): void
+    {
+        View::composer(
+            'web::category.structure._side_bar',
+            \App\View\Composers\ProductSidebarComposer::class,
+        );
+    }
+
     protected function registerRateLimiters(): void
     {
         $keyFor = function (\Illuminate\Http\Request $request): string {

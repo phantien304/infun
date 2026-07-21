@@ -10,10 +10,6 @@
     $userAddressId = old('user_address_id', data_get($addressVisitor, 'id', 0));
     $zoneIdCookie = getCookie(setting('cookie.shipping_zone'), '');
     $zoneNameCookie = '';
-    if (filled($zoneIdCookie)) {
-        $zoneCookie = $zones->firstWhere('id', $zoneIdCookie);
-        $zoneNameCookie = $zoneCookie ? $zoneCookie->name : '';
-    }
     $zoneId = old('zone_id', data_get($addressVisitor, 'zone_id', $zoneIdCookie));
     $fullName = old('full_name', data_get($addressVisitor, 'full_name', ''));
     $telephone = old('telephone', data_get($addressVisitor, 'telephone', ''));
@@ -39,7 +35,6 @@
     <div class="container-xl mb-80 mt-50">
         <form action="{{ route('checkout.saveOrder') }}" method="post" enctype="multipart/form-data" id="saveOrder"
             role="form">
-            {{-- Idempotency token: chống double-submit tạo trùng đơn (guest lẫn user) --}}
             <input type="hidden" name="idempotency_key" value="{{ $idempotencyKey ?? '' }}">
             <div class="row cart-wrap">
                 <div class="col-lg-12">
@@ -293,7 +288,10 @@
                                                         <div class="alert alert-info" style="font-size: 11px;">
                                                             <b>DEBUG totalData</b> ({{ count($totalData) }} rows):<br>
                                                             @foreach ($totalData as $i => $row)
-                                                                #{{ $i }} code={{ $row['code'] }} title={{ strip_tags($row['title']) }} text={{ strip_tags($row['text']) }} value={{ $row['value'] }}<br>
+                                                                #{{ $i }} code={{ $row['code'] }}
+                                                                title={{ strip_tags($row['title']) }}
+                                                                text={{ strip_tags($row['text']) }}
+                                                                value={{ $row['value'] }}<br>
                                                             @endforeach
                                                             <br><b>Session</b>:
                                                             applied_coupons={{ json_encode((array) session('checkout.applied_coupons', [])) }}
@@ -341,8 +339,6 @@
     </div>
     @if ($countProduct)
         @include('web::checkout._choose_address')
-        {{-- Modal MUST live outside the saveOrder <form> to avoid nested
-             forms (the modal contains its own AJAX manual-code input). --}}
         @include('web::checkout._coupon_modal')
         @if (isset($gifts) && $gifts->count())
             @include('web::checkout._gift_modal')
@@ -350,20 +346,17 @@
         @include('web::checkout._voucher_modal')
     @endif
 
-    {{-- Chống double-click nút Đặt hàng (lớp frontend của idempotency).
-         Chỉ khoá nút khi form thực sự submit; tự mở lại sau 8s phòng khi
-         validation phía client chặn submit, tránh kẹt nút. --}}
     <script>
-        (function () {
+        (function() {
             var form = document.getElementById('saveOrder');
             if (!form) return;
-            form.addEventListener('submit', function () {
+            form.addEventListener('submit', function() {
                 var btn = form.querySelector('[data-order-submit]');
                 if (!btn || btn.dataset.locked === '1') return;
                 btn.dataset.locked = '1';
                 btn.classList.add('disabled');
                 btn.setAttribute('aria-busy', 'true');
-                setTimeout(function () {
+                setTimeout(function() {
                     btn.dataset.locked = '';
                     btn.classList.remove('disabled');
                     btn.removeAttribute('aria-busy');

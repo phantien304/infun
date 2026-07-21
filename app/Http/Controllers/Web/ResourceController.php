@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cookie;
 
 class ResourceController extends Controller
 {
-    public function zone()
+    public function zone(Request $request)
     {
         $rows = $this->zoneRepo->listAllCached()
             ->map(fn ($zone) => [
@@ -17,7 +17,13 @@ class ResourceController extends Controller
             ])
             ->values();
 
-        return respondSuccess($rows);
+        $response = respondSuccess($rows);
+        $response->setPublic();
+        $response->setMaxAge(86400);
+        $response->setEtag(md5((string) $response->getContent()));
+        $response->isNotModified($request);
+
+        return $response;
     }
 
     public function district(Request $request)

@@ -17,9 +17,6 @@ class FilterRepository extends QueryableRepository implements FilterRepositoryIn
         return Filter::class;
     }
 
-    /**
-     * Filters load mọi page render → `rememberSystem` luôn cache.
-     */
     public function listAllCached(): Collection
     {
         return $this->rememberSystemModels(
@@ -31,8 +28,7 @@ class FilterRepository extends QueryableRepository implements FilterRepositoryIn
     public function flushCache(): void
     {
         $this->forgetSystem(setting('cache.filters'));
-        // Facets sidebar (item 3) dùng list này → xoá luôn fragment cache.
-        \App\Services\View\FragmentCache::forgetFacets();
+        \App\View\FragmentCache::forgetFacets();
     }
 
     protected function withRelations(): array

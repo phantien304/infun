@@ -70,7 +70,7 @@ Route::middleware(['maintenance', 'limit_access'])->group(function () {
     Route::get('language/{code}', 'LocaleController@language')->name('locale.language')->withoutMiddleware(['cache_page']);
 
     Route::prefix('resource')->group(function () {
-        Route::get('zone', 'ResourceController@zone')->name('resource.zone');
+        Route::get('zone', 'ResourceController@zone')->name('resource.zone')->withoutMiddleware(['cache_page']);
         Route::post('zone-shipping', 'ResourceController@zoneShipping')->name('resource.zoneShipping');
         Route::get('district', 'ResourceController@district')->name('resource.district');
         Route::get('ward', 'ResourceController@ward')->name('resource.ward');

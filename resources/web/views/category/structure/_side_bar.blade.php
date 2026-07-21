@@ -51,7 +51,7 @@
         @foreach (collect(request()->query())->except(['filter', 'page'])->dot() as $name => $value)
             <input type="hidden" name="{{ $name }}" value="{{ $value }}">
         @endforeach
-        {!! \App\Services\View\FragmentCache::facets((bool) ($hideManufacturer ?? false)) !!}
+        {!! \App\View\FragmentCache::facets((bool) ($hideManufacturer ?? false)) !!}
     </form>
 
     <div class="sidebar-widget product-sidebar mb-30 p-30 bg-grey border-radius-10">

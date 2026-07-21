@@ -2,10 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Data\Output\CategoryDTO;
-use App\Data\Output\FilterDTO;
-use App\Data\Output\ManufacturerDTO;
-use App\Data\Output\ZoneDTO;
 use App\Events\BaseEvent;
 use App\Http\Supports\BuildsSeoMeta;
 use App\Http\Supports\MenusClient;
@@ -143,10 +139,6 @@ abstract class Controller
         $this->setViewData([
             'breadcrumbs' => $breadcrumbs,
             'breadcrumbSchema' => $breadcrumbSchema,
-            'categories' => CategoryDTO::collect($this->categoryRepo->listAllCached()),
-            'manufacturers' => ManufacturerDTO::collect($this->manufacturerRepo->listAllCached()),
-            'filters' => FilterDTO::collect($this->filterRepo->listAllCached()),
-            'zones' => ZoneDTO::collect($this->zoneRepo->listAllCached()),
             'menus' => $this->getMenus(),
             'currencies' => $this->currencyService->allCurrency(),
             'currentCurrency' => $currentCurrency,

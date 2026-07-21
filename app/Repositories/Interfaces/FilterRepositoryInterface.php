@@ -3,8 +3,11 @@
 namespace App\Repositories\Interfaces;
 
 use App\Repositories\Base\BaseRepositoryInterface;
+use Illuminate\Support\Collection;
 
-interface FilterRepositoryInterface extends BaseRepositoryInterface {
+interface FilterRepositoryInterface extends BaseRepositoryInterface
+{
+    public function listWithValues(): Collection;
 
-    public function listWithValues(): \Illuminate\Support\Collection;
+    public function listAllCached(): Collection;
 }

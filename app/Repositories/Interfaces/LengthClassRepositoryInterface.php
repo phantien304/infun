@@ -11,5 +11,5 @@ interface LengthClassRepositoryInterface extends BaseRepositoryInterface
 
     public function flushCache(): void;
 
-    public function getAll(): \Illuminate\Support\Collection;
+    public function getAll(): Collection;
 }

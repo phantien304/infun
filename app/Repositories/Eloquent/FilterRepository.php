@@ -31,6 +31,8 @@ class FilterRepository extends QueryableRepository implements FilterRepositoryIn
     public function flushCache(): void
     {
         $this->forgetSystem(setting('cache.filters'));
+        // Facets sidebar (item 3) dùng list này → xoá luôn fragment cache.
+        \App\Services\View\FragmentCache::forgetFacets();
     }
 
     protected function withRelations(): array

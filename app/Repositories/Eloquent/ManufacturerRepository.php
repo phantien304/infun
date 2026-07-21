@@ -37,6 +37,8 @@ class ManufacturerRepository extends QueryableRepository implements Manufacturer
     public function flushCache(): void
     {
         $this->forgetSystem(setting('cache.manufacturers'));
+        // Facets sidebar (item 3) dùng list này → xoá luôn fragment cache.
+        \App\Services\View\FragmentCache::forgetFacets();
     }
 
     public function getAll(): Collection

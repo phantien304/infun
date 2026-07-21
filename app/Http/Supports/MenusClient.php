@@ -13,27 +13,23 @@ trait MenusClient
     {
         return isset($this->children[$id . '_' . $menuId]);
     }
+
     protected function getNodes($id, $menuId = 0)
     {
         return $this->children[$id . '_' . $menuId];
     }
+
     public function getMenus()
     {
         $cacheKey = getCoreConfig('cache.menu') . app()->getLocale();
-        // `systemStore()` luôn trả Repository — KHÔNG bypass khi
-        // `config_debug=1`. Menu HTML pre-rendered là tài nguyên "load mọi
-        // page render" — không thể chấp nhận chi phí build mỗi request kể cả
-        // dev mode. Invalidation đi qua `CacheFlushObserver(Menu/MenuValue)`
-        // đăng ký ở `AppServiceProvider` → `MenuRepository::flushCache()` dùng
-        // cùng systemStore nên admin sửa menu vẫn fresh ngay.
         $store = CacheGate::systemStore();
 
         if (! $store->has($cacheKey)) {
             $menus = $this->buildMenus();
             $store->add($cacheKey, $menus);
-            return $this->processMenuBeforeRender($menus);
+            return $menus;
         }
-        return $this->processMenuBeforeRender($store->get($cacheKey));
+        return $store->get($cacheKey);
     }
 
     /**
@@ -50,18 +46,7 @@ trait MenusClient
         }
         return $menus;
     }
-    protected function processMenuBeforeRender(array $menus): array
-    {
-        $data = [];
-        $path = (request()->path() != '/') ? str_replace('/', '\/', request()->path()) : '';
-        foreach ($menus as $i => $menu) {
-            $data[$i] = [
-                'pc' => preg_replace("/data-link=\"$path\"/", 'class="active"', $menu['pc']),
-                'mobile' => preg_replace("/data-link=\"$path\"/", 'class="active"', $menu['mobile'])
-            ];
-        }
-        return $data;
-    }
+
     public function genTree(mixed $menu)
     {
         $this->children = [];
@@ -84,6 +69,7 @@ trait MenusClient
         }
         return ['', ''];
     }
+
     public function getMenu($parent, $menuId)
     {
         $output = $outputMobile = '';

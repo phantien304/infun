@@ -237,6 +237,7 @@
 </style>
 {{-- Phương án B item 1: badge giỏ/wishlist hydrate client-side (SSR để 0) --}}
 {{-- → HTML header user-agnostic, cache_page / CF Cache Everything không dính số của guest khác. --}}
+{{-- Phương án B item 2: active-state menu đánh dấu client-side (không còn preg_replace mỗi request). --}}
 <script>
     (function () {
         function setBadges(sel, value) {
@@ -257,10 +258,23 @@
                 })
                 .catch(function () { /* im lặng — badge giữ 0 */ });
         }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', hydrateBadges);
-        } else {
+        // Item 2: active-state menu client-side → menu HTML là hằng số per-locale.
+        function markActiveMenu() {
+            var path = location.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+            if (!path) return; // trang chủ: không đánh dấu (giữ hành vi cũ)
+            document.querySelectorAll('.main-menu a[data-link], .mobile-menu-wrap a[data-link]')
+                .forEach(function (a) {
+                    if (a.getAttribute('data-link') === path) a.classList.add('active');
+                });
+        }
+        function init() {
             hydrateBadges();
+            markActiveMenu();
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
         }
     })();
 </script>

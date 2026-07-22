@@ -9,6 +9,10 @@
 #   ./staging.sh logs [svc]  # theo dõi log (mặc định infun-php)
 #   ./staging.sh migrate     # php artisan migrate --force
 #   ./staging.sh reindex     # scout:import Product
+#   ./staging.sh provision [args]   # k6:provision-stock — reset tồn kho product
+#                            #   test TRƯỚC mỗi đợt k6 (chống default variant cạn
+#                            #   → 422 giả). Truyền args giống k6, vd:
+#                            #   ./staging.sh provision --products=1-50 --flash=730
 #   ./staging.sh shell       # vào shell container app
 #   ./staging.sh scale N     # up -d --scale infun-php=N
 #   ./staging.sh down        # dừng (giữ dữ liệu)
@@ -34,9 +38,10 @@ case "$cmd" in
     logs)    $DC logs -f "${2:-infun-php}" ;;
     migrate) $DC exec infun-php php artisan migrate --force ;;
     reindex) $DC exec infun-php php artisan scout:import "App\\Models\\Entities\\Product" ;;
+    provision) $DC exec infun-php php artisan k6:provision-stock "${@:2}" ;;
     shell)   $DC exec infun-php sh ;;
     scale)   $DC up -d --scale "infun-php=${2:-3}" ;;
     down)    $DC down ;;
     reset)   $DC down -v ;;
-    *)       echo "Lệnh không hợp lệ: $cmd (build|up|deploy|logs|migrate|reindex|shell|scale|down|reset)"; exit 1 ;;
+    *)       echo "Lệnh không hợp lệ: $cmd (build|up|deploy|logs|migrate|reindex|provision|shell|scale|down|reset)"; exit 1 ;;
 esac

@@ -106,6 +106,28 @@ Sửa code xong chỉ cần chạy lại 1 lệnh trên. **Không cần** `down 
 
 ---
 
+## Bring-up qua remote context (từ máy dev, `docker context ... ssh://...`)
+
+`mysql-replica1`/`mysql-replica2`/`proxysql` có bind-mount file cấu hình
+(`./docker/mysql/replica-init.sh`, `./docker/proxysql/proxysql.cnf`). Khi
+`docker compose` chạy nhắm remote context, path `./...` được daemon REMOTE
+diễn giải trên **ổ đĩa của chính nó** — không phải ổ đĩa máy dev. Máy staging
+(192.168.1.11) có sẵn 1 bản mirror project đầy đủ (git, cùng commit) tại
+`D:\projects\infun` — dùng path đó qua biến `STAGING_HOST_CONFIG_DIR`:
+
+```bash
+# PowerShell: $env:STAGING_HOST_CONFIG_DIR = "D:/projects/infun"
+export STAGING_HOST_CONFIG_DIR="D:/projects/infun"
+docker --context staging-ssh compose -f docker-compose.staging.yml up -d --scale infun-php=3
+```
+
+Không set biến này → mặc định `.` (build/bring-up local hoặc chạy trực tiếp
+trên máy staging qua RDP/console, không đổi hành vi cũ). Mirror ở
+`D:\projects\infun` nên `git pull` định kỳ để 2 file cấu hình trên không bị
+lệch code so với máy dev.
+
+---
+
 ## Lệnh hay dùng
 
 ```bash

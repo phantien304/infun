@@ -225,7 +225,7 @@ services:
       - --skip-name-resolve
     volumes:
       - staging_mysql_replica1_data:/var/lib/mysql
-      - ./docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
+      - ${STAGING_HOST_CONFIG_DIR:-.}/docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
     depends_on:
       mysql: { condition: service_healthy }
     healthcheck:
@@ -260,7 +260,7 @@ services:
       - --skip-name-resolve
     volumes:
       - staging_mysql_replica2_data:/var/lib/mysql
-      - ./docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
+      - ${STAGING_HOST_CONFIG_DIR:-.}/docker/mysql/replica-init.sh:/docker-entrypoint-initdb.d/10-replica-init.sh:ro
     depends_on:
       mysql: { condition: service_healthy }
     healthcheck:
@@ -283,7 +283,7 @@ services:
       - "${STAGING_PROXYSQL_WRITE_PORT:-6033}:6033"
       - "${STAGING_PROXYSQL_READ_PORT:-6034}:6034"
     volumes:
-      - ./docker/proxysql/proxysql.cnf:/etc/proxysql.cnf:ro
+      - ${STAGING_HOST_CONFIG_DIR:-.}/docker/proxysql/proxysql.cnf:/etc/proxysql.cnf:ro
       - staging_proxysql_data:/var/lib/proxysql
     depends_on:
       mysql: { condition: service_healthy }

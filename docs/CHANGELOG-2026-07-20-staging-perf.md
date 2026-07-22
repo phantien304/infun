@@ -18,20 +18,37 @@ Máy để bàn cạnh (12 luồng/32GB, IP LAN `192.168.1.11`) dùng làm stagi
 tách khỏi máy dev chính (đang chạy dev stack + Herd cùng lúc → tự nó là 1 nguồn
 nhiễu, xem mục 4).
 
-```bash
-# Trên máy để bàn (PowerShell Admin), 1 lần:
-netsh interface portproxy add v4tov4 listenport=2375 listenaddress=0.0.0.0 connectport=2375 connectaddress=127.0.0.1
-# (Docker Desktop "Expose daemon on tcp://localhost:2375" mặc định chỉ bind
-# 127.0.0.1 dù tick chọn — cần portproxy để expose ra LAN)
+**Cập nhật 2026-07-22**: đã bỏ hẳn cách expose `tcp://2375` (Docker Desktop chỉ
+bind `127.0.0.1` dù tick "expose without TLS", phải dùng `netsh portproxy` để
+lộ ra LAN — không mã hoá, không xác thực, và checkbox "expose" bị Docker
+Desktop tự reset OFF sau mỗi lần update khiến portproxy còn "mở cổng" nhưng
+backend phía sau chết, connect được nhưng mọi request bị đóng ngay — EOF/empty
+reply). Chuyển sang **docker context qua SSH** (OpenSSH Server có sẵn trên
+Windows, cổng 22, xác thực bằng key):
 
-# Trên máy dev, add context:
-docker context create staging-desktop --docker "host=tcp://192.168.1.11:2375"
+```powershell
+# Trên máy để bàn (192.168.1.11), PowerShell Admin, 1 lần:
+Add-WindowsCapability -Online -Name "OpenSSH.Server~~~~0.0.1.0"
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+New-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -DisplayName "OpenSSH Server (sshd)" `
+    -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+# Nếu tài khoản đăng nhập thuộc nhóm Administrators (trường hợp ở đây: user
+# ADMIN), OpenSSH BẮT BUỘC dùng %ProgramData%\ssh\administrators_authorized_keys
+# thay vì ~/.ssh/authorized_keys, với ACL chỉ SYSTEM + Administrators — nhầm
+# chỗ này là lỗi hay gặp nhất khi setup OpenSSH trên Windows.
+```
+
+```bash
+# Trên máy dev (~/.ssh/config có alias "staging-win" trỏ 192.168.1.11:22,
+# IdentityFile riêng id_ed25519_staging_win, User ADMIN):
+docker context create staging-ssh --docker "host=ssh://staging-win"
 
 # Build local rồi transfer thẳng (nhanh + ổn định hơn build qua remote context —
 # BuildKit qua session dài dễ bị "CANCELED" ở mốc 60s khi đường truyền không ổn định):
 docker compose -f docker-compose.staging.yml build infun-php
-docker save infun-app:staging | docker --context staging-desktop load
-docker --context staging-desktop compose -f docker-compose.staging.yml up -d --scale infun-php=3
+docker save infun-app:staging | docker --context staging-ssh load
+docker --context staging-ssh compose -f docker-compose.staging.yml up -d --scale infun-php=3
 ```
 
 DB: copy full (schema + data) từ MySQL dev sang MySQL staging remote qua pipe
@@ -39,12 +56,12 @@ DB: copy full (schema + data) từ MySQL dev sang MySQL staging remote qua pipe
 
 ```bash
 docker exec infun-mysql mariadb-dump -uroot -proot --single-transaction --quick infun \
-  | docker --context staging-desktop exec -i infun-mysql-staging mariadb -uroot -proot infun
+  | docker --context staging-ssh exec -i infun-mysql-staging mariadb -uroot -proot infun
 ```
 
 `docker save | docker load` qua context remote **đôi khi bị đứt kết nối giữa
 chừng** (`wsasend: An existing connection was forcibly closed`) — không phải lỗi
-logic, thử lại là qua. Luôn `docker --context staging-desktop images infun-app:staging`
+logic, thử lại là qua. Luôn `docker --context staging-ssh images infun-app:staging`
 so Image ID với local sau mỗi lần transfer để chắc chắn container đang chạy
 đúng image mới (nếu transfer fail nhưng `up -d` không thấy đổi ID thì compose
 sẽ KHÔNG recreate container → chạy nhầm code cũ mà không báo lỗi).
@@ -136,7 +153,7 @@ song song Docker Desktop (dev stack 9 container) + Herd + mọi thứ khác.
 (cùng Docker network với staging, không qua LAN/máy dev):
 
 ```bash
-cat k6/mixed-30k.js | docker --context staging-desktop run --rm -i \
+cat k6/mixed-30k.js | docker --context staging-ssh run --rm -i \
   --network infun_infun-net grafana/k6 run \
   -e BASE_URL=http://infun-web-staging:80 -e TARGET=50 -e DURATION=1m \
   -e PRODUCT_IDS=... -e FLASH_PRODUCT_ID=3 -e ZONE_ID=... -e DISTRICT_ID=... -e WARD_ID=... -
@@ -219,6 +236,171 @@ tối ưu thêm trên 1 máy.
 
 ---
 
+## 8. TARGET giữa 300-1500 (2026-07-22) — ngưỡng nghẽn sớm hơn dự đoán nhiều
+
+Test 3 mốc 600/900/1200 (DURATION=1m) lần đầu sau khi chuyển hạ tầng sang
+`staging-ssh` context (mục 1):
+
+| TARGET | Browse p95 | Add p95 | Order p95 | http_req_failed | order_error | Ghi chú |
+|---|---|---|---|---|---|---|
+| 600  | 84.6ms  | 52.3ms | 72.4ms | 16.79% | 0 | Toàn bộ fail là **timeout client 60s**, không phải 5xx |
+| 900  | 94.9ms  | 54.1ms | 73.9ms | 17.88% | 0 | Cùng dạng |
+| 1200 | 106.7ms | 55.6ms | 71.4ms | 18.90% | 1 | Lỗi 5xx thật đầu tiên xuất hiện |
+
+Khác hẳn dự đoán ban đầu (queue chậm dần tới gần 1500 mới nghẽn, xem mục 7):
+p95 latency vẫn rất thấp và ổn định ở MỌI mức — không phải "chậm dần", mà là
+**~17-19% request bị treo cứng đúng 60s rồi mới timeout**, ngay từ TARGET=600.
+Nghĩa là có 1 tài nguyên **cố định** bị bão hoà sớm, không tỉ lệ thuận theo VU.
+
+### Root cause: `pm.max_children` bão hoà, không phải DB chậm
+
+Log php-fpm cả 3 replica đều có:
+```
+WARNING: [pool www] server reached pm.max_children setting (25), consider raising it
+```
+75 worker tổng (25 × 3 replica) là trần cứng. Ban đầu nghi do query browse có
+`filter[keyword]` chậm (2-9s theo slowlog `request_slowlog_timeout=2s`), nhưng
+bật `slow_query_log` (`long_query_time=0.5`) rồi soi bằng `mysqldumpslow -s t`
+cho thấy **KHÔNG có query nào chậm thật** — nặng nhất (COUNT quét 500k dòng
+`date_available`) trung bình chỉ 0.08s. Nghĩa là 2-9s "chậm" ở php-fpm slowlog
+là do **tranh CPU** (75-180 worker PHP-FPM cộng thêm MySQL×3 + ProxySQL cùng
+chia nhau 12 lõi vật lý), không phải thiếu index — khác hẳn pattern lỗi
+`date_available` ở mục 4 (đó là do thiếu index thật).
+
+**Kết luận quan trọng: KHÔNG nên tiếp tục tăng `pm.max_children` quá cao** —
+oversubscribe CPU chỉ tăng context-switching, không tăng throughput thật.
+Hướng đúng để vượt ngưỡng này là scale ngang (thêm máy), đúng kết luận đã ghi
+ở mục 7.
+
+### Fix áp dụng — `docker/php/www.pool.conf`
+
+- `pm.max_children`: 25 → **60** (tận dụng RAM/CPU dư — baseline idle CPU
+  <3%, RAM dư hàng chục GB so với 15.5GB Docker cấp).
+- `request_terminate_timeout`: 60s → **15s** — lý do chính khiến kết quả
+  cải thiện rõ: 60s làm worker kẹt giữ chỗ quá lâu, hàng đợi dồn ứ cấp số
+  nhân; 15s vẫn dư margin so với query chậm nhất đo được (~9s) nhưng giải
+  phóng worker nhanh hơn nhiều khi kẹt thật.
+
+Build lại + transfer (`docker save | docker --context staging-ssh load`) +
+`up -d --scale infun-php=3` để nhận image mới.
+
+### Kết quả sau fix (TARGET=900, so trực tiếp với dòng 900 ở bảng trên)
+
+| | Trước fix | Sau fix |
+|---|---|---|
+| Max latency | 59.99s (chạm trần) | ~20-25s |
+| Throughput (http_reqs/1.5m) | 33,279 | 45,087 (+35%) |
+| checks_failed (browse/order/flash) | 0.75% | **0%** |
+| http_req_failed | 17.88% | 15.25% |
+| order_error | 0 | 0 |
+
+Vẫn còn 15.25% "fail" — cần điều tra tiếp có bao nhiêu % trong đó là 422 hợp
+lệ (chống oversell) vs timeout/lỗi thật (xem mục "nợ" — threshold quá chặt).
+
+### Phát hiện phụ — dữ liệu test bị nhiễm bẩn qua nhiều lần chạy k6
+
+7+ lượt chạy k6 liên tiếp trong ngày làm cạn stock của **variant mặc định**
+(is_default) cho từng `PRODUCT_IDS` dùng để test — dù các variant KHÁC của
+cùng sản phẩm vẫn còn hàng. Add-to-cart không truyền `variant_id` nên luôn
+resolve về variant mặc định → 422 "không đủ số lượng trong kho" cho TOÀN BỘ
+add, dù bảng `product_stock` tổng nhìn vẫn còn hàng (dễ nhầm là hệ thống lỗi).
+Đã restock các variant mặc định của `3,6,9,14,17,19,21,27` lên `on_hand=5000`,
+reset `730` (variant flash-sale cố ý khan hiếm) về `on_hand=1`.
+
+**Bài học**: sau mỗi đợt k6, nên restock lại các sản phẩm test (không chỉ
+truncate `orders` như đã note ở đầu file) — nếu không, lần chạy sau sẽ cho số
+liệu sai lệch do hết hàng thật chứ không phải do hạ tầng.
+
+### ⚠️ Cần điều tra riêng (chưa xử lý trong phiên này)
+
+- `flash_ok` ở lần chạy TARGET=900 sau restock ra **1675** dù variant flash
+  (`730`) chỉ có `on_hand=1` — con số này vô lý nếu đúng nghĩa "1675 đơn hàng
+  thật mua thành công sản phẩm chỉ có 1 tồn kho". Nghi `checkoutCod()` vẫn trả
+  2xx (tính vào `flash_ok`) ngay cả khi giỏ hàng KHÔNG có sản phẩm flash (do
+  `postAdd(FLASH_PRODUCT_ID)` trước đó bị 422) — tức có thể tạo **đơn hàng
+  rỗng** thay vì báo lỗi. Cần kiểm tra `orders_product` xem có đúng 1 order
+  chứa variant 791 hay không, và review logic `save-order` có validate giỏ
+  hàng rỗng chưa. KHÔNG kết luận đây là bug oversell thật — chỉ là nghi vấn
+  cần verify riêng.
+
+---
+
+## 9. Tăng cache hit — cache query danh mục/phân trang + đo đúng steady-state (2026-07-22)
+
+Xuất phát từ soi lại nguyên tắc 80/20 trong `k6/mixed-30k.js`: cơ chế Zipf có
+đúng, nhưng hit thực tế bị chặn trần vì **`CachePage` BYPASS mọi URL có query
+string** (trừ UTM) — tức trang danh mục / phân trang / sort (phần lớn traffic
+browse thương mại điện tử) KHÔNG BAO GIỜ được cache. `k6` càng làm lộ vì
+`listUrl()` luôn gắn `page=...` → 100% BYPASS.
+
+### B — `CachePage` cache thêm whitelist query param
+
+`app/Http/Middleware/CachePage.php` — thay "có query → BYPASS" bằng whitelist:
+
+- Cache khi query CHỈ gồm `page` / `per_page` / `sort` / `filter[...]` với sub-key
+  thuộc `{category_id, manufacturer_id, filter_value_id}`. Value phải hợp lệ
+  (`page/per_page` là số, `sort` khớp `/^-?[a-z_]+$/i`, id là số/mảng số) — value
+  rác → BYPASS an toàn, chặn cache poisoning/cache-busting.
+- CỐ Ý loại (vẫn BYPASS): `filter[keyword]` (free-text → Meilisearch, cardinality
+  vô hạn), `filter[price_min|max]` (range liên tục), `filter[in_stock]` (dễ stale).
+- Cache key nhúng query đã CHUẨN HOÁ (sort key + sort value mảng) → 2 URL cùng
+  nghĩa khác thứ tự dùng chung 1 entry. Key path-trần GIỮ NGUYÊN byte như cũ →
+  không invalidate cache homepage/list hiện có.
+- Chỉ chạy cho guest (`auth()->check()` return sớm) → giá theo user group mặc
+  định, không lệch giá.
+
+### Bật invalidation page cache
+
+`app/Observers/CacheFlushObserver.php` — bỏ comment `CacheGate::flushPages()`.
+Bắt buộc: giờ cache cả trang danh mục nên khi product/category đổi phải flush,
+nếu không stale tới hết TTL 24h. Tag flush trên redis rẻ (bump version), no-op
+trên file driver. Trade-off: 1 write CMS xoá toàn page cache — chấp nhận vì
+đọc >> ghi. **Chỉ hiệu lực khi `config_redis_cache=1`** (file driver không có
+tag → danh mục vẫn stale theo TTL; prod nên dùng redis).
+
+### Track A — `k6/mixed-30k.js` đo đúng hit sau khi B bật
+
+- **`setup()` warm-up**: production cache ấm 24/7, test 1 phút đang đo
+  cold-start. `setup()` ấm trước `BROWSE_PATHS` + tổ hợp category hot (page 1 ±
+  sort) trên page store (server-side, chia sẻ mọi VU). Tắt bằng `-e WARMUP=0`.
+- **`listUrl()` viết lại**: đa số là browse danh mục CACHEABLE
+  (`filter[category_id]` Zipf 80/20 + `page` lệch về 1 + đôi khi sort/per_page)
+  → lặp trang hot → HIT. `KEYWORD_RATIO` (mặc định 0.25) phần đi
+  `filter[keyword]` search (BYPASS, đo Meili). Env mới: `CATEGORY_IDS`
+  (**mặc định `1-50` theo seed test**), `SORTS`, `KEYWORD_RATIO`, `WARMUP`.
+- **Threshold `cache_hit` 0.5 → 0.8**: sau warm + category cacheable, steady-state
+  kỳ vọng >0.9; ngưỡng cũ 0.5 quá lỏng để bắt regression.
+
+Ước tính hit sau thay đổi: browse = 80% path-trần (HIT) + 20% listUrl, trong đó
+~75% category (HIT) + ~25% keyword (BYPASS) → cacheable ≈ 95%.
+
+### Chống cạn quantity qua nhiều lượt k6 — `k6:provision-stock`
+
+`app/Console/Commands/K6ProvisionStockCommand.php` — giải quyết dứt điểm mục 8
+"Phát hiện phụ" (default variant cạn dần → 422 giả). Chạy TRƯỚC mỗi đợt test:
+
+```bash
+php artisan k6:provision-stock                                  # default set
+php artisan k6:provision-stock --products=3,6,9,14,17,19,21,27 --flash=730
+php artisan k6:provision-stock --products=1-50 --stock=500000
+```
+
+- Product thường: `on_hand` default variant lên `--stock` (mặc định 1.000.000) +
+  `reserved=0`, GIỮ policy `Deny` → vẫn test đúng đường reserve/deduct lock, chỉ
+  không bao giờ cạn trong 1 đợt.
+- Product flash: `on_hand=--flash-stock` (mặc định 1) → giữ khan hiếm cho oversell.
+- Idempotent; ghi `stock_movement` type=adjust (delta) giữ bất biến
+  `on_hand = SUM(movement)`; `--products` nhận list "1,2" hoặc range "1-50".
+
+### Cần verify trên staging (chưa chạy được — sandbox không có php-cli)
+
+- `php artisan config:clear` (đổi middleware) + smoke:
+  `curl -sI 'http://.../san-pham?filter[category_id]=3&page=2'` → lần 1 `X-Cache:
+  MISS`, lần 2 `HIT`; `?filter[keyword]=áo` phải `BYPASS`.
+- Chạy `k6:provision-stock` rồi bắn lại `mixed-30k.js` đo `cache_hit` mới.
+
+---
+
 ## Việc còn nợ / gợi ý bước tiếp
 
 - [ ] Commit 3 fix app-level (mục 2-4) + 2 fix k6 script (mục 6) — đang nằm
@@ -227,11 +409,23 @@ tối ưu thêm trên 1 máy.
       quá chặt cho kịch bản có `flash_sale` (cố tình tạo tranh chấp tồn kho →
       422 là kết quả ĐÚNG, không phải lỗi) — cân nhắc tách riêng ngưỡng cho
       browse/add/order (không tính 422) thay vì 1 ngưỡng chung cho tất cả HTTP.
-- [ ] Chưa test `TARGET` ở khoảng giữa 300-1500 để định vị chính xác ngưỡng
-      queue bắt đầu (hiện chỉ có 2 điểm dữ liệu quanh ngưỡng).
+- [x] ~~Chưa test `TARGET` ở khoảng giữa 300-1500~~ — done 2026-07-22, xem mục 8.
+      Ngưỡng nghẽn thật nằm ở 75 worker php-fpm (không phải DB), đã tăng lên
+      180 (60×3) + hạ `request_terminate_timeout` 60s→15s. Vẫn còn 15.25%
+      `http_req_failed` ở TARGET=900 sau fix — CHƯA xác định được bao nhiêu %
+      là 422 hợp lệ vs lỗi thật (cần thêm 1 vòng đo có phân loại).
+- [ ] Điều tra `flash_ok` bất thường (1675 "thành công" cho sản phẩm chỉ có
+      1 tồn kho) — nghi `save-order` không validate giỏ hàng rỗng, xem chi
+      tiết ở mục 8 "Cần điều tra riêng".
 - [ ] Muốn tiến gần hơn tới kịch bản "30k active" thật cần k6 phân tán
       (k6-operator/Grafana Cloud) + nhiều app server thật, theo đúng
       `docs/SCALE-30K.md` mục D — máy đơn không đại diện cho hạ tầng multi-server.
+      Mục 8 đã củng cố thêm bằng chứng: 1 máy 12 lõi bão hoà CPU ở ~75-180
+      php-fpm worker, không phải do query chậm — scale ngang là hướng đúng
+      duy nhất để vượt ngưỡng này, không phải tối ưu thêm code/index.
 - [ ] `docker save | docker load` qua remote context thỉnh thoảng đứt kết nối
       giữa chừng — nếu làm quy trình deploy lặp lại thường xuyên, nên cân nhắc
       dùng registry riêng (vd 1 registry local) thay vì save/load tay.
+- [x] ~~Restock định kỳ các sản phẩm dùng trong `k6/mixed-30k.js`~~ — done
+      2026-07-22 (mục 9): command `k6:provision-stock` reset on_hand default
+      variant idempotent, chạy trước mỗi đợt test. Có thể nối vào script bắn k6.

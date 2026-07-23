@@ -4,7 +4,6 @@ namespace App\Models\Entities;
 
 use App\Models\Base\Base;
 
-/** Pivot affiliate ↔ coupon (composite PK, không timestamps — như ProductReward). */
 class AffiliateCoupon extends Base
 {
     protected $table = 'affiliate_coupon';

@@ -131,13 +131,6 @@ class Base extends Model
         return parent::fill($attributes);
     }
 
-    /**
-     * Giữ json cast idempotent với vòng refill của save() bên trên
-     * (setRawAttributes([])->fill($attrs)): giá trị đã encode ở lần fill
-     * trước quay lại dưới dạng chuỗi JSON — nếu encode tiếp sẽ thành
-     * double-encoded trong DB (bug bắt được 2026-07-11 ở affiliate.payment_info,
-     * xem AFFILIATE-PLAN.md). Chuỗi JSON hợp lệ → gán thẳng, không encode lại.
-     */
     public function setAttribute($key, $value)
     {
         if (is_string($value) && $value !== '' && $this->isJsonCastable($key) && $this->isValidJsonString($value)) {
@@ -197,41 +190,11 @@ class Base extends Model
         $this->setRelations([]);
     }
 
-    public function getNextInsertId(): int|string
-    {
-        $entity = $this;
-        if ($entity->getKey()) {
-            return $entity->getKey();
-        }
-        $nextId = 1;
-        $table = $entity->getTable();
-        switch ($this->getConnection()->getDriverName()) {
-            case 'mysql':
-                $statement = $this->getConnection()->select("SHOW TABLE STATUS LIKE '{$table}'");
-                $nextId = $statement[0]->Auto_increment;
-                break;
-            case 'pgsql':
-                $statement = $this->getConnection()->select("SELECT nextval('{$this->getSequence()}')");
-                $nextId = $statement[0]->nextval;
-                break;
-            case 'sqlite':
-                // sqlite chỉ dùng trong test suite (:memory:). Trước đây bỏ
-                // trống → mọi insert không truyền id đều nhận 1 → UNIQUE
-                // violation từ row thứ 2. MAX(key)+1 đủ cho test đơn luồng.
-                $key = $this->getPrimaryKeyAutoIncrement() ?: $this->getKeyName();
-                $max = $this->getConnection()->table($table)->max($key);
-                $nextId = ((int) $max) + 1;
-                break;
-            case 'sqlsrv':
-                break;
-        }
-        return $nextId;
-    }
-
     protected function insertAndSetId(\Illuminate\Database\Eloquent\Builder $query, $attributes)
     {
-        if ($this->incrementing && empty($attributes[$this->getPrimaryKeyAutoIncrement()])) {
-            $attributes[$this->getPrimaryKeyAutoIncrement()] = $this->getNextInsertId();
+        $key = $this->getPrimaryKeyAutoIncrement();
+        if ($this->incrementing && $key && empty($attributes[$key] ?? null)) {
+            unset($attributes[$key]);
         }
         return parent::insertAndSetId($query, $attributes);
     }

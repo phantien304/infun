@@ -145,7 +145,7 @@ services:
   # ──────────────────────────────────────────────────────────────────────
   infun-cms:
     build:
-      context: ../infun_cms
+      context: ../infuncms
       dockerfile: Dockerfile
     container_name: infun-cms
     restart: unless-stopped

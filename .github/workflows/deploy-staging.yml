@@ -80,4 +80,4 @@ jobs:
       # (đa dòng qua ssh dễ vỡ nếu default shell của OpenSSH không phải PowerShell).
       - name: Pull image + recreate containers on staging
         run: |
-          ssh -i ~/.ssh/id_ed25519 ADMIN@100.114.156.76 "powershell -NoProfile -Command \"Set-Location 'D:\\projects\\infun'; git fetch origin economer; git checkout economer; git reset --hard origin/economer; docker compose -f docker-compose.staging.yml pull; docker compose -f docker-compose.staging.yml up -d --no-build; docker compose -f docker-compose.staging.yml exec -T infun-php php artisan migrate --force; docker image prune -f\""
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -i ~/.ssh/id_ed25519 ADMIN@100.114.156.76 "powershell -NoProfile -Command \"Set-Location 'D:\\projects\\infun'; git fetch origin economer; git checkout economer; git reset --hard origin/economer; docker compose -f docker-compose.staging.yml pull infun-php infun-web; docker compose -f docker-compose.staging.yml up -d --no-build infun-php infun-web infun-queue infun-scheduler; docker compose -f docker-compose.staging.yml exec -T infun-php php artisan migrate --force; docker image prune -f\""

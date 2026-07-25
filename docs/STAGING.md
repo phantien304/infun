@@ -1,5 +1,29 @@
 # Staging (image bất biến) — cách build & đẩy code
 
+## CI/CD tự động (2026-07-25)
+
+Push lên branch `economer` → `.github/workflows/deploy-staging.yml` tự chạy:
+1. Build 2 image (`app`/`web`, cùng `docker/php/Dockerfile.staging`) trên GitHub-hosted
+   runner (không tốn tài nguyên máy staging), cache qua GHA, push lên
+   `ghcr.io/phantien304/infun-app:staging` + `infun-web:staging`.
+2. Job `deploy` join Tailscale (máy staging có địa chỉ tailnet ổn định
+   `100.114.156.76`, hostname `infun-staging`) rồi SSH vào chạy: `git pull` (đồng
+   bộ `docker-compose.staging.yml`/migration mới) → `docker compose pull` → `up -d
+   --no-build` → `artisan migrate --force`.
+
+`docker-compose.staging.yml` giờ có `image: ghcr.io/phantien304/infun-app:staging`
+(và `infun-web`) cạnh `build:` sẵn có — quy trình build tay ở mục dưới **vẫn chạy
+bình thường** (build local vẫn tag đúng tên đó), CI chỉ là con đường nhanh hơn để
+khỏi phải build ngay trên máy staging mỗi lần đổi code.
+
+Secrets cần trong GitHub repo (Settings → Secrets and variables → Actions):
+`TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` (Tailscale OAuth client, tag `tag:ci`),
+`STAGING_SSH_KEY` (private key SSH login user `ADMIN`). 2 package
+`infun-app`/`infun-web` trên GHCR đã set Public → không cần `docker login` /
+`GHCR_PAT` để pull.
+
+---
+
 Bản staging chạy **image bất biến**: code + vendor + asset build được nướng vào
 image lúc `docker build`. Không mount code, không Vite hot-reload, opcache khoá
 timestamp → giống production. DB / Redis / Meilisearch **riêng**, không đụng bản
@@ -118,8 +142,14 @@ diễn giải trên **ổ đĩa của chính nó** — không phải ổ đĩa m
 ```bash
 # PowerShell: $env:STAGING_HOST_CONFIG_DIR = "D:/projects/infun"
 export STAGING_HOST_CONFIG_DIR="D:/projects/infun"
-docker --context staging-ssh compose -f docker-compose.staging.yml up -d --scale infun-php=3
+docker --context staging-ssh compose -f docker-compose.staging.yml up -d
 ```
+
+> 2026-07-23: mặc định `infun-php` giờ **4 replica** qua `deploy.replicas`
+> trong compose — `up -d` KHÔNG cần kèm `--scale` nữa (trước đây quên
+> `--scale` sẽ tụt về 1 replica, xem mục "Rủi ro" bên dưới). `--scale
+> infun-php=N` khi chạy vẫn override được số này. Chi tiết:
+> `docs/CHANGELOG-2026-07-23-k6-loadtest-fixes.md`.
 
 Không set biến này → mặc định `.` (build/bring-up local hoặc chạy trực tiếp
 trên máy staging qua RDP/console, không đổi hành vi cũ). Mirror ở
@@ -140,8 +170,8 @@ docker compose -f docker-compose.staging.yml exec infun-php sh
 # Migration khi deploy code có thay đổi schema
 docker compose -f docker-compose.staging.yml exec infun-php php artisan migrate --force
 
-# 3 PHP worker sau LB để test tải (nginx least_conn tự chia)
-docker compose -f docker-compose.staging.yml up -d --scale infun-php=3
+# Mặc định đã 4 PHP worker sau LB (deploy.replicas) — chỉ cần khi muốn số khác:
+docker compose -f docker-compose.staging.yml up -d --scale infun-php=<N>
 
 # Dừng (GIỮ dữ liệu)
 docker compose -f docker-compose.staging.yml down
@@ -260,6 +290,11 @@ docker compose -f docker-compose.staging.yml exec infun-php php artisan tinker -
   trên writer đang chạy — nên làm lúc ít traffic staging.
 - `--log-bin` trên writer ghi binlog liên tục (`expire-logs-days=3`) — theo
   dõi dung lượng đĩa vài ngày đầu.
-- `--scale infun-php=N` bị reset về 1 instance nếu chỉ `up -d infun-php` mà
-  không kèm `--scale` — nhớ thêm lại `--scale infun-php=3` (hay N tuỳ trước
-  đó) ở bước recreate app nếu đang test tải.
+- ~~`--scale infun-php=N` bị reset về 1 instance nếu chỉ `up -d infun-php` mà
+  không kèm `--scale`~~ — đã fix 2026-07-23 bằng `deploy.replicas: 4` trong
+  compose (mặc định tự 4, không cần `--scale`). Nếu từng test với `--scale`
+  N khác 4 rồi recreate KHÔNG kèm `--scale`, sẽ tụt về mặc định 4 (không phải
+  1 nữa) — vẫn cần tự thêm lại `--scale infun-php=N` nếu muốn N ≠ 4.
+  ⚠️ Hành vi `deploy.replicas` khi `up -d` không kèm `--scale` CHƯA được
+  verify trực tiếp trên máy staging (máy tắt giữa lúc test) — xem việc còn
+  nợ trong `docs/CHANGELOG-2026-07-23-k6-loadtest-fixes.md`.

@@ -1,0 +1,82 @@
+name: Deploy staging
+
+# Push lên economer = build image mới + đẩy sang máy staging.
+# Build chạy trên GitHub-hosted runner (không tốn CPU/disk máy staging).
+# Máy staging chỉ `pull` image đã build sẵn rồi recreate container.
+on:
+  push:
+    branches: [economer]
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_APP: ghcr.io/phantien304/infun-app
+  IMAGE_WEB: ghcr.io/phantien304/infun-web
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Stage "app" (php-fpm) — dùng chung layer cache với stage "web" vì
+      # cùng 1 Dockerfile.staging (stage assets/app build 1 lần, web chỉ COPY).
+      - name: Build & push infun-app
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile.staging
+          target: app
+          push: true
+          tags: ${{ env.IMAGE_APP }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push infun-web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile.staging
+          target: web
+          push: true
+          tags: ${{ env.IMAGE_WEB }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-client-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 100.114.156.76 >> ~/.ssh/known_hosts
+
+      # Máy staging là Windows — mọi lệnh gói trong 1 lời gọi powershell -Command
+      # (đa dòng qua ssh dễ vỡ nếu default shell của OpenSSH không phải PowerShell).
+      - name: Pull image + recreate containers on staging
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ADMIN@100.114.156.76 "powershell -NoProfile -Command \"Set-Location 'D:\\projects\\infun'; git fetch origin economer; git checkout economer; git reset --hard origin/economer; docker compose -f docker-compose.staging.yml pull; docker compose -f docker-compose.staging.yml up -d --no-build; docker compose -f docker-compose.staging.yml exec -T infun-php php artisan migrate --force; docker image prune -f\""

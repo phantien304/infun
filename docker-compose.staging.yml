@@ -105,9 +105,15 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile.staging
       target: app
-    image: infun-app:staging
+    image: ghcr.io/phantien304/infun-app:staging
     restart: unless-stopped
     # KHÔNG container_name → cho phép `--scale infun-php=N`
+    # Chuẩn 2026-07-23 (xem docs/CHANGELOG-2026-07-23-k6-loadtest-fixes.md):
+    # 4 replica mặc định qua deploy.replicas — `up -d` (không kèm --scale)
+    # vẫn giữ đúng 4, không tụt về 1 như trước (gotcha cũ ở docs/STAGING.md).
+    # `--scale infun-php=N` khi chạy vẫn override được giá trị này.
+    deploy:
+      replicas: 4
     environment:
       <<: *app-env
     volumes:
@@ -154,7 +160,7 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile.staging
       target: web
-    image: infun-web:staging
+    image: ghcr.io/phantien304/infun-web:staging
     container_name: infun-web-staging
     restart: unless-stopped
     ports:
@@ -307,7 +313,7 @@ services:
       - --appendonly
       - "yes"
       - --maxmemory
-      - "512mb"
+      - "1gb"
       - --maxmemory-policy
       - "noeviction"
     volumes:

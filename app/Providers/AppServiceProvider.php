@@ -19,14 +19,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton('myrouter', function ($app) {
             return new \App\Helpers\Router($app['router']);
         });
-        $this->app->singleton('channellog', function ($app) {
+        $this->app->scoped('channellog', function ($app) {
             return new \App\Helpers\ChannelWriter();
         });
         $this->app->scoped(\App\Services\Currency\CurrencyService::class);
         $this->app->scoped(\App\Services\Measurement\LengthService::class);
         $this->app->scoped(\App\Services\Measurement\WeightService::class);
-        $this->app->singleton(\App\Services\ConfigDbService::class);
-        $this->app->singleton(\App\Services\Stock\WarehouseService::class);
+        $this->app->scoped(\App\Services\ConfigDbService::class);
+        $this->app->scoped(\App\Services\Stock\WarehouseService::class);
     }
 
     public function boot(): void

@@ -13,6 +13,7 @@
         "awobaz/compoships": "^2.5",
         "intervention/image": "^3.11",
         "laravel/framework": "^12.0",
+        "laravel/octane": "^2.18",
         "laravel/sanctum": "^4.0",
         "laravel/scout": "^11.3",
         "laravel/socialite": "^5.27",
@@ -36,7 +37,8 @@
         "laravel/sail": "^1.41",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
-        "phpunit/phpunit": "^11.5.50"
+        "phpunit/phpunit": "^11.5.50",
+        "spiral/roadrunner-cli": "*"
     },
     "autoload": {
         "psr-4": {

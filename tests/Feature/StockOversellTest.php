@@ -38,7 +38,7 @@ class StockOversellTest extends TestCase
                 {
                 }
 
-                public function getConfigs()
+                public function getConfigs(): array
                 {
                     return ['config_stock_checkout' => 1];
                 }
@@ -51,6 +51,28 @@ class StockOversellTest extends TestCase
 
     private function createStockSchema(): void
     {
+        Schema::create('warehouse', function ($t) {
+            $t->bigIncrements('id');
+            $t->string('code', 32);
+            $t->string('name');
+            $t->integer('priority')->default(0);
+            $t->boolean('is_active')->default(true);
+            $t->boolean('is_sellable')->default(true);
+            $t->timestamps();
+            $t->softDeletes();
+        });
+
+        DB::table('warehouse')->insert([
+            'id'           => 1,
+            'code'         => 'DEFAULT',
+            'name'         => 'Kho mặc định',
+            'priority'     => 0,
+            'is_active'    => 1,
+            'is_sellable'  => 1,
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ]);
+
         Schema::create('product_stock', function ($t) {
             $t->bigIncrements('id');
             $t->unsignedBigInteger('product_variant_id');

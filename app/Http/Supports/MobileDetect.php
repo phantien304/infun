@@ -672,7 +672,7 @@ class MobileDetect
      *                          from the $headers array instead.
      */
     public function __construct(
-        array $headers = null,
+        ?array $headers = null,
         $userAgent = null
     )
     {

@@ -74,10 +74,20 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 100.114.156.76 >> ~/.ssh/known_hosts
+          ssh-keyscan -H 100.99.170.2 >> ~/.ssh/known_hosts
 
-      # Máy staging là Windows — mọi lệnh gói trong 1 lời gọi powershell -Command
-      # (đa dòng qua ssh dễ vỡ nếu default shell của OpenSSH không phải PowerShell).
+      # Máy staging là Ubuntu (thay máy Windows cũ 2026-07-28) — repo mirror ở
+      # /home/an-my/infun.
       - name: Pull image + recreate containers on staging
         run: |
-          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -i ~/.ssh/id_ed25519 ADMIN@100.114.156.76 "powershell -NoProfile -Command \"Set-Location 'D:\\projects\\infun'; git fetch origin economer; git checkout economer; git reset --hard origin/economer; docker compose -f docker-compose.staging.yml pull infun-php infun-web; docker compose -f docker-compose.staging.yml up -d --no-build infun-php infun-web infun-queue infun-scheduler; docker compose -f docker-compose.staging.yml exec -T infun-php php artisan migrate --force; docker image prune -f\""
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -i ~/.ssh/id_ed25519 an-my@100.99.170.2 "
+            set -e
+            cd /home/an-my/infun
+            git fetch origin economer
+            git checkout economer
+            git reset --hard origin/economer
+            docker compose -f docker-compose.staging.yml pull infun-php infun-web
+            docker compose -f docker-compose.staging.yml up -d --no-build infun-php infun-web infun-queue infun-scheduler
+            docker compose -f docker-compose.staging.yml exec -T infun-php php artisan migrate --force
+            docker image prune -f
+          "

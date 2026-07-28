@@ -1,8 +1,8 @@
-# PHP-FPM 8.2 cho dự án infun (Laravel 12) — dev mode.
+# PHP-FPM 8.4 cho dự án infun (Laravel 12) — dev mode.
 # Code mount từ host (./:/var/www/html) nên KHÔNG COPY source ở đây.
 # Image chỉ cài sẵn extension + composer để FPM chạy được app khi mount vào.
 
-FROM php:8.2-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # System deps + build deps cho các extension cần biên dịch (gd, intl, zip, redis).
 # Tách phần build deps để xoá sau khi `pecl install` xong, image nhẹ hơn.

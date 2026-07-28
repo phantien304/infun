@@ -1,15 +1,26 @@
 # Staging (image bất biến) — cách build & đẩy code
 
-## CI/CD tự động (2026-07-25)
+## CI/CD tự động (2026-07-25, chuyển máy staging sang Ubuntu 2026-07-28)
 
 Push lên branch `economer` → `.github/workflows/deploy-staging.yml` tự chạy:
 1. Build 2 image (`app`/`web`, cùng `docker/php/Dockerfile.staging`) trên GitHub-hosted
    runner (không tốn tài nguyên máy staging), cache qua GHA, push lên
    `ghcr.io/phantien304/infun-app:staging` + `infun-web:staging`.
-2. Job `deploy` join Tailscale (máy staging có địa chỉ tailnet ổn định
-   `100.114.156.76`, hostname `infun-staging`) rồi SSH vào chạy: `git pull` (đồng
-   bộ `docker-compose.staging.yml`/migration mới) → `docker compose pull` → `up -d
-   --no-build` → `artisan migrate --force`.
+2. Job `deploy` join Tailscale (máy staging địa chỉ tailnet `100.99.170.2`,
+   Ubuntu 26.04 LTS, user `an-my`, repo mirror `/home/an-my/infun`) rồi SSH vào
+   chạy: `git fetch/checkout/reset --hard` (đồng bộ `docker-compose.staging.yml`/
+   migration mới) → `docker compose pull` → `up -d --no-build` →
+   `artisan migrate --force`.
+
+> Máy staging trước đây là Windows (`100.114.156.76`, hostname `infun-staging`,
+> user `ADMIN`, path `D:\projects\infun`, PowerShell) — đã thay thế hoàn toàn
+> bằng Ubuntu 2026-07-28 (Docker Engine + Compose plugin cài mới, KHÔNG dùng
+> Docker Desktop vì máy điều khiển qua SSH không cần phiên GUI). Node Tailscale
+> cũ `infun-staging` còn nằm trong tailnet ở trạng thái offline (chưa dọn).
+
+Muốn truy cập staging từ Internet qua public IP (không cần cài Tailscale) —
+xem `docs/STAGING-PUBLIC-ACCESS.md` (port forward router + firewall +
+gotcha "Docker bỏ qua ufw").
 
 `docker-compose.staging.yml` giờ có `image: ghcr.io/phantien304/infun-app:staging`
 (và `infun-web`) cạnh `build:` sẵn có — quy trình build tay ở mục dưới **vẫn chạy
@@ -18,7 +29,8 @@ khỏi phải build ngay trên máy staging mỗi lần đổi code.
 
 Secrets cần trong GitHub repo (Settings → Secrets and variables → Actions):
 `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` (Tailscale OAuth client, tag `tag:ci`),
-`STAGING_SSH_KEY` (private key SSH login user `ADMIN`). 2 package
+`STAGING_SSH_KEY` (private key SSH login user `an-my` — **đổi lại secret này**
+sau khi chuyển sang Ubuntu, khác private key `ADMIN` cũ). 2 package
 `infun-app`/`infun-web` trên GHCR đã set Public → không cần `docker login` /
 `GHCR_PAT` để pull.
 

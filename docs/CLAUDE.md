@@ -2739,7 +2739,7 @@ service chạy container, code mount qua bind volume cho hot reload.
 ```
 infun/
   docker/
-    php/Dockerfile          # PHP 8.2-FPM Alpine + ext (pdo_mysql, redis,
+    php/Dockerfile          # PHP 8.4-FPM Alpine + ext (pdo_mysql, redis,
                             # gd, intl, bcmath, zip) + Composer
     php/entrypoint.sh       # auto composer install + fix quyền storage/
     nginx/default.conf      # nginx vhost forward .php → FPM
@@ -2757,7 +2757,7 @@ infun/
 
 | Service | Port host | Vai trò |
 |---|---|---|
-| `infun-php` | — (qua FPM socket) | PHP-FPM 8.2 |
+| `infun-php` | — (qua FPM socket) | PHP-FPM 8.4 |
 | `infun-web` | 8000 | nginx serve public/ |
 | `infun-vite` | 5174 | Vite dev cho Laravel @vite |
 | `infun-cms` | 5173 | React CMS standalone (Vite) |

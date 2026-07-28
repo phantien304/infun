@@ -6,13 +6,6 @@ use App\Http\Middleware\CachePage;
 use Illuminate\Http\Request;
 use Tests\TestCase;
 
-/**
- * CachePage bản 80/20:
- *   - Chỉ cache trang SẠCH (không query có nghĩa). Có filter/sort/page/search → BYPASS.
- *   - Param tracking (utm/aff/ref/gclid/fbclid) KHÔNG tính là query → vẫn cache, chung key.
- *   - Trang cart/checkout/account/api → không cache (except).
- *   - Key theo path (+locale+currency), KHÔNG kèm query/device.
- */
 class CachePageKeyTest extends TestCase
 {
     private function invoke(string $method, string $url)
@@ -24,25 +17,63 @@ class CachePageKeyTest extends TestCase
         return $ref->invoke($middleware, Request::create($url));
     }
 
-    // ---- hasMeaningfulQuery: chỉ trang sạch mới được cache ----
+    /** Tái hiện đúng bước lọc query mà handle() làm trước khi gọi isCacheableQuery/cacheKey. */
+    private function significantQuery(CachePage $middleware, Request $request): array
+    {
+        $ignoredProp = new \ReflectionProperty($middleware, 'ignoredQueryParams');
+        $ignoredProp->setAccessible(true);
+
+        return array_diff_key($request->query(), array_flip($ignoredProp->getValue($middleware)));
+    }
+
+    private function isCacheable(string $url): bool
+    {
+        $middleware = new CachePage();
+        $request = Request::create($url);
+        $query = $this->significantQuery($middleware, $request);
+
+        $ref = new \ReflectionMethod($middleware, 'isCacheableQuery');
+        $ref->setAccessible(true);
+
+        return $ref->invoke($middleware, $query);
+    }
+
+    private function keyFor(string $url): string
+    {
+        $middleware = new CachePage();
+        $request = Request::create($url);
+        $query = $this->significantQuery($middleware, $request);
+
+        $ref = new \ReflectionMethod($middleware, 'cacheKey');
+        $ref->setAccessible(true);
+
+        return $ref->invoke($middleware, $request, $query);
+    }
+
+    // ---- isCacheableQuery: query rỗng / chỉ whitelist → cache ----
 
     public function test_trang_khong_query_thi_cache(): void
     {
-        $this->assertFalse($this->invoke('hasMeaningfulQuery', '/san-pham'));
-        $this->assertFalse($this->invoke('hasMeaningfulQuery', '/gau-bong-p12'));
+        $this->assertTrue($this->isCacheable('/san-pham'));
+        $this->assertTrue($this->isCacheable('/gau-bong-p12'));
     }
 
     public function test_chi_co_tracking_thi_van_cache(): void
     {
-        $this->assertFalse($this->invoke('hasMeaningfulQuery', '/san-pham?utm_source=a&ref=b&gclid=c&fbclid=d'));
+        $this->assertTrue($this->isCacheable('/san-pham?utm_source=a&ref=b&gclid=c&fbclid=d'));
     }
 
-    public function test_co_filter_sort_page_search_thi_bypass(): void
+    public function test_page_sort_filter_hop_le_thi_van_cache(): void
     {
-        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?page=2'));
-        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?sort=price'));
-        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?q=abc'));
-        $this->assertTrue($this->invoke('hasMeaningfulQuery', '/san-pham?filter[in_stock]=1'));
+        $this->assertTrue($this->isCacheable('/san-pham?page=2'));
+        $this->assertTrue($this->isCacheable('/san-pham?sort=price'));
+        $this->assertTrue($this->isCacheable('/san-pham?filter[category_id]=5'));
+    }
+
+    public function test_search_hoac_filter_khong_whitelist_thi_bypass(): void
+    {
+        $this->assertFalse($this->isCacheable('/san-pham?q=abc'));
+        $this->assertFalse($this->isCacheable('/san-pham?filter[in_stock]=1'));
     }
 
     // ---- isExcepted: trang động / theo-user ----
@@ -67,16 +98,16 @@ class CachePageKeyTest extends TestCase
     public function test_affiliate_va_khach_thuong_chung_key(): void
     {
         $this->assertSame(
-            $this->invoke('cacheKey', '/gau-bong-p12'),
-            $this->invoke('cacheKey', '/gau-bong-p12?ref=kol9&utm_campaign=abc&gclid=zzz'),
+            $this->keyFor('/gau-bong-p12'),
+            $this->keyFor('/gau-bong-p12?ref=kol9&utm_campaign=abc&gclid=zzz'),
         );
     }
 
     public function test_path_khac_nhau_key_khac_nhau(): void
     {
         $this->assertNotSame(
-            $this->invoke('cacheKey', '/gau-bong-p12'),
-            $this->invoke('cacheKey', '/gau-bong-p13'),
+            $this->keyFor('/gau-bong-p12'),
+            $this->keyFor('/gau-bong-p13'),
         );
     }
 }

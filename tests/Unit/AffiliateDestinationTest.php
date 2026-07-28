@@ -18,7 +18,6 @@ class AffiliateDestinationTest extends TestCase
         config(['app.url' => 'https://infun.vn']);
         $service = $this->app->make(AffiliatePortalService::class);
         $method = new \ReflectionMethod($service, 'normalizeDestination');
-        $method->setAccessible(true);
 
         return $method->invoke($service, $url);
     }
@@ -27,7 +26,6 @@ class AffiliateDestinationTest extends TestCase
     {
         $service = $this->app->make(AffiliatePortalService::class);
         $method = new \ReflectionMethod($service, 'detectProductId');
-        $method->setAccessible(true);
 
         return $method->invoke($service, $path);
     }

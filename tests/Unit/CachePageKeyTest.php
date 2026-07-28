@@ -12,7 +12,6 @@ class CachePageKeyTest extends TestCase
     {
         $middleware = new CachePage();
         $ref = new \ReflectionMethod($middleware, $method);
-        $ref->setAccessible(true);
 
         return $ref->invoke($middleware, Request::create($url));
     }
@@ -21,7 +20,6 @@ class CachePageKeyTest extends TestCase
     private function significantQuery(CachePage $middleware, Request $request): array
     {
         $ignoredProp = new \ReflectionProperty($middleware, 'ignoredQueryParams');
-        $ignoredProp->setAccessible(true);
 
         return array_diff_key($request->query(), array_flip($ignoredProp->getValue($middleware)));
     }
@@ -33,7 +31,6 @@ class CachePageKeyTest extends TestCase
         $query = $this->significantQuery($middleware, $request);
 
         $ref = new \ReflectionMethod($middleware, 'isCacheableQuery');
-        $ref->setAccessible(true);
 
         return $ref->invoke($middleware, $query);
     }
@@ -45,7 +42,6 @@ class CachePageKeyTest extends TestCase
         $query = $this->significantQuery($middleware, $request);
 
         $ref = new \ReflectionMethod($middleware, 'cacheKey');
-        $ref->setAccessible(true);
 
         return $ref->invoke($middleware, $request, $query);
     }

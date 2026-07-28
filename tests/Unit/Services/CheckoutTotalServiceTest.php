@@ -193,7 +193,6 @@ class CheckoutTotalServiceTest extends TestCase
     {
         $svc = $this->makeService();
         $m = new ReflectionMethod($svc, 'freeshipCap');
-        $m->setAccessible(true);
 
         $this->assertSame(20000, $m->invoke($svc, new Coupon(['discount_max' => 20000, 'discount' => 0])));
         $this->assertSame(15000, $m->invoke($svc, new Coupon(['discount_max' => 0, 'discount' => 15000])));
@@ -203,7 +202,6 @@ class CheckoutTotalServiceTest extends TestCase
     {
         $svc = $this->makeService();
         $m = new ReflectionMethod($svc, 'freeshipShipDiscount');
-        $m->setAccessible(true);
 
         $entry = ['coupon' => new Coupon(['discount_max' => 20000, 'discount' => 0])];
 

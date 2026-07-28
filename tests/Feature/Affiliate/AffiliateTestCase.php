@@ -172,7 +172,6 @@ abstract class AffiliateTestCase extends TestCase
     protected function forceWebContext(): void
     {
         $prop = new \ReflectionProperty($this->app, 'isRunningInConsole');
-        $prop->setAccessible(true);
         $prop->setValue($this->app, false);
     }
 }

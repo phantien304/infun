@@ -20,9 +20,12 @@ trait HasSchemaCache
         }
 
         $columns = $this->fetchTableColumns();
-        if (!empty($columns)) {
-            cache()->forever($key, $columns);
+
+        if (empty($columns)) {
+            return $columns;
         }
+
+        cache()->forever($key, $columns);
 
         return static::$schemaCacheMemo[$key] = $columns;
     }

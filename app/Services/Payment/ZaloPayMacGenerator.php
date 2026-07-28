@@ -23,7 +23,7 @@ class ZaloPayMacGenerator
         return self::compute(self::createOrderMacData($order));
     }
 
-    static function quickPay($order = [], $paymentCodeRaw)
+    static function quickPay($order, $paymentCodeRaw)
     {
         return self::compute(self::createOrderMacData($order) . "|" . $paymentCodeRaw);
     }

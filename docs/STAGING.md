@@ -18,6 +18,10 @@ Push lên branch `economer` → `.github/workflows/deploy-staging.yml` tự ch�
 > Docker Desktop vì máy điều khiển qua SSH không cần phiên GUI). Node Tailscale
 > cũ `infun-staging` còn nằm trong tailnet ở trạng thái offline (chưa dọn).
 
+Muốn truy cập staging từ Internet qua public IP (không cần cài Tailscale) —
+xem `docs/STAGING-PUBLIC-ACCESS.md` (port forward router + firewall +
+gotcha "Docker bỏ qua ufw").
+
 `docker-compose.staging.yml` giờ có `image: ghcr.io/phantien304/infun-app:staging`
 (và `infun-web`) cạnh `build:` sẵn có — quy trình build tay ở mục dưới **vẫn chạy
 bình thường** (build local vẫn tag đúng tên đó), CI chỉ là con đường nhanh hơn để

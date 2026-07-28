@@ -39,7 +39,7 @@ class ProductVariantWriteTest extends TestCase
                 {
                 }
 
-                public function getConfigs()
+                public function getConfigs(): array
                 {
                     return [];
                 }
@@ -91,6 +91,7 @@ class ProductVariantWriteTest extends TestCase
         Schema::create('option_value', function ($t) {
             $t->bigIncrements('id');
             $t->unsignedBigInteger('option_id');
+            $t->softDeletes();
             $t->timestamps();
         });
 

@@ -24,9 +24,9 @@ COPY . .
 RUN npm run build
 
 # ───────────────────────────────────────────────────────────────────────────
-# STAGE 2 — app: PHP-FPM 8.2 + code + vendor prod + opcache prod
+# STAGE 2 — app: PHP-FPM 8.4 + code + vendor prod + opcache prod
 # ───────────────────────────────────────────────────────────────────────────
-FROM php:8.2-fpm-alpine AS app
+FROM php:8.4-fpm-alpine AS app
 
 # Extension (giống Dockerfile dev để hành vi khớp)
 RUN apk add --no-cache \

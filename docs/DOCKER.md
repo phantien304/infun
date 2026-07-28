@@ -9,7 +9,7 @@ compose của `infun`.
 ```
 infun/
   docker/
-    php/Dockerfile        # PHP 8.2-FPM + ext (pdo_mysql, redis, gd, ...)
+    php/Dockerfile        # PHP 8.4-FPM + ext (pdo_mysql, redis, gd, ...)
     php/entrypoint.sh     # composer install + fix quyền storage
     nginx/default.conf    # vhost Laravel → FPM
   docker-compose.yml      # toàn bộ services

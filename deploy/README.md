@@ -96,7 +96,7 @@ Kiểm tra: `mysql -h127.0.0.1 -P6032 -uadmin -p` →
   thức trong file) + `php/opcache-prod.ini` vào conf.d.
 - Deploy ritual: `composer install --no-dev -o && php artisan config:cache
   && php artisan route:cache && php artisan view:cache` rồi
-  `systemctl reload php8.2-fpm` (reload = restart worker → nạp opcache mới).
+  `systemctl reload php8.4-fpm` (reload = restart worker → nạp opcache mới).
 - Nhiều app server stateless sau LB — mẫu nginx LB có sẵn:
   `docker/nginx/default.lb.conf` (least_conn + healthcheck `/__lb_health`).
 

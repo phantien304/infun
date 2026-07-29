@@ -16,7 +16,6 @@ class CachePageKeyTest extends TestCase
         return $ref->invoke($middleware, Request::create($url));
     }
 
-    /** Tái hiện đúng bước lọc query mà handle() làm trước khi gọi isCacheableQuery/cacheKey. */
     private function significantQuery(CachePage $middleware, Request $request): array
     {
         $ignoredProp = new \ReflectionProperty($middleware, 'ignoredQueryParams');
@@ -46,8 +45,6 @@ class CachePageKeyTest extends TestCase
         return $ref->invoke($middleware, $request, $query);
     }
 
-    // ---- isCacheableQuery: query rỗng / chỉ whitelist → cache ----
-
     public function test_trang_khong_query_thi_cache(): void
     {
         $this->assertTrue($this->isCacheable('/san-pham'));
@@ -72,8 +69,6 @@ class CachePageKeyTest extends TestCase
         $this->assertFalse($this->isCacheable('/san-pham?filter[in_stock]=1'));
     }
 
-    // ---- isExcepted: trang động / theo-user ----
-
     public function test_except_cart_checkout_account_api(): void
     {
         $this->assertTrue($this->invoke('isExcepted', '/cart/badge'));
@@ -88,8 +83,6 @@ class CachePageKeyTest extends TestCase
         $this->assertFalse($this->invoke('isExcepted', '/gau-bong-p12'));
         $this->assertFalse($this->invoke('isExcepted', '/'));
     }
-
-    // ---- cacheKey: tracking không đổi key; path khác → key khác ----
 
     public function test_affiliate_va_khach_thuong_chung_key(): void
     {

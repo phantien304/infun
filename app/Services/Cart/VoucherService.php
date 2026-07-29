@@ -98,7 +98,7 @@ class VoucherService
         }
 
         return [
-            'applied'        => $applied,
+            'voucherApplied' => $applied,
             'total_discount' => array_sum(array_column($applied, 'amount')),
             'errors'         => $errors,
         ];
@@ -141,7 +141,7 @@ class VoucherService
     public function recordOrderVouchers(int $orderId, int $orderTotal): void
     {
         $result = $this->resolveApplied($orderTotal);
-        if (empty($result['applied'])) {
+        if (empty($result['voucherApplied'])) {
             return;
         }
 
@@ -149,7 +149,7 @@ class VoucherService
         $userId = (int) getCurrentUserId() ?: null;
         $voucherIds = [];
 
-        foreach ($result['applied'] as $entry) {
+        foreach ($result['voucherApplied'] as $entry) {
             if ($entry['amount'] <= 0) {
                 continue;
             }

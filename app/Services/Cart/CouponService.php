@@ -212,7 +212,7 @@ class CouponService
         }
 
         return [
-            'applied'        => $applied,
+            'couponApplied'  => $applied,
             'errors'         => $errors,
             'total_discount' => array_sum(array_column($applied, 'discount')),
             'freeship'       => $bestFreeship !== null && in_array($bestFreeship, $applied, true),

@@ -222,10 +222,10 @@ class CheckoutTotalService
             return;
         }
         $result = $this->promotionService->resolveVouchers($total);
-        if (empty($result['applied'])) {
+        if (empty($result['voucherApplied'])) {
             return;
         }
-        foreach ($result['applied'] as $entry) {
+        foreach ($result['voucherApplied'] as $entry) {
             $amount = (int) $entry['amount'];
             if ($amount <= 0) {
                 continue;

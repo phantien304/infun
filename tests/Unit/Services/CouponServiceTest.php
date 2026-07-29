@@ -13,22 +13,12 @@ use App\Services\ConfigDbService;
 use Mockery;
 use Tests\TestCase;
 
-/**
- * Tier 1 — luật quyết định coupon: CouponService::validateForCart.
- *
- * Mỗi nhánh reject phải trả về 1 lý do (string khác null); pass hết trả null.
- * Không đụng DB: Coupon dựng in-memory (setRelation cho couponProducts/
- * couponCategories), repo mock, getConfigDb('config_currency') fake.
- */
 class CouponServiceTest extends TestCase
 {
     protected function setUp(): void
     {
         parent::setUp();
-
-        // getConfigDb('config_currency') dùng ở message need_more -> fake khỏi chạm DB.
-        $fakeConfig = new class extends ConfigDbService
-        {
+        $fakeConfig = new class () extends ConfigDbService {
             public function __construct()
             {
             }
@@ -49,7 +39,6 @@ class CouponServiceTest extends TestCase
 
     protected function service(): CouponService
     {
-        // validateForCart không gọi repo vì test luôn truyền usedByUser tường minh.
         return new CouponService(
             Mockery::mock(CouponRepositoryInterface::class),
             Mockery::mock(CouponHistoryRepositoryInterface::class),

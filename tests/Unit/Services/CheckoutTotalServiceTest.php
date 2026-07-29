@@ -4,6 +4,7 @@ namespace Tests\Unit\Services;
 
 use App\Models\Entities\Coupon;
 use App\Models\Entities\User;
+use App\Models\Entities\Voucher;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
 use App\Services\Checkout\CheckoutPromotions;
 use App\Services\Checkout\CheckoutTotalService;
@@ -15,18 +16,6 @@ use Mockery;
 use ReflectionMethod;
 use Tests\TestCase;
 
-/**
- * Tier 1 — toán tiền checkout: CheckoutTotalService.
- *
- * Chốt các phép tính "sai là mất tiền":
- *  - coupon discount bị kẹp trong [0, total] (không âm tổng, không vượt tổng);
- *  - freeship coupon KHÔNG tạo dòng giảm giá hàng;
- *  - reward redemption: rate + cap % + intdiv (điểm lẻ không được tính);
- *  - freeship cap helper.
- *
- * money() được stub qua CurrencyService fake -> không chạm DB currency.
- * getConfigDb qua ConfigDbService fake (data mutable theo từng test).
- */
 class CheckoutTotalServiceTest extends TestCase
 {
     protected $fakeConfig;
@@ -35,9 +24,7 @@ class CheckoutTotalServiceTest extends TestCase
     {
         parent::setUp();
 
-        // getConfigDb(...) -> đọc từ mảng data fake (mặc định rỗng).
-        $this->fakeConfig = new class extends ConfigDbService
-        {
+        $this->fakeConfig = new class () extends ConfigDbService {
             public array $data = [];
 
             public function __construct()
@@ -51,7 +38,6 @@ class CheckoutTotalServiceTest extends TestCase
         };
         $this->app->instance(ConfigDbService::class, $this->fakeConfig);
 
-        // money() -> CurrencyService::formatPrice: chỉ cần chuỗi, không cần DB.
         $currency = Mockery::mock(CurrencyService::class);
         $currency->shouldReceive('formatPrice')->andReturnUsing(
             fn ($price) => number_format((float) $price),
@@ -65,10 +51,12 @@ class CheckoutTotalServiceTest extends TestCase
         parent::tearDown();
     }
 
-    protected function makeService(?UserRewardRepositoryInterface $rewardRepo = null): CheckoutTotalService
-    {
+    protected function makeService(
+        ?UserRewardRepositoryInterface $rewardRepo = null,
+        array $voucherResult = ['voucherApplied' => []],
+    ): CheckoutTotalService {
         $promo = Mockery::mock(PromotionService::class);
-        $promo->shouldReceive('resolveVouchers')->andReturn(['applied' => []]);
+        $promo->shouldReceive('resolveVouchers')->andReturn($voucherResult);
 
         return new CheckoutTotalService(
             Mockery::mock(ShippingFeeService::class),
@@ -123,7 +111,7 @@ class CheckoutTotalServiceTest extends TestCase
 
         [$totalData, $total] = $this->makeService()->build($promotions, withShipping: false);
 
-        $this->assertSame(0, $total);                                    // không âm
+        $this->assertSame(0, $total);
         $this->assertSame(-50000, $this->lineValue($totalData, 'coupon:BIG')); // kẹp đúng bằng tổng
     }
 
@@ -205,9 +193,135 @@ class CheckoutTotalServiceTest extends TestCase
 
         $entry = ['coupon' => new Coupon(['discount_max' => 20000, 'discount' => 0])];
 
-        $this->assertSame(20000, $m->invoke($svc, $entry, 30000));   // cap < phí ship
+        $this->assertSame(20000, $m->invoke($svc, $entry, 30000));
         $this->assertSame(30000, $m->invoke($svc, ['coupon' => new Coupon(['discount_max' => 0, 'discount' => 0])], 30000)); // cap 0 -> free toàn bộ
-        $this->assertSame(0, $m->invoke($svc, null, 30000));         // không có entry
-        $this->assertSame(0, $m->invoke($svc, $entry, 0));           // không có phí ship
+        $this->assertSame(0, $m->invoke($svc, null, 30000));
+        $this->assertSame(0, $m->invoke($svc, $entry, 0));
+    }
+
+    public function test_gift_line_hien_thi_dung_so_luong_qua_tang(): void
+    {
+        session()->put(getCoreConfig('session.applied_gifts'), [
+            ['item_ids' => [1, 2]],
+            ['item_ids' => [3]],
+        ]);
+
+        $promotions = (new CheckoutPromotions())
+            ->setItems([['total' => 100000]])
+            ->setAppliedCoupons([], false);
+
+        [$totalData, $total] = $this->makeService()->build($promotions, withShipping: false);
+
+        $this->assertSame(100000, $total);
+        $this->assertSame(0, $this->lineValue($totalData, 'gifts'));
+        $this->assertNotNull(collect($totalData)->firstWhere('code', 'gifts'));
+    }
+
+    public function test_gift_line_khong_hien_thi_khi_khong_co_gift(): void
+    {
+        $promotions = (new CheckoutPromotions())
+            ->setItems([['total' => 100000]])
+            ->setAppliedCoupons([], false);
+
+        [$totalData] = $this->makeService()->build($promotions, withShipping: false);
+
+        $this->assertNull($this->lineValue($totalData, 'gifts'));
+    }
+
+    public function test_gift_line_bo_qua_entry_thieu_item_ids(): void
+    {
+        session()->put(getCoreConfig('session.applied_gifts'), [
+            ['note' => 'khong co item_ids'],
+        ]);
+
+        $promotions = (new CheckoutPromotions())
+            ->setItems([['total' => 100000]])
+            ->setAppliedCoupons([], false);
+
+        [$totalData] = $this->makeService()->build($promotions, withShipping: false);
+
+        $this->assertNull($this->lineValue($totalData, 'gifts'));
+    }
+
+    public function test_voucher_tru_tien_dung_so_tien_ap_dung(): void
+    {
+        $voucherResult = [
+            'voucherApplied' => [
+                ['voucher' => new Voucher(['code' => 'GIFT10']), 'amount' => 20000],
+            ],
+        ];
+
+        $promotions = (new CheckoutPromotions())
+            ->setItems([['total' => 100000]])
+            ->setAppliedCoupons([], false);
+
+        [$totalData, $total] = $this->makeService(voucherResult: $voucherResult)
+            ->build($promotions, withShipping: false);
+
+        $this->assertSame(80000, $total);
+        $this->assertSame(-20000, $this->lineValue($totalData, 'voucher:GIFT10'));
+    }
+
+    public function test_voucher_amount_0_khong_tao_dong_giam(): void
+    {
+        $voucherResult = [
+            'voucherApplied' => [
+                ['voucher' => new Voucher(['code' => 'EMPTY']), 'amount' => 0],
+            ],
+        ];
+
+        $promotions = (new CheckoutPromotions())
+            ->setItems([['total' => 100000]])
+            ->setAppliedCoupons([], false);
+
+        [$totalData, $total] = $this->makeService(voucherResult: $voucherResult)
+            ->build($promotions, withShipping: false);
+
+        $this->assertSame(100000, $total);
+        $this->assertNull($this->lineValue($totalData, 'voucher:EMPTY'));
+    }
+
+    public function test_voucher_nhieu_voucher_cung_ap_dung(): void
+    {
+        $voucherResult = [
+            'voucherApplied' => [
+                ['voucher' => new Voucher(['code' => 'V1']), 'amount' => 10000],
+                ['voucher' => new Voucher(['code' => 'V2']), 'amount' => 5000],
+            ],
+        ];
+
+        $promotions = (new CheckoutPromotions())
+            ->setItems([['total' => 100000]])
+            ->setAppliedCoupons([], false);
+
+        [$totalData, $total] = $this->makeService(voucherResult: $voucherResult)
+            ->build($promotions, withShipping: false);
+
+        $this->assertSame(85000, $total);
+        $this->assertSame(-10000, $this->lineValue($totalData, 'voucher:V1'));
+        $this->assertSame(-5000, $this->lineValue($totalData, 'voucher:V2'));
+    }
+
+    public function test_voucher_khong_duoc_goi_khi_total_da_ve_0(): void
+    {
+        $promo = Mockery::mock(PromotionService::class);
+        $promo->shouldNotReceive('resolveVouchers');
+
+        $svc = new CheckoutTotalService(
+            Mockery::mock(ShippingFeeService::class),
+            Mockery::mock(UserRewardRepositoryInterface::class),
+            $promo,
+        );
+
+        $promotions = (new CheckoutPromotions())
+            ->setItems([['total' => 50000]])
+            ->setAppliedCoupons([
+                ['coupon' => new Coupon(['code' => 'BIG', 'type' => 1]), 'discount' => 999999, 'type' => 1],
+            ], false);
+
+        [$totalData, $total] = $svc->build($promotions, withShipping: false);
+
+        $this->assertSame(0, $total);
+        $this->assertNull($this->lineValue($totalData, 'voucher:BIG'));
     }
 }

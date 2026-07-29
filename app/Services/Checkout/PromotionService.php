@@ -22,7 +22,7 @@ class PromotionService
         $couponCodes = (array) session()->get(getCoreConfig('session.applied_coupons'), []);
         if (! empty($couponCodes)) {
             $result = $this->couponService->applyCodes($couponCodes, $cartItems, $subtotal, contextHasShipping: $hasShipping);
-            $promotions->setAppliedCoupons($result['applied'], $result['freeship']);
+            $promotions->setAppliedCoupons($result['couponApplied'], $result['freeship']);
         }
 
         $this->giftService->pruneInvalid($cartItems, $subtotal);

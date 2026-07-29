@@ -52,12 +52,12 @@ class CheckoutCouponController extends Controller
         $hasShipping = $this->contextHasShipping($request);
 
         $result = $this->couponService->applyCodes($codes, $items, (int) $subtotal, contextHasShipping: $hasShipping);
-        if (empty($result['applied'])) {
+        if (empty($result['couponApplied'])) {
             $msg = $result['errors'][0] ?? trans('messages.checkout.coupon_none_applied');
             return respondUnprocessable($msg);
         }
 
-        $appliedCodes = array_map(fn ($a) => $a['coupon']->code, $result['applied']);
+        $appliedCodes = array_map(fn ($a) => $a['coupon']->code, $result['couponApplied']);
         session()->put(getCoreConfig('session.applied_coupons'), $appliedCodes);
 
         return respondSuccess($this->renderState($request, $hasShipping, [
@@ -131,12 +131,12 @@ class CheckoutCouponController extends Controller
         if ($applyResult === null && ! empty($appliedCodes)) {
             $applyResult = $this->couponService->applyCodes($appliedCodes, $items, $subtotal, contextHasShipping: $hasShipping);
         }
-        if (! empty($applyResult['applied'] ?? [])) {
+        if (! empty($applyResult['couponApplied'] ?? [])) {
             $ctx->setAppliedCoupons(
-                $applyResult['applied'],
+                $applyResult['couponApplied'],
                 $applyResult['freeship'],
             );
-            $appliedCodes = array_map(fn ($a) => $a['coupon']->code, $applyResult['applied']);
+            $appliedCodes = array_map(fn ($a) => $a['coupon']->code, $applyResult['couponApplied']);
             session()->put(getCoreConfig('session.applied_coupons'), $appliedCodes);
         }
 

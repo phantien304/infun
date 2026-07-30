@@ -57,7 +57,7 @@ docker compose -f "$COMPOSE_FILE" exec -T infun-php php artisan migrate --force
 log "Health check $HEALTH_URL"
 ok=0
 for i in $(seq 1 10); do
-  code="$(curl -s -o /dev/null -w '%{http_code}' "$HEALTH_URL" || true)"
+  code="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' "$HEALTH_URL" || true)"
   if [ "$code" = "200" ]; then log "health OK (HTTP 200)"; ok=1; break; fi
   log "health HTTP $code — thử lại lần $i/10"; sleep 3
 done

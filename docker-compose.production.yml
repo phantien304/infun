@@ -66,6 +66,11 @@ x-app-env: &app-env
   MAIL_MAILER: "${MAIL_MAILER:-log}"
   LOG_CHANNEL: stderr
 
+  # ── Cổng chặn IP (middleware LimitAccess) ─────────────────────────────────
+  # ENABLED=false = mở public (mặc định). true + IPS=... = chỉ các IP đó vào.
+  LIMIT_ACCESS_ENABLED: "${LIMIT_ACCESS_ENABLED:-false}"
+  LIMIT_ACCESS_IPS: "${LIMIT_ACCESS_IPS:-}"
+
 services:
   # ── App PHP-FPM (scale được qua deploy.replicas) ──────────────────────────
   infun-php:

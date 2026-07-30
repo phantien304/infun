@@ -2,10 +2,8 @@
 
 namespace App\Http\Middleware;
 
-use App\Repositories\Cms\SettingRepository;
 use App\Services\ConfigDbService;
 use Closure;
-use App\Helpers\Facades\ExtendedRoute as Route;
 
 class CheckJsRequest
 {

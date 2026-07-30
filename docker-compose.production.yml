@@ -1,0 +1,143 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# PRODUCTION (AWS EC2 + Docker Compose) — image BẤT BIẾN kéo từ ghcr (tag
+# :production), KHÔNG build, KHÔNG mount code.
+#
+# Khác staging: DB/Redis DÙNG MANAGED (RDS + ElastiCache Valkey) nên KHÔNG chạy
+# container mysql/replica/proxysql/redis/mailpit ở đây. Chỉ còn:
+#   infun-php · infun-web · infun-queue · infun-scheduler · meilisearch
+#
+# Biến ${...} lấy từ file .env đặt CÙNG THƯ MỤC (không commit — chứa secret).
+# Xem docs/CI-CD-PRODUCTION.md và .env.production.example.
+#
+#   docker compose -f docker-compose.production.yml pull
+#   docker compose -f docker-compose.production.yml up -d
+# ═══════════════════════════════════════════════════════════════════════════
+
+x-app-env: &app-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: "${APP_KEY:?Chua set APP_KEY trong .env}"
+  APP_URL: "${APP_URL:?Chua set APP_URL trong .env}"
+  APP_LOCALE: vi
+  APP_LOCALES: vi
+  APP_FALLBACK_LOCALE: vi
+
+  # ── RDS MySQL ──────────────────────────────────────────────────────────────
+  # DB_READ_HOST1/DB_WRITE_HOST KHÔNG set → config/database.php tự fallback về
+  # DB_HOST (= RDS). Khi thêm RDS Read Replica, set DB_READ_HOST1 = endpoint replica.
+  DB_CONNECTION: mysql
+  DB_HOST: "${DB_HOST:?Chua set DB_HOST (RDS endpoint)}"
+  DB_PORT: "3306"
+  DB_DATABASE: "${DB_DATABASE:-infun}"
+  DB_USERNAME: "${DB_USERNAME:?Chua set DB_USERNAME}"
+  DB_PASSWORD: "${DB_PASSWORD:?Chua set DB_PASSWORD}"
+  # SSL tới RDS (tùy chọn). Bỏ trống = nối thẳng trong VPC (traffic đã cô lập).
+  # Muốn bật: để global-bundle.pem trong image/mount rồi set đường dẫn ở .env.
+  MYSQL_ATTR_SSL_CA: "${MYSQL_ATTR_SSL_CA:-}"
+
+  # ── ElastiCache Valkey (Redis-compatible) ─────────────────────────────────
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: "${REDIS_HOST:?Chua set REDIS_HOST (Valkey endpoint)}"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+
+  # ── Meilisearch (container nội bộ, không publish port) ────────────────────
+  SCOUT_DRIVER: meilisearch
+  MEILISEARCH_HOST: http://meilisearch:7700
+  MEILISEARCH_KEY: "${MEILISEARCH_KEY:?Chua set MEILISEARCH_KEY}"
+
+  # ── Lưu ảnh: Cloudflare R2 + CDN (giữ như dev/staging) ────────────────────
+  IMAGE_DISK_DRIVER: "${IMAGE_DISK_DRIVER:-s3}"
+  AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:?Chua set AWS_ACCESS_KEY_ID}"
+  AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?Chua set AWS_SECRET_ACCESS_KEY}"
+  AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-auto}"
+  AWS_BUCKET: "${AWS_BUCKET:-infun-media}"
+  AWS_ENDPOINT: "${AWS_ENDPOINT:?Chua set AWS_ENDPOINT}"
+  AWS_URL: "${AWS_URL:-https://cdn.lartisan.vn}"
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+
+  # ── Throttle PROD thật (KHÔNG nới như staging) ────────────────────────────
+  THROTTLE_ADD_TO_CART: "${THROTTLE_ADD_TO_CART:-30}"
+  THROTTLE_SAVE_ORDER: "${THROTTLE_SAVE_ORDER:-10}"
+
+  MAIL_MAILER: "${MAIL_MAILER:-log}"
+  LOG_CHANNEL: stderr
+
+services:
+  # ── App PHP-FPM (scale được qua deploy.replicas) ──────────────────────────
+  infun-php:
+    image: ghcr.io/phantien304/infun-app:production
+    restart: unless-stopped
+    deploy:
+      replicas: ${PROD_PHP_REPLICAS:-2}   # t3.small (2GB): 2 replica; resize máy thì tăng
+    environment:
+      <<: *app-env
+    volumes:
+      - prod_logs:/var/www/html/storage/logs
+    depends_on:
+      meilisearch: { condition: service_healthy }
+    networks: [infun-net]
+
+  # ── Nginx (public/ nướng sẵn trong image) ─────────────────────────────────
+  infun-web:
+    image: ghcr.io/phantien304/infun-web:production
+    container_name: infun-web-prod
+    restart: unless-stopped
+    ports:
+      - "${PROD_WEB_PORT:-8100}:80"
+    depends_on:
+      - infun-php
+    networks: [infun-net]
+
+  # ── Queue worker (cùng image app) ─────────────────────────────────────────
+  infun-queue:
+    image: ghcr.io/phantien304/infun-app:production
+    restart: unless-stopped
+    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=90 --max-time=3600
+    environment:
+      <<: *app-env
+    depends_on:
+      infun-php: { condition: service_started }
+      meilisearch: { condition: service_healthy }
+    networks: [infun-net]
+
+  # ── Scheduler (CHỈ 1 instance) ────────────────────────────────────────────
+  infun-scheduler:
+    image: ghcr.io/phantien304/infun-app:production
+    container_name: infun-scheduler-prod
+    restart: unless-stopped
+    command: php artisan schedule:work
+    environment:
+      <<: *app-env
+    depends_on:
+      infun-php: { condition: service_started }
+    networks: [infun-net]
+
+  # ── Meilisearch (Scout) — nội bộ, KHÔNG mở port ra host ───────────────────
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: infun-meili-prod
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: "${MEILI_ENV:-production}"
+      MEILI_MASTER_KEY: "${MEILISEARCH_KEY:?Chua set MEILISEARCH_KEY}"
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - prod_meili_data:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "meilisearch --version >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [infun-net]
+
+volumes:
+  prod_meili_data:
+  prod_logs:
+
+networks:
+  infun-net:

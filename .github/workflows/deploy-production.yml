@@ -1,0 +1,93 @@
+name: Deploy production
+
+# Phát hành lên PRODUCTION = PROMOTE image đã test ở staging (KHÔNG build lại).
+# Nguyên tắc: "tested = shipped" — prod chạy đúng bit-for-bit image :sha-XXX mà
+# staging đã chạy, nên retag chứ không rebuild.
+#
+# Kích hoạt bằng 1 trong 2 cách (đều CÓ CHỦ ĐÍCH, không tự chạy mỗi commit):
+#   1. Tạo GitHub Release (tag vX.Y.Z)  -> promote commit của release đó.
+#   2. Run workflow thủ công (workflow_dispatch) + nhập SHA  -> cũng dùng để ROLLBACK
+#      (nhập lại SHA của bản tốt trước đó).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA của image đã test ở staging (bỏ trống = commit hiện tại). Dùng SHA cũ để rollback."
+        required: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_APP: ghcr.io/phantien304/infun-app
+  IMAGE_WEB: ghcr.io/phantien304/infun-web
+
+jobs:
+  # ── 1. PROMOTE ─────────────────────────────────────────────────────────────
+  # Gắn tag :production cho ĐÚNG image :sha-XXX (do deploy-staging.yml đẩy lên).
+  # `environment: production` kích hoạt CỔNG PHÊ DUYỆT THỦ CÔNG — job treo chờ tới
+  # khi reviewer bấm Approve (cấu hình ở Settings → Environments → production).
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      packages: write
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      - id: pick
+        run: echo "sha=${{ github.event.inputs.sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # imagetools create = retag phía registry, KHÔNG kéo/build lại image.
+      - name: "Retag :sha-XXX -> :production (không build lại)"
+        run: |
+          SHA="${{ steps.pick.outputs.sha }}"
+          echo "Promoting sha-${SHA} -> production"
+          docker buildx imagetools create -t "${IMAGE_APP}:production" "${IMAGE_APP}:sha-${SHA}"
+          docker buildx imagetools create -t "${IMAGE_WEB}:production" "${IMAGE_WEB}:sha-${SHA}"
+
+  # ── 2. DEPLOY ──────────────────────────────────────────────────────────────
+  # SSH vào EC2 production qua Tailscale (cùng cơ chế staging — không mở port 22
+  # ra Internet). Chạy deploy/prod-deploy.sh trên máy: pull :production, recreate,
+  # migrate, health check. DB/Redis/S3 là RDS/ElastiCache/S3, cấu hình qua .env
+  # trên máy — KHÔNG nằm trong workflow này.
+  deploy:
+    needs: promote
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.PROD_HOST }}" >> ~/.ssh/known_hosts
+
+      # Đẩy script qua stdin và chạy trên máy prod: `bash -s -- <ref> <tag>`.
+      # <ref> = tag/commit để đồng bộ mã nguồn (compose/scripts); <tag> = tag image
+      # sẽ deploy (production). Tránh nhồi logic + escape phức tạp vào chuỗi SSH.
+      - name: Deploy to production EC2
+        run: |
+          REF="${{ github.event.release.tag_name || needs.promote.outputs.sha }}"
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -i ~/.ssh/id_ed25519 \
+            "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_HOST }}" \
+            'bash -s' -- "$REF" "production" < deploy/prod-deploy.sh

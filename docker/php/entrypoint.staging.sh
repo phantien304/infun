@@ -13,6 +13,22 @@
 set -e
 cd /var/www/html
 
+# ── Chọn pool php-fpm ──────────────────────────────────────────────────────
+# Mặc định: pool storefront (docker/php/www.pool.conf đã bake thành zz-www.conf).
+# FPM_POOL_PROFILE=admin → dùng pool CMS (ít children, timeout 300s) cho
+# container infun-admin-php. Cùng image, khác env — xem docker/php/www.admin.conf.
+# Chạy trước mọi lệnh artisan để nếu tên profile sai thì fail sớm, rõ ràng.
+if [ -n "${FPM_POOL_PROFILE:-}" ]; then
+    _pool="/usr/local/etc/php-fpm.d/available/www.${FPM_POOL_PROFILE}.conf"
+    if [ -f "$_pool" ]; then
+        echo "[entrypoint] FPM_POOL_PROFILE=${FPM_POOL_PROFILE} → nạp $_pool"
+        cp "$_pool" /usr/local/etc/php-fpm.d/zz-www.conf
+    else
+        echo "[entrypoint] LỖI: FPM_POOL_PROFILE=${FPM_POOL_PROFILE} nhưng không có $_pool" >&2
+        exit 1
+    fi
+fi
+
 # Đảm bảo thư mục ghi được (volume storage có thể mount đè)
 mkdir -p storage/framework/cache storage/framework/sessions \
          storage/framework/views storage/logs bootstrap/cache

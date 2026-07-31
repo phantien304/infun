@@ -86,6 +86,44 @@ services:
       meilisearch: { condition: service_healthy }
     networks: [infun-net]
 
+  # ── App PHP-FPM ADMIN (CMS) — BULKHEAD ────────────────────────────────────
+  # CÙNG image, CÙNG codebase, khác container + khác pool php-fpm.
+  #
+  # Vì sao không tách repo CMS: 90 controller CMS sẽ chạm gần hết 151 entity
+  # trong app/Models/Entities. Tách code = nhân đôi tầng domain (tồn kho,
+  # coupon, voucher) hoặc dựng shared package phải version cùng nhịp — trả
+  # đủ giá 2 repo mà gần như không decouple được gì. Thứ THẬT SỰ giảm tải là
+  # tách RUNTIME, tức đúng service này. Xem docs/CMS-MODULE-BOUNDARY.md.
+  #
+  # Deploy riêng được dù chung image:
+  #   docker compose -f docker-compose.production.yml up -d --no-deps infun-admin-php
+  # → không reload FPM storefront (opcache.validate_timestamps=0 nên mỗi lần
+  #   reload là một lần chạm đường nóng).
+  infun-admin-php:
+    image: ghcr.io/phantien304/infun-app:production
+    restart: unless-stopped
+    deploy:
+      replicas: ${PROD_ADMIN_PHP_REPLICAS:-1}   # 5-10 admin online: 1 là đủ
+    environment:
+      <<: *app-env
+      # Nạp docker/php/www.admin.conf: 6 worker, terminate 300s (thay vì 15s
+      # của storefront) — export/import CMS chạy vài phút là bình thường và
+      # giờ không giữ chỗ của khách mua hàng nữa.
+      FPM_POOL_PROFILE: admin
+
+      # Đẩy read của CMS sang RDS Read Replica. PHẢI set CẢ HAI biến:
+      # config/database.php fallback read/write về DB_HOST, nên nếu chỉ đổi
+      # read mà quên write thì lệnh ghi của CMS bay thẳng vào replica
+      # (read_only) → lỗi lúc lưu sản phẩm. Chưa dựng replica thì để trống,
+      # cả hai tự fallback DB_HOST như cũ.
+      DB_READ_HOST1: "${DB_ADMIN_READ_HOST:-${DB_HOST}}"
+      DB_WRITE_HOST: "${DB_HOST}"
+    volumes:
+      - prod_logs:/var/www/html/storage/logs
+    depends_on:
+      meilisearch: { condition: service_healthy }
+    networks: [infun-net]
+
   # ── Nginx (public/ nướng sẵn trong image) ─────────────────────────────────
   infun-web:
     image: ghcr.io/phantien304/infun-web:production
@@ -95,17 +133,47 @@ services:
       - "${PROD_WEB_PORT:-8100}:80"
     depends_on:
       - infun-php
+      # nginx có `resolver` nên tự re-resolve được, nhưng chờ sẵn ở đây thì
+      # không ăn 502 trong vài giây đầu sau `up -d`.
+      - infun-admin-php
     networks: [infun-net]
 
   # ── Queue worker (cùng image app) ─────────────────────────────────────────
   infun-queue:
     image: ghcr.io/phantien304/infun-app:production
     restart: unless-stopped
-    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=90 --max-time=3600
+    # --queue=default nói rõ ra thứ vốn đã ngầm định (REDIS_QUEUE=default), để
+    # khi thêm queue `admin` bên dưới thì ranh giới nhìn là thấy: worker này
+    # CHỈ phục vụ job của khách (mail xác nhận đơn, verify email…).
+    command: php artisan queue:work redis --queue=default --sleep=1 --tries=3 --timeout=90 --max-time=3600
     environment:
       <<: *app-env
     depends_on:
       infun-php: { condition: service_started }
+      meilisearch: { condition: service_healthy }
+    networks: [infun-net]
+
+  # ── Queue worker ADMIN — mặc định TẮT (replicas=0) ────────────────────────
+  # Tầng thứ hai của cùng nguyên tắc bulkhead: job do admin sinh ra (re-gen
+  # thumbnail, export, import) không được xếp trước email xác nhận đơn của
+  # khách. Chung một queue thì một lần `images:migrate-r2` là khách chờ mail
+  # hàng chục phút.
+  #
+  # VÌ SAO replicas=0: hiện CHƯA job nào gọi ->onQueue('admin') (kiểm tra:
+  # không file nào trong app/Jobs khai báo $queue), nên bật lên chỉ tốn ~90MB
+  # RAM để idle — trên t3.small 2GB đó là RAM lấy của storefront.
+  # BẬT khi viết job CMS đầu tiên: đặt PROD_QUEUE_ADMIN_REPLICAS=1 trong .env
+  # và dispatch bằng ProcessImageUpload::dispatch(...)->onQueue('admin').
+  infun-queue-admin:
+    image: ghcr.io/phantien304/infun-app:production
+    restart: unless-stopped
+    deploy:
+      replicas: ${PROD_QUEUE_ADMIN_REPLICAS:-0}
+    # timeout 600s: job CMS nặng và dài, khác hẳn queue default (90s).
+    command: php artisan queue:work redis --queue=admin --sleep=3 --tries=3 --timeout=600 --max-time=3600
+    environment:
+      <<: *app-env
+    depends_on:
       meilisearch: { condition: service_healthy }
     networks: [infun-net]
 

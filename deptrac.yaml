@@ -1,0 +1,103 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# deptrac — ép ranh giới module giữa CMS / Storefront / Domain.
+#
+# Bối cảnh: CMS sắp phình từ 6 lên ~90 controller (166 bảng). Ranh giới dựng
+# BÂY GIỜ tốn gần như 0 công; dựng sau 90 controller là một đợt refactor.
+# Lý do đầy đủ: docs/CMS-MODULE-BOUNDARY.md
+#
+# Chạy:  composer boundary        (CI chạy trên mọi PR)
+#        composer boundary:graph
+#
+# LƯU Ý QUAN TRỌNG: layer gom bằng PATTERN ĐƯỜNG DẪN, không phải bằng một cây
+# thư mục module riêng. Repo đi theo quy ước "layer trước, area sau"
+# (Http/Controllers/{Web,Cms,Api}, Http/Requests/{Web,Cms}, Data/Cms) — deptrac
+# tôn trọng quy ước đó thay vì bắt dựng thêm app/Cms/ song song. Hệ quả: luật
+# có hiệu lực NGAY trên code hiện có, không cần PR dời file nào.
+# ═══════════════════════════════════════════════════════════════════════════
+deptrac:
+  paths:
+    - ./app
+
+  # File không thuộc layer nào → deptrac bỏ qua (không phải lỗi).
+  # Cụ thể: app/Http/Middleware, app/Providers, app/Console, app/Helpers,
+  # app/Common, app/Exceptions, app/Policies, app/Mail — hạ tầng dùng chung,
+  # chưa cần ràng buộc. Thêm vào layer khi thấy cần siết.
+  layers:
+    # ── CMS: chỉ admin dùng ────────────────────────────────────────────────
+    # `.*` bao cả nhóm con (Api/Cms/Catalog, Api/Cms/Order…) nên thêm nhóm mới
+    # KHÔNG phải sửa file này.
+    - name: Cms
+      collectors:
+        - type: directory
+          value: app/Http/Controllers/Cms/.*
+        - type: directory
+          value: app/Http/Controllers/Api/Cms/.*
+        - type: directory
+          value: app/Http/Requests/Cms/.*
+        - type: directory
+          value: app/Data/Cms/.*
+        # Chưa tồn tại. Khai báo trước để nếu ai đó mở app/Services/Cms thì nó
+        # rơi vào layer Cms (Web không import được), chứ không lẫn vào Domain
+        # và vô tình trở thành code dùng chung. Ngưỡng để được phép tạo thư mục
+        # này: logic KHÔNG chạm quy tắc nghiệp vụ nào (không tính tiền, không
+        # trừ kho, không xét coupon) — xem README ở Api/Cms.
+        - type: directory
+          value: app/Services/Cms/.*
+
+    # ── Web: storefront + API mobile — đường nóng, 30k active ──────────────
+    - name: Web
+      collectors:
+        - type: directory
+          value: app/Http/Controllers/Web/.*
+        - type: directory
+          value: app/Http/Controllers/Api/Mobile/.*
+        - type: directory
+          value: app/Http/Requests/Web/.*
+    # CỐ Ý không gom app/View vào layer nào. `App\View\FragmentCache` là tiện
+    # ích cache fragment (sidebar tree/facets) và bị chính Repository gọi để
+    # invalidate (CategoryRepository, FilterRepository, ManufacturerRepository).
+    # Xếp nó vào Web thì sinh 3 vi phạm Domain→Web ngay ngày đầu — mà đó là
+    # hạ tầng cache dùng chung chứ không phải code trình bày của storefront.
+    # Để ngoài layer = deptrac bỏ qua, đúng bản chất hơn là nới luật.
+
+    # ── Domain: nguồn sự thật dùng chung ───────────────────────────────────
+    # Tồn kho, đơn hàng, voucher, coupon nằm ở đây. Cả Cms lẫn Web đều gọi
+    # vào ĐÂY thay vì tự implement lại — đó là toàn bộ lý do không tách repo.
+    - name: Domain
+      collectors:
+        - type: directory
+          value: app/Models/.*
+        - type: directory
+          value: app/Repositories/.*
+        # Trừ app/Services/Cms — nếu không loại ra, một class sẽ khớp CẢ HAI
+        # layer (deptrac không dừng ở layer đầu tiên) và luật trở nên nhập
+        # nhằng: Web import service CMS mà vẫn pass vì nó cũng là Domain.
+        - type: bool
+          must:
+            - type: directory
+              value: app/Services/.*
+          must_not:
+            - type: directory
+              value: app/Services/Cms/.*
+        - type: directory
+          value: app/Enums/.*
+        - type: directory
+          value: app/Events/.*
+        - type: directory
+          value: app/Observers/.*
+        - type: directory
+          value: app/Jobs/.*
+
+  ruleset:
+    # Cms được đọc/ghi domain dùng chung — đúng chủ đích.
+    Cms:
+      - Domain
+
+    # Web KHÔNG được thấy Cms. Đây là luật quan trọng nhất trong file này:
+    # nó giữ cho mọi thay đổi CMS không có đường làm sập trang bán hàng.
+    Web:
+      - Domain
+
+    # Domain không biết gì về tầng trên. Service cần rẽ nhánh theo ngữ cảnh
+    # thì nhận tham số, không import ngược lên Cms/Web.
+    Domain: ~

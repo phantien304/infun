@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype trang sản phẩm — TMĐT đa ngành hàng</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="store.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style type="text/tailwindcss">
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #16151A;
+  --color-ink-2: #56545F;
+  --color-ink-3: #8B8895;
+  --color-line: #E7E5E4;
+  --color-canvas: #FAF9F7;
+  --color-brand: #E8452C;
+  --color-brand-tint: #FDEEEB;
+  --color-mint: #0F9D6E;
+  --color-mint-tint: #E6F5EF;
+}
+</style>
+<style>
+  body { background: var(--color-canvas); }
+  [x-cloak] { display: none !important; }
+  .ph { background-color: #EDEAE6; background-size: cover; background-position: center; }
+  .no-sb::-webkit-scrollbar { display: none; }
+  .no-sb { scrollbar-width: none; }
+</style>
+</head>
+<body class="font-sans text-ink antialiased" x-data>
+
+<!-- ══ Thanh trên ═════════════════════════════════════════════════════ -->
+<div class="bg-ink text-white text-[13px]">
+  <div class="mx-auto max-w-[1320px] px-5 h-9 flex items-center justify-between gap-4">
+    <p class="font-medium truncate" x-text="$store.app.t('bar.ship')">Miễn phí vận chuyển cho đơn từ 299.000₫</p>
+    <div class="flex items-center gap-1 shrink-0">
+      <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+        <button @click="open = !open" class="h-7 px-2.5 rounded-lg hover:bg-white/10 flex items-center gap-1.5 font-medium transition">
+          <svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+          <span x-text="$store.app.L.short">VI</span>
+        </button>
+        <div x-show="open" x-cloak x-transition.opacity.duration.120ms class="absolute right-0 top-full mt-1.5 w-44 bg-white text-ink rounded-xl border border-line shadow-lg py-1.5 z-[60]">
+          <template x-for="l in Object.values($store.app.locales)" :key="l.code">
+            <button @click="$store.app.setLocale(l.code); open = false" class="w-full px-3.5 py-2 flex items-center justify-between text-[14px] hover:bg-canvas transition"
+                    :class="$store.app.locale === l.code && 'font-semibold text-brand'">
+              <span x-text="l.label"></span><span class="text-[11px] text-ink-3" x-text="l.short"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+      <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+        <button @click="open = !open" class="h-7 px-2.5 rounded-lg hover:bg-white/10 flex items-center gap-1.5 font-medium transition">
+          <svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5a2.5 2.5 0 0 0-5 0c0 3 5 1.5 5 5a2.5 2.5 0 0 1-5 0M12 6v12"/></svg>
+          <span x-text="$store.app.C.code">VND</span>
+        </button>
+        <div x-show="open" x-cloak x-transition.opacity.duration.120ms class="absolute right-0 top-full mt-1.5 w-40 bg-white text-ink rounded-xl border border-line shadow-lg py-1.5 z-[60]">
+          <template x-for="c in Object.values($store.app.currencies)" :key="c.code">
+            <button @click="$store.app.setCurrency(c.code); open = false" class="w-full px-3.5 py-2 text-left text-[14px] hover:bg-canvas transition"
+                    :class="$store.app.currency === c.code && 'font-semibold text-brand'" x-text="c.label"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Header ═════════════════════════════════════════════════════════ -->
+<header class="sticky top-0 z-50 bg-canvas/95 backdrop-blur border-b border-line">
+  <div class="mx-auto max-w-[1320px] px-5 h-[72px] flex items-center gap-4 lg:gap-6">
+    <a href="home-v1.html" class="shrink-0 text-[22px] font-extrabold tracking-tight">infun<span class="text-brand">.</span></a>
+    <div class="flex-1 max-w-[560px] relative hidden sm:block">
+      <input type="text" :placeholder="$store.app.t('search.ph')" class="w-full h-11 pl-11 pr-24 rounded-full bg-white border border-line text-[15px] placeholder:text-ink-3 focus:outline-none focus:border-ink focus:ring-4 focus:ring-ink/5 transition">
+      <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-ink-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <button class="absolute right-1.5 top-1.5 h-8 px-4 rounded-full bg-ink text-white text-[13px] font-medium hover:bg-ink-2 transition" x-text="$store.app.t('search.btn')">Tìm</button>
+    </div>
+    <div class="flex items-center gap-1 ml-auto">
+      <button class="h-10 px-3 rounded-full hover:bg-white flex items-center gap-2 text-[14px] font-medium transition">
+        <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+        <span class="hidden lg:inline" x-text="$store.app.t('acc.title')">Tài khoản</span>
+      </button>
+      <button class="h-10 pl-3 pr-4 rounded-full bg-white border border-line hover:border-ink flex items-center gap-2 transition">
+        <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M5 7h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 7Z"/><path d="M9 7V5.5a3 3 0 0 1 6 0V7"/></svg>
+        <span class="text-[13px] font-semibold tabular-nums" x-text="$store.app.cart">3</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ══ TRANG SẢN PHẨM ═════════════════════════════════════════════════
+     x-data="product()" giữ toàn bộ trạng thái: ảnh đang xem, màu, dung
+     lượng, số lượng. Giá và tồn kho suy ra từ biến thể đang chọn — đúng
+     mô hình ProductVariant + ProductStock (đa kho) trong repo.          -->
+<main class="mx-auto max-w-[1320px] px-5" x-data="product()">
+
+  <nav class="py-4 text-[13px] text-ink-2 flex items-center gap-2 flex-wrap">
+    <a href="home-v1.html" class="hover:text-ink" x-text="$store.app.t('pd.home')">Trang chủ</a>
+    <span class="text-ink-3">/</span>
+    <a href="#" class="hover:text-ink" x-text="$store.app.tr(P.cat)"></a>
+    <span class="text-ink-3">/</span>
+    <span class="text-ink truncate" x-text="$store.app.tr(P)"></span>
+  </nav>
+
+  <div class="grid grid-cols-12 gap-6 lg:gap-10 pb-10">
+
+    <!-- ── Gallery ─────────────────────────────────────────────────── -->
+    <div class="col-span-12 lg:col-span-6">
+      <div class="sticky top-[88px]">
+        <div class="rounded-3xl overflow-hidden ph aspect-square mb-3 relative"
+             :style="`background-image:url('https://picsum.photos/seed/${gallery[active]}/900')`">
+          <span x-show="discount > 0" class="absolute top-4 left-4 px-3 py-1 rounded-full bg-brand text-white text-[13px] font-bold"
+                x-text="'-' + discount + '%'"></span>
+        </div>
+        <div class="grid grid-cols-5 gap-2.5">
+          <template x-for="(g, i) in gallery" :key="g">
+            <button @click="active = i" class="rounded-2xl overflow-hidden ph aspect-square transition"
+                    :class="active === i ? 'ring-2 ring-ink' : 'opacity-70 hover:opacity-100'"
+                    :style="`background-image:url('https://picsum.photos/seed/${g}/200')`" :aria-label="`Ảnh ${i+1}`"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Thông tin & mua hàng ────────────────────────────────────── -->
+    <div class="col-span-12 lg:col-span-6">
+
+      <p class="text-[13px] font-semibold text-ink-3 tracking-wide uppercase" x-text="P.brand"></p>
+      <h1 class="text-[28px] lg:text-[34px] font-extrabold tracking-tight leading-[1.15] mt-1.5" x-text="$store.app.tr(P)"></h1>
+
+      <div class="flex items-center gap-3 mt-3 text-[13.5px] flex-wrap">
+        <span class="flex items-center gap-1 font-semibold">
+          <span class="text-brand">★</span> <span x-text="P.rating"></span>
+        </span>
+        <span class="text-ink-3">·</span>
+        <a href="#reviews" class="text-ink-2 hover:text-ink underline underline-offset-2" x-text="`${$store.app.num(P.reviews)} ${$store.app.t('rev.count')}`"></a>
+        <span class="text-ink-3">·</span>
+        <span class="text-ink-2" x-text="`${$store.app.num(P.sold)} ${$store.app.t('pd.sold')}`"></span>
+        <span class="text-ink-3">·</span>
+        <span class="text-ink-3" x-text="`${$store.app.t('pd.sku')} ${sku}`"></span>
+      </div>
+
+      <!-- Giá — đổi theo biến thể VÀ theo tiền tệ đang chọn -->
+      <div class="mt-5 flex items-end gap-3 flex-wrap">
+        <span class="text-[34px] font-extrabold leading-none text-brand" x-text="$store.app.money(price)"></span>
+        <span x-show="compareAt > price" class="text-[17px] text-ink-3 line-through mb-0.5" x-text="$store.app.money(compareAt)"></span>
+        <span x-show="compareAt > price" class="mb-1 px-2 py-0.5 rounded-md bg-brand-tint text-brand text-[12.5px] font-bold"
+              x-text="`${$store.app.t('pd.save')} ${$store.app.money(compareAt - price)}`"></span>
+      </div>
+
+      <!-- Biến thể: màu (swatch) — OptionValue.image trong DB thật -->
+      <div class="mt-7">
+        <div class="flex items-baseline justify-between mb-2.5">
+          <p class="text-[14px] font-semibold" x-text="$store.app.tr(OPT_COLOR.label)"></p>
+          <p class="text-[13.5px] text-ink-2" x-text="$store.app.tr(OPT_COLOR.values[color])"></p>
+        </div>
+        <div class="flex gap-2.5 flex-wrap">
+          <template x-for="(v, i) in OPT_COLOR.values" :key="i">
+            <button @click="color = i" class="w-11 h-11 rounded-2xl border-2 transition grid place-items-center"
+                    :class="color === i ? 'border-ink' : 'border-line hover:border-ink-3'"
+                    :aria-label="$store.app.tr(v)">
+              <span class="w-7 h-7 rounded-xl border border-line" :style="`background:${v.hex}`"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Biến thể: dung lượng — hết hàng thì gạch chéo, không cho chọn -->
+      <div class="mt-6">
+        <p class="text-[14px] font-semibold mb-2.5" x-text="$store.app.tr(OPT_SIZE.label)"></p>
+        <div class="flex gap-2.5 flex-wrap">
+          <template x-for="(v, i) in OPT_SIZE.values" :key="i">
+            <button @click="stockOf(color, i) > 0 && (size = i)"
+                    :disabled="stockOf(color, i) === 0"
+                    class="h-11 px-5 rounded-2xl border-2 text-[14px] font-semibold transition"
+                    :class="stockOf(color, i) === 0
+                      ? 'border-line text-ink-3 line-through cursor-not-allowed bg-canvas'
+                      : (size === i ? 'border-ink' : 'border-line hover:border-ink-3')"
+                    x-text="v.name"></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Tồn kho — nhiều kho là điểm mạnh sẵn có của backend, nên cho thấy -->
+      <div class="mt-6 rounded-2xl border border-line bg-white p-4">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[13.5px] font-semibold" x-text="$store.app.t('pd.wh')">Tồn theo kho</p>
+          <span class="px-2.5 py-1 rounded-full text-[12px] font-bold"
+                :class="stock === 0 ? 'bg-canvas text-ink-3' : (stock <= 10 ? 'bg-brand-tint text-brand' : 'bg-mint-tint text-mint')"
+                x-text="stock === 0 ? $store.app.t('pd.oos') : (stock <= 10 ? `${$store.app.t('pd.lowstock')} · ${stock}` : `${$store.app.t('pd.instock')} · ${stock}`)"></span>
+        </div>
+        <div class="space-y-2">
+          <template x-for="w in warehouses" :key="w.k">
+            <div class="flex items-center justify-between text-[13.5px]">
+              <span class="text-ink-2" x-text="$store.app.tr(w)"></span>
+              <span class="font-semibold tabular-nums" :class="w.qty === 0 && 'text-ink-3'" x-text="w.qty"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Số lượng + hành động -->
+      <div class="mt-6 flex gap-3 flex-wrap items-center">
+        <div class="flex items-center h-13 rounded-2xl border border-line bg-white overflow-hidden">
+          <button @click="qty > 1 && qty--" class="w-12 h-13 grid place-items-center hover:bg-canvas transition text-[19px]" aria-label="-">−</button>
+          <input type="text" class="w-12 h-13 text-center font-semibold text-[15px] tabular-nums bg-transparent focus:outline-none" :value="qty" readonly>
+          <button @click="qty < stock && qty++" class="w-12 h-13 grid place-items-center hover:bg-canvas transition text-[19px]" aria-label="+">+</button>
+        </div>
+        <button @click="$store.app.addToCart(qty)" :disabled="stock === 0"
+                class="h-13 px-7 rounded-2xl border-2 border-ink font-semibold text-[15px] hover:bg-ink hover:text-white transition disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink"
+                x-text="$store.app.t('pd.addcart')">Thêm vào giỏ</button>
+        <button :disabled="stock === 0"
+                class="h-13 flex-1 min-w-[160px] rounded-2xl bg-brand text-white font-semibold text-[15px] hover:bg-ink transition disabled:opacity-40"
+                x-text="$store.app.t('pd.buynow')">Mua ngay</button>
+      </div>
+
+      <!-- Cam kết -->
+      <div class="mt-6 grid grid-cols-3 gap-2.5">
+        <div class="rounded-2xl bg-white border border-line p-3.5 text-center">
+          <svg class="w-6 h-6 mx-auto mb-2 text-ink-2" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></svg>
+          <p class="text-[12.5px] font-medium leading-tight" x-text="$store.app.t('pd.ship')">Giao 24h nội thành</p>
+        </div>
+        <div class="rounded-2xl bg-white border border-line p-3.5 text-center">
+          <svg class="w-6 h-6 mx-auto mb-2 text-ink-2" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          <p class="text-[12.5px] font-medium leading-tight" x-text="$store.app.t('pd.ret')">Đổi trả 30 ngày</p>
+        </div>
+        <div class="rounded-2xl bg-white border border-line p-3.5 text-center">
+          <svg class="w-6 h-6 mx-auto mb-2 text-ink-2" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8.2 8 9 4.6-.8 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <p class="text-[12.5px] font-medium leading-tight" x-text="$store.app.t('pd.auth')">Hàng chính hãng 100%</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tabs: mô tả / thông số / đánh giá ────────────────────────────
+       Alpine giữ tab, không cần route — nội dung đã có sẵn trong DOM.  -->
+  <section class="pb-10" x-data="{ tab: 'desc' }" id="reviews">
+    <div class="flex gap-1.5 border-b border-line mb-6 overflow-x-auto no-sb">
+      <template x-for="[k, key] in [['desc','pd.tab.desc'],['spec','pd.tab.spec'],['rev','pd.tab.rev']]" :key="k">
+        <button @click="tab = k" class="shrink-0 h-11 px-5 text-[15px] font-semibold border-b-2 -mb-px transition"
+                :class="tab === k ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink'"
+                x-text="$store.app.t(key)"></button>
+      </template>
+    </div>
+
+    <div x-show="tab === 'desc'" class="max-w-[70ch] text-[15.5px] leading-[1.75] text-ink-2 space-y-4">
+      <p x-text="$store.app.tr(P.desc1)"></p>
+      <p x-text="$store.app.tr(P.desc2)"></p>
+    </div>
+
+    <div x-show="tab === 'spec'" x-cloak class="max-w-[640px]">
+      <div class="rounded-2xl border border-line bg-white overflow-hidden">
+        <template x-for="(s, i) in SPECS" :key="i">
+          <div class="flex text-[14.5px] border-b border-line last:border-0">
+            <div class="w-2/5 px-4 py-3 bg-canvas text-ink-2 font-medium" x-text="$store.app.tr(s.k)"></div>
+            <div class="w-3/5 px-4 py-3" x-text="$store.app.tr(s.v)"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="tab === 'rev'" x-cloak class="grid grid-cols-12 gap-8">
+      <div class="col-span-12 md:col-span-4">
+        <div class="rounded-3xl bg-white border border-line p-6 text-center">
+          <p class="text-[46px] font-extrabold leading-none" x-text="P.rating"></p>
+          <p class="text-brand text-[17px] mt-1.5 tracking-wide">★★★★★</p>
+          <p class="text-[13.5px] text-ink-2 mt-1.5" x-text="`${$store.app.num(P.reviews)} ${$store.app.t('rev.count')}`"></p>
+          <div class="mt-5 space-y-2">
+            <template x-for="b in BARS" :key="b.star">
+              <div class="flex items-center gap-2.5 text-[12.5px]">
+                <span class="w-7 text-left text-ink-2" x-text="b.star + '★'"></span>
+                <div class="flex-1 h-2 rounded-full bg-canvas overflow-hidden">
+                  <div class="h-full rounded-full bg-brand" :style="`width:${b.pct}%`"></div>
+                </div>
+                <span class="w-9 text-right text-ink-3 tabular-nums" x-text="b.pct + '%'"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="col-span-12 md:col-span-8 space-y-3">
+        <template x-for="(r, i) in REVIEWS" :key="i">
+          <div class="rounded-2xl bg-white border border-line p-5">
+            <div class="flex items-center gap-3 mb-2.5">
+              <div class="w-9 h-9 rounded-full ph" :style="`background-image:url('https://picsum.photos/seed/rv${i}/80')`"></div>
+              <div class="min-w-0">
+                <p class="text-[14px] font-semibold" x-text="r.name"></p>
+                <p class="text-[12px] text-ink-3" x-text="r.date"></p>
+              </div>
+              <span class="ml-auto text-brand text-[13px]" x-text="'★'.repeat(r.star)"></span>
+            </div>
+            <p class="text-[14.5px] leading-relaxed text-ink-2" x-text="$store.app.tr(r)"></p>
+          </div>
+        </template>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Sản phẩm tương tự ───────────────────────────────────────────── -->
+  <section class="pb-12">
+    <h2 class="text-[24px] font-bold tracking-tight mb-4" x-text="$store.app.t('pd.related')">Sản phẩm tương tự</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <template x-for="p in RELATED" :key="p.seed">
+        <a href="#" class="group bg-white border border-line rounded-2xl p-2.5 hover:border-ink hover:-translate-y-0.5 transition">
+          <div class="aspect-square rounded-xl overflow-hidden ph mb-2.5" :style="`background-image:url('https://picsum.photos/seed/${p.seed}/400')`"></div>
+          <p class="text-[13.5px] leading-snug line-clamp-2 min-h-[38px] group-hover:text-brand transition" x-text="$store.app.tr(p)"></p>
+          <p class="mt-2 text-[15px] font-bold" x-text="$store.app.money(p.p)"></p>
+          <p class="mt-0.5 text-[12px] text-ink-3" x-text="`★ ${p.r} · ${$store.app.num(p.c)} ${$store.app.t('rev.count')}`"></p>
+        </a>
+      </template>
+    </div>
+  </section>
+
+  <!-- ── Thanh mua hàng dính đáy — hiện khi cuộn quá phần chính ──────── -->
+  <div x-data="{ show: false }" @scroll.window="show = window.scrollY > 700"
+       x-show="show" x-cloak x-transition.opacity
+       class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-line">
+    <div class="mx-auto max-w-[1320px] px-5 h-[68px] flex items-center gap-4">
+      <div class="w-11 h-11 rounded-xl ph shrink-0" :style="`background-image:url('https://picsum.photos/seed/${gallery[0]}/100')`"></div>
+      <div class="min-w-0 hidden sm:block">
+        <p class="text-[14px] font-semibold truncate" x-text="$store.app.tr(P)"></p>
+        <p class="text-[12.5px] text-ink-3 truncate" x-text="`${$store.app.tr(OPT_COLOR.values[color])} · ${OPT_SIZE.values[size].name}`"></p>
+      </div>
+      <span class="text-[19px] font-extrabold text-brand ml-auto shrink-0" x-text="$store.app.money(price)"></span>
+      <button @click="$store.app.addToCart(qty)" :disabled="stock === 0"
+              class="h-11 px-6 rounded-xl bg-brand text-white font-semibold text-[14px] hover:bg-ink transition disabled:opacity-40 shrink-0"
+              x-text="$store.app.t('pd.addcart')">Thêm vào giỏ</button>
+    </div>
+  </div>
+</main>
+
+<footer class="bg-white border-t border-line mt-4 mb-[68px]">
+  <div class="mx-auto max-w-[1320px] px-5 h-16 flex items-center justify-between text-[13px] text-ink-3">
+    <span x-text="$store.app.t('ft.note')">© 2026 infun.</span>
+    <a href="home-v1.html" class="hover:text-ink" x-text="$store.app.t('pd.home')">Trang chủ</a>
+  </div>
+</footer>
+
+<script>
+const P = {
+  brand: 'AUDIOLAB',
+  vi: 'Tai nghe không dây chống ồn chủ động Pro',
+  en: 'Pro active noise-cancelling wireless headphones',
+  cat: { vi: 'Tai nghe & loa', en: 'Audio' },
+  rating: 4.8, reviews: 1284, sold: 5210,
+  desc1: {
+    vi: 'Chống ồn chủ động thế hệ 3 với 6 micro thu môi trường, cắt tới 95% tiếng ồn dải thấp. Driver 40mm phủ titan cho dải trầm sâu mà không lấn tiếng hát.',
+    en: 'Third-generation active noise cancellation with six environment microphones, cutting up to 95% of low-frequency noise. Titanium-coated 40mm drivers deliver deep bass without masking vocals.'
+  },
+  desc2: {
+    vi: 'Pin 40 giờ nghe liên tục, sạc nhanh 10 phút dùng được 5 giờ. Kết nối hai thiết bị cùng lúc, chuyển qua lại không cần ngắt.',
+    en: '40 hours of continuous playback; a 10-minute charge gives 5 hours. Connects to two devices at once and switches between them without reconnecting.'
+  }
+};
+
+const OPT_COLOR = {
+  label: { vi: 'Màu sắc', en: 'Colour' },
+  values: [
+    { vi: 'Đen than',   en: 'Charcoal black', hex: '#16151A' },
+    { vi: 'Trắng ngà',  en: 'Ivory white',    hex: '#EDEAE4' },
+    { vi: 'Xanh navy',  en: 'Navy blue',      hex: '#2C3E5A' },
+    { vi: 'Cam đất',    en: 'Terracotta',     hex: '#B54A2E' }
+  ]
+};
+
+const OPT_SIZE = {
+  label: { vi: 'Phiên bản', en: 'Edition' },
+  values: [{ name: 'Standard' }, { name: 'Plus' }, { name: 'Pro' }]
+};
+
+/* Ma trận biến thể: [màu][phiên bản] → { giá gốc, giá bán, tồn theo kho }.
+   Đây chính là ProductVariant × ProductStock trong DB — mỗi ô là một SKU
+   thật, có giá riêng và tồn riêng ở từng kho. */
+const VARIANTS = [
+  [ { p:2490000, o:3290000, wh:[12, 8, 0] },  { p:2990000, o:3790000, wh:[5, 2, 1] },  { p:3490000, o:4290000, wh:[3, 0, 0] } ],
+  [ { p:2490000, o:3290000, wh:[6, 0, 2] },   { p:2990000, o:3790000, wh:[0, 0, 0] },  { p:3490000, o:4290000, wh:[2, 1, 0] } ],
+  [ { p:2590000, o:3290000, wh:[9, 4, 3] },   { p:3090000, o:3790000, wh:[7, 3, 0] },  { p:3590000, o:4290000, wh:[0, 0, 0] } ],
+  [ { p:2690000, o:3390000, wh:[2, 0, 0] },   { p:3190000, o:3890000, wh:[1, 0, 0] },  { p:3690000, o:4390000, wh:[4, 2, 2] } ]
+];
+
+const WAREHOUSES = [
+  { k:'hn', vi:'Kho Hà Nội',     en:'Hanoi warehouse' },
+  { k:'hcm', vi:'Kho TP.HCM',    en:'Ho Chi Minh warehouse' },
+  { k:'dn', vi:'Kho Đà Nẵng',    en:'Da Nang warehouse' }
+];
+
+const SPECS = [
+  { k:{vi:'Kiểu dáng',en:'Form factor'},   v:{vi:'Over-ear, gọng gập',en:'Over-ear, foldable'} },
+  { k:{vi:'Driver',en:'Driver'},           v:{vi:'40mm phủ titan',en:'40mm titanium-coated'} },
+  { k:{vi:'Chống ồn',en:'Noise cancelling'},v:{vi:'ANC thế hệ 3, 6 micro',en:'3rd-gen ANC, 6 mics'} },
+  { k:{vi:'Thời lượng pin',en:'Battery'},  v:{vi:'40 giờ (ANC bật: 30 giờ)',en:'40h (30h with ANC)'} },
+  { k:{vi:'Kết nối',en:'Connectivity'},    v:{vi:'Bluetooth 5.4, đa điểm',en:'Bluetooth 5.4, multipoint'} },
+  { k:{vi:'Trọng lượng',en:'Weight'},      v:{vi:'268g',en:'268g'} },
+  { k:{vi:'Bảo hành',en:'Warranty'},       v:{vi:'24 tháng chính hãng',en:'24 months official'} }
+];
+
+const BARS = [
+  { star:5, pct:82 }, { star:4, pct:12 }, { star:3, pct:4 }, { star:2, pct:1 }, { star:1, pct:1 }
+];
+
+const REVIEWS = [
+  { name:'Trần Ngọc Anh', date:'28/07/2026', star:5,
+    vi:'Đeo cả ngày làm việc không đau tai. Chống ồn tốt hơn hẳn cái cũ mình dùng, đi máy bay gần như không nghe tiếng động cơ.',
+    en:'Wore it all day without ear fatigue. Noise cancelling is far better than my old pair — on a plane the engine is almost gone.' },
+  { name:'Lê Minh Hoàng', date:'21/07/2026', star:5,
+    vi:'Pin đúng như quảng cáo, sạc một lần dùng cả tuần đi làm. Kết nối hai máy tiện, chuyển laptop sang điện thoại mượt.',
+    en:'Battery is as advertised — one charge lasts a full work week. Multipoint is handy, switching laptop to phone is smooth.' },
+  { name:'Phạm Thu Hà', date:'15/07/2026', star:4,
+    vi:'Âm thanh hay, chỉ hơi nặng khi đeo lâu trên 3 tiếng. Hộp đựng chắc chắn, đóng gói cẩn thận.',
+    en:'Great sound, just slightly heavy past three hours. Sturdy case, carefully packed.' }
+];
+
+const RELATED = [
+  { vi:'Tai nghe true wireless chống ồn', en:'True wireless ANC earbuds',   p:1890000, r:4.7, c:842,  seed:'r1' },
+  { vi:'Loa bluetooth ngoài trời 30W',    en:'Outdoor bluetooth speaker 30W', p:1190000, r:4.7, c:486, seed:'r2' },
+  { vi:'Đế sạc không dây 3 trong 1',      en:'3-in-1 wireless charging dock', p:690000, r:4.6, c:311, seed:'r3' },
+  { vi:'Dây audio 3.5mm bọc dù 1.2m',     en:'Braided 3.5mm audio cable 1.2m', p:159000, r:4.8, c:1520, seed:'r4' },
+  { vi:'Túi đựng tai nghe chống sốc',     en:'Shockproof headphone case',     p:249000, r:4.9, c:673,  seed:'r5' }
+];
+
+document.addEventListener('alpine:init', () => {
+  Alpine.data('product', () => ({
+    P, OPT_COLOR, OPT_SIZE, SPECS, BARS, REVIEWS, RELATED,
+    active: 0,
+    color: 0,
+    size: 0,
+    qty: 1,
+
+    get gallery() { return ['pd1', 'pd2', 'pd3', 'pd4', 'pd5']; },
+    get variant()  { return VARIANTS[this.color][this.size]; },
+    get price()    { return this.variant.p; },
+    get compareAt(){ return this.variant.o; },
+    get discount() { return Math.round((1 - this.variant.p / this.variant.o) * 100); },
+    get warehouses() { return WAREHOUSES.map((w, i) => ({ ...w, qty: this.variant.wh[i] })); },
+    get stock()    { return this.variant.wh.reduce((a, b) => a + b, 0); },
+    get sku()      { return `AL-${String(this.color + 1).padStart(2,'0')}${String(this.size + 1).padStart(2,'0')}`; },
+
+    stockOf(c, s) { return VARIANTS[c][s].wh.reduce((a, b) => a + b, 0); },
+
+    init() {
+      /* Đổi màu mà phiên bản đang chọn hết hàng ở màu mới → tự nhảy sang
+         phiên bản còn hàng. Thiếu bước này người dùng bấm màu xong thấy
+         nút Mua bị khoá mà không hiểu vì sao. */
+      this.$watch('color', () => {
+        if (this.stockOf(this.color, this.size) === 0) {
+          const ok = OPT_SIZE.values.findIndex((_, i) => this.stockOf(this.color, i) > 0);
+          if (ok !== -1) this.size = ok;
+        }
+        this.qty = 1;
+      });
+      this.$watch('size', () => { this.qty = 1; });
+    }
+  }));
+});
+</script>
+</body>
+</html>

@@ -71,6 +71,17 @@
                     if (selected.indexOf(cb.value) !== -1) cb.checked = true;
                 });
             });
+
+            // Đánh giá: radio, không phải checkbox — không nằm chung vòng lặp
+            // trên được vì cần tick ĐÚNG MỘT ô và ô rỗng ("Tất cả đánh giá")
+            // là mặc định. Thiếu đoạn này thì reload xong bộ lọc vẫn áp
+            // nhưng sidebar hiện "Tất cả" — người dùng tưởng đã bỏ lọc.
+            var rating = p.get('filter[rating_min]');
+            if (rating !== null) {
+                document.querySelectorAll('input[name="filter[rating_min]"]').forEach(function(rb) {
+                    rb.checked = (rb.value === rating);
+                });
+            }
         }
         // --- Cây danh mục (item 3b): toggle + active + bung nhánh tổ tiên ---
         function openNode(li) {

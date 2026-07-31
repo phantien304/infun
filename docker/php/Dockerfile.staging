@@ -100,6 +100,13 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # zz- prefix đảm bảo nạp SAU www.conf gốc trong /usr/local/etc/php-fpm.d/*.conf.
 COPY docker/php/www.pool.conf /usr/local/etc/php-fpm.d/zz-www.conf
 
+# Pool thay thế, KHÔNG tự nạp (thư mục available/ nằm ngoài glob *.conf mà
+# php-fpm quét). Container `infun-admin-php` set FPM_POOL_PROFILE=admin →
+# entrypoint copy www.admin.conf đè zz-www.conf trước khi exec php-fpm.
+# Cùng 1 image cho cả storefront lẫn admin, chỉ khác env → không phá nguyên
+# tắc "tested = shipped" (prod promote đúng image staging đã test).
+COPY docker/php/www.admin.conf /usr/local/etc/php-fpm.d/available/www.admin.conf
+
 EXPOSE 9000
 ENTRYPOINT ["entrypoint.sh"]
 CMD ["php-fpm"]

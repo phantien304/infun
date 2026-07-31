@@ -178,6 +178,14 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             $query->effectivePriceBetween($min, $max);
         }
 
+        // Lọc theo đánh giá — nhánh DB. `product.rating_avg` là cột tổng hợp
+        // sẵn (cùng rating_sum/review_count, do ReviewObserver cập nhật) nên
+        // không phải join sang bảng review hay tính AVG lúc chạy.
+        $ratingMin = self::normalizeRating(request()->input('filter.rating_min'));
+        if ($ratingMin !== null) {
+            $query->where('product.rating_avg', '>=', $ratingMin);
+        }
+
         return $query;
     }
 
@@ -302,6 +310,16 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         }
         if ($max !== null) {
             $builder->where('min_variant_price', '<=', $max);
+        }
+
+        // Lọc theo đánh giá — nhánh Meilisearch. `rating_avg` đã có sẵn trong
+        // filterableAttributes (config/scout.php) nên KHÔNG cần reindex, chỉ
+        // cần `scout:sync-index-settings` nếu index dựng trước khi khai báo.
+        // Scout Builder::where nhận 3 tham số → MeilisearchEngine dựng chuỗi
+        // "rating_avg >= 4"; đây là lý do dùng được toán tử ở đây.
+        $ratingMin = self::normalizeRating($request->input('filter.rating_min'));
+        if ($ratingMin !== null) {
+            $builder->where('rating_avg', '>=', $ratingMin);
         }
 
         $sort = (string) $request->input('sort', '');
@@ -584,6 +602,24 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         $digits = preg_replace('/[^\d]/', '', (string) $value);
 
         return $digits === '' ? null : (int) $digits;
+    }
+
+    /**
+     * filter[rating_min] → 3|4|5, ngoài khoảng đó coi như không lọc.
+     *
+     * Chỉ nhận 3-5 chứ không nhận số bất kỳ: dưới 3 sao thì bộ lọc gần như
+     * không loại được gì (đa số sản phẩm >= 3), mà mỗi giá trị lạ lại là một
+     * biến thể URL mới — vừa loãng cache đếm (countSignature gồm cả filter)
+     * vừa mở đường cho crawler sinh vô hạn trang.
+     */
+    private static function normalizeRating(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $rating = (int) $value;
+
+        return in_array($rating, [3, 4, 5], true) ? $rating : null;
     }
 
     private static function positiveIntList(mixed $value): array

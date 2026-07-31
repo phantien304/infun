@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype trang danh mục — bộ lọc facet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="store.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style type="text/tailwindcss">
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #16151A;
+  --color-ink-2: #56545F;
+  --color-ink-3: #8B8895;
+  --color-line: #E7E5E4;
+  --color-canvas: #FAF9F7;
+  --color-brand: #E8452C;
+  --color-brand-tint: #FDEEEB;
+  --color-mint: #0F9D6E;
+  --color-mint-tint: #E6F5EF;
+}
+</style>
+<style>
+  body { background: var(--color-canvas); }
+  [x-cloak] { display: none !important; }
+  .ph { background-color: #EDEAE6; background-size: cover; background-position: center; }
+  .no-sb::-webkit-scrollbar { display: none; }
+  .no-sb { scrollbar-width: none; }
+</style>
+</head>
+<body class="font-sans text-ink antialiased" x-data>
+
+<!-- ══ Thanh trên — ngôn ngữ + tiền tệ ════════════════════════════════ -->
+<div class="bg-ink text-white text-[13px]">
+  <div class="mx-auto max-w-[1320px] px-5 h-9 flex items-center justify-between gap-4">
+    <p class="font-medium truncate" x-text="$store.app.t('bar.ship')">Miễn phí vận chuyển cho đơn từ 299.000₫</p>
+    <div class="flex items-center gap-1 shrink-0">
+      <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+        <button @click="open = !open" class="h-7 px-2.5 rounded-lg hover:bg-white/10 flex items-center gap-1.5 font-medium transition">
+          <svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+          <span x-text="$store.app.L.short">VI</span>
+        </button>
+        <div x-show="open" x-cloak x-transition.opacity.duration.120ms class="absolute right-0 top-full mt-1.5 w-44 bg-white text-ink rounded-xl border border-line shadow-lg py-1.5 z-[60]">
+          <template x-for="l in Object.values($store.app.locales)" :key="l.code">
+            <button @click="$store.app.setLocale(l.code); open = false" class="w-full px-3.5 py-2 flex items-center justify-between text-[14px] hover:bg-canvas transition"
+                    :class="$store.app.locale === l.code && 'font-semibold text-brand'">
+              <span x-text="l.label"></span><span class="text-[11px] text-ink-3" x-text="l.short"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+      <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+        <button @click="open = !open" class="h-7 px-2.5 rounded-lg hover:bg-white/10 flex items-center gap-1.5 font-medium transition">
+          <svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5a2.5 2.5 0 0 0-5 0c0 3 5 1.5 5 5a2.5 2.5 0 0 1-5 0M12 6v12"/></svg>
+          <span x-text="$store.app.C.code">VND</span>
+        </button>
+        <div x-show="open" x-cloak x-transition.opacity.duration.120ms class="absolute right-0 top-full mt-1.5 w-40 bg-white text-ink rounded-xl border border-line shadow-lg py-1.5 z-[60]">
+          <template x-for="c in Object.values($store.app.currencies)" :key="c.code">
+            <button @click="$store.app.setCurrency(c.code); open = false" class="w-full px-3.5 py-2 text-left text-[14px] hover:bg-canvas transition"
+                    :class="$store.app.currency === c.code && 'font-semibold text-brand'" x-text="c.label"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Header ═════════════════════════════════════════════════════════ -->
+<header class="sticky top-0 z-50 bg-canvas/95 backdrop-blur border-b border-line">
+  <div class="mx-auto max-w-[1320px] px-5 h-[72px] flex items-center gap-4 lg:gap-6">
+    <a href="home-v1.html" class="shrink-0 text-[22px] font-extrabold tracking-tight">infun<span class="text-brand">.</span></a>
+    <div class="flex-1 max-w-[560px] relative hidden sm:block">
+      <input type="text" :placeholder="$store.app.t('search.ph')" class="w-full h-11 pl-11 pr-24 rounded-full bg-white border border-line text-[15px] placeholder:text-ink-3 focus:outline-none focus:border-ink focus:ring-4 focus:ring-ink/5 transition">
+      <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-ink-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <button class="absolute right-1.5 top-1.5 h-8 px-4 rounded-full bg-ink text-white text-[13px] font-medium hover:bg-ink-2 transition" x-text="$store.app.t('search.btn')">Tìm</button>
+    </div>
+    <div class="flex items-center gap-1 ml-auto">
+      <button class="h-10 px-3 rounded-full hover:bg-white flex items-center gap-2 text-[14px] font-medium transition">
+        <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+        <span class="hidden lg:inline" x-text="$store.app.t('acc.title')">Tài khoản</span>
+      </button>
+      <button class="h-10 pl-3 pr-4 rounded-full bg-white border border-line hover:border-ink flex items-center gap-2 transition">
+        <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M5 7h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 7Z"/><path d="M9 7V5.5a3 3 0 0 1 6 0V7"/></svg>
+        <span class="text-[13px] font-semibold tabular-nums" x-text="$store.app.cart">3</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ══ DANH MỤC ═══════════════════════════════════════════════════════
+     catalog() giữ toàn bộ trạng thái lọc + sắp xếp + phân trang.
+     Facet count tính lại theo các bộ lọc KHÁC — đúng cách Meilisearch trả
+     facetDistribution, và là lý do người dùng không bao giờ bấm vào một
+     lựa chọn rồi nhận về 0 kết quả.                                     -->
+<main class="mx-auto max-w-[1320px] px-5" x-data="catalog()">
+
+  <nav class="py-4 text-[13px] text-ink-2 flex items-center gap-2 flex-wrap">
+    <a href="home-v1.html" class="hover:text-ink" x-text="$store.app.t('pd.home')">Trang chủ</a>
+    <span class="text-ink-3">/</span>
+    <span class="text-ink" x-text="$store.app.tr(CAT)"></span>
+  </nav>
+
+  <div class="pb-5">
+    <h1 class="text-[30px] lg:text-[36px] font-extrabold tracking-tight" x-text="$store.app.tr(CAT)"></h1>
+    <p class="text-[14px] text-ink-2 mt-1.5">
+      <span class="font-semibold text-ink tabular-nums" x-text="$store.app.num(result.length)"></span>
+      <span x-text="$store.app.t('cl.found')">sản phẩm</span>
+    </p>
+  </div>
+
+  <div class="grid grid-cols-12 gap-6 lg:gap-8 pb-12">
+
+    <!-- ── Sidebar bộ lọc (desktop) ─────────────────────────────────── -->
+    <aside class="hidden lg:block col-span-3">
+      <div class="sticky top-[88px] max-h-[calc(100vh-108px)] overflow-y-auto no-sb pr-1 space-y-5">
+
+        <div class="relative">
+          <input type="text" x-model="f.q" :placeholder="$store.app.t('cl.qph')"
+                 class="w-full h-10 pl-9 pr-3 rounded-xl bg-white border border-line text-[14px] placeholder:text-ink-3 focus:outline-none focus:border-ink transition">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </div>
+
+        <!-- Loại sản phẩm -->
+        <div class="rounded-2xl bg-white border border-line p-4">
+          <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.type')">Loại sản phẩm</p>
+          <div class="space-y-1">
+            <template x-for="t in TYPES" :key="t.k">
+              <label class="flex items-center gap-2.5 py-1 cursor-pointer group"
+                     :class="count('type', t.k) === 0 && 'opacity-40 pointer-events-none'">
+                <input type="checkbox" class="w-4 h-4 rounded accent-ink" :checked="f.types.includes(t.k)" @change="toggle('types', t.k)">
+                <span class="text-[14px] group-hover:text-brand transition" x-text="$store.app.tr(t)"></span>
+                <span class="ml-auto text-[12px] text-ink-3 tabular-nums" x-text="count('type', t.k)"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+
+        <!-- Khoảng giá — hai ô số, hiển thị theo tiền tệ đang chọn -->
+        <div class="rounded-2xl bg-white border border-line p-4">
+          <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.price')">Khoảng giá</p>
+          <div class="space-y-1.5">
+            <template x-for="(b, i) in PRICE_BANDS" :key="i">
+              <label class="flex items-center gap-2.5 py-1 cursor-pointer group"
+                     :class="countBand(i) === 0 && 'opacity-40 pointer-events-none'">
+                <input type="radio" name="band" class="w-4 h-4 accent-ink" :checked="f.band === i" @change="f.band = (f.band === i ? null : i); page = 1">
+                <span class="text-[14px] group-hover:text-brand transition" x-text="bandLabel(b)"></span>
+                <span class="ml-auto text-[12px] text-ink-3 tabular-nums" x-text="countBand(i)"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+
+        <!-- Thương hiệu -->
+        <div class="rounded-2xl bg-white border border-line p-4">
+          <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.brand')">Thương hiệu</p>
+          <div class="space-y-1">
+            <template x-for="b in BRANDS" :key="b">
+              <label class="flex items-center gap-2.5 py-1 cursor-pointer group"
+                     :class="count('brand', b) === 0 && 'opacity-40 pointer-events-none'">
+                <input type="checkbox" class="w-4 h-4 rounded accent-ink" :checked="f.brands.includes(b)" @change="toggle('brands', b)">
+                <span class="text-[14px] group-hover:text-brand transition" x-text="b"></span>
+                <span class="ml-auto text-[12px] text-ink-3 tabular-nums" x-text="count('brand', b)"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+
+        <!-- Màu — swatch, không phải checkbox chữ -->
+        <div class="rounded-2xl bg-white border border-line p-4">
+          <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.color')">Màu sắc</p>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="c in COLORS" :key="c.k">
+              <button @click="toggle('colors', c.k)" :title="$store.app.tr(c)" :aria-label="$store.app.tr(c)"
+                      class="w-9 h-9 rounded-xl border-2 grid place-items-center transition"
+                      :class="f.colors.includes(c.k) ? 'border-ink' : 'border-line hover:border-ink-3'">
+                <span class="w-5.5 h-5.5 rounded-lg border border-line" :style="`background:${c.hex}`"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Đánh giá -->
+        <div class="rounded-2xl bg-white border border-line p-4">
+          <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.rating')">Đánh giá</p>
+          <div class="space-y-1">
+            <template x-for="r in [5,4,3]" :key="r">
+              <label class="flex items-center gap-2.5 py-1 cursor-pointer group">
+                <input type="radio" name="rating" class="w-4 h-4 accent-ink" :checked="f.rating === r" @change="f.rating = (f.rating === r ? 0 : r); page = 1">
+                <span class="text-[14px] text-brand" x-text="'★'.repeat(r)"></span>
+                <span class="text-[13px] text-ink-2" x-text="$store.app.t('cl.up')">trở lên</span>
+                <span class="ml-auto text-[12px] text-ink-3 tabular-nums" x-text="countRating(r)"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+
+        <!-- Tình trạng -->
+        <div class="rounded-2xl bg-white border border-line p-4">
+          <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.status')">Tình trạng</p>
+          <label class="flex items-center gap-2.5 py-1 cursor-pointer">
+            <input type="checkbox" class="w-4 h-4 rounded accent-ink" x-model="f.inStock" @change="page = 1">
+            <span class="text-[14px]" x-text="$store.app.t('cl.instock')">Chỉ hàng có sẵn</span>
+          </label>
+          <label class="flex items-center gap-2.5 py-1 cursor-pointer">
+            <input type="checkbox" class="w-4 h-4 rounded accent-ink" x-model="f.onSale" @change="page = 1">
+            <span class="text-[14px]" x-text="$store.app.t('cl.onsale')">Đang giảm giá</span>
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Kết quả ──────────────────────────────────────────────────── -->
+    <div class="col-span-12 lg:col-span-9">
+
+      <!-- Thanh công cụ: mở lọc (mobile) + sắp xếp -->
+      <div class="flex items-center gap-3 mb-4">
+        <button @click="drawer = true" class="lg:hidden h-10 px-4 rounded-xl bg-white border border-line font-medium text-[14px] flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          <span x-text="$store.app.t('cl.filters')">Bộ lọc</span>
+          <span x-show="activeCount > 0" class="w-5 h-5 rounded-full bg-brand text-white text-[11px] font-bold grid place-items-center" x-text="activeCount"></span>
+        </button>
+
+        <p class="hidden sm:block text-[13.5px] text-ink-2">
+          <span x-text="$store.app.t('cl.showing')">Đang xem</span>
+          <span class="font-semibold text-ink tabular-nums" x-text="Math.min(page * perPage, result.length)"></span>
+          <span x-text="$store.app.t('cl.of')">trong</span>
+          <span class="font-semibold text-ink tabular-nums" x-text="$store.app.num(result.length)"></span>
+        </p>
+
+        <div class="relative ml-auto" x-data="{ open: false }" @click.outside="open = false">
+          <button @click="open = !open" class="h-10 pl-4 pr-3 rounded-xl bg-white border border-line hover:border-ink font-medium text-[14px] flex items-center gap-2 transition">
+            <span class="text-ink-3 hidden sm:inline" x-text="$store.app.t('cl.sort') + ':'">Sắp xếp:</span>
+            <span x-text="$store.app.t(SORTS.find(s => s.k === sort).key)"></span>
+            <svg class="w-3.5 h-3.5 transition-transform" :class="open && 'rotate-180'" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div x-show="open" x-cloak x-transition.opacity.duration.120ms class="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-xl border border-line shadow-lg py-1.5 z-40">
+            <template x-for="s in SORTS" :key="s.k">
+              <button @click="sort = s.k; page = 1; open = false" class="w-full px-4 py-2 text-left text-[14px] hover:bg-canvas transition"
+                      :class="sort === s.k && 'font-semibold text-brand'" x-text="$store.app.t(s.key)"></button>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chip đang lọc — cho thấy tại sao kết quả bị thu hẹp, bỏ được từng cái -->
+      <div x-show="chips.length > 0" x-cloak class="flex flex-wrap items-center gap-2 mb-4">
+        <template x-for="c in chips" :key="c.id">
+          <button @click="c.remove()" class="h-8 pl-3 pr-2 rounded-full bg-white border border-line hover:border-ink text-[13px] font-medium flex items-center gap-1.5 transition">
+            <span x-text="c.label"></span>
+            <svg class="w-3.5 h-3.5 text-ink-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </template>
+        <button @click="clearAll()" class="h-8 px-3 rounded-full text-[13px] font-semibold text-brand hover:bg-brand-tint transition" x-text="$store.app.t('cl.clearall')">Xoá tất cả</button>
+      </div>
+
+      <!-- Rỗng -->
+      <div x-show="result.length === 0" x-cloak class="rounded-3xl bg-white border border-line py-20 text-center">
+        <svg class="w-12 h-12 mx-auto text-ink-3 mb-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <p class="text-[17px] font-semibold" x-text="$store.app.t('cl.none')">Không tìm thấy sản phẩm nào</p>
+        <p class="text-[14px] text-ink-2 mt-1.5" x-text="$store.app.t('cl.nonesub')">Thử bỏ bớt bộ lọc.</p>
+        <button @click="clearAll()" class="mt-5 h-10 px-5 rounded-xl bg-ink text-white text-[14px] font-semibold hover:bg-ink-2 transition" x-text="$store.app.t('cl.clearall')">Xoá tất cả</button>
+      </div>
+
+      <!-- Lưới -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+        <template x-for="p in paged" :key="p.id">
+          <a href="product-v1.html" class="group bg-white border border-line rounded-2xl p-2.5 hover:border-ink hover:-translate-y-0.5 transition flex flex-col">
+            <div class="relative aspect-square rounded-xl overflow-hidden ph mb-2.5" :style="`background-image:url('https://picsum.photos/seed/${p.id}/400')`">
+              <span x-show="p.o > p.p" class="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-brand text-white text-[11px] font-bold"
+                    x-text="'-' + Math.round((1 - p.p / p.o) * 100) + '%'"></span>
+              <span x-show="p.stock === 0" class="absolute inset-0 bg-white/70 grid place-items-center text-[13px] font-semibold text-ink-2"
+                    x-text="$store.app.t('pd.oos')"></span>
+            </div>
+            <p class="text-[12px] font-semibold text-ink-3 tracking-wide" x-text="p.brand"></p>
+            <p class="text-[13.5px] leading-snug line-clamp-2 min-h-[38px] mt-0.5 group-hover:text-brand transition" x-text="$store.app.tr(p)"></p>
+            <div class="flex gap-1 mt-2 h-4">
+              <template x-for="c in p.colors" :key="c">
+                <span class="w-4 h-4 rounded-full border border-line" :style="`background:${COLORS.find(x => x.k === c).hex}`"></span>
+              </template>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2 flex-wrap">
+              <span class="text-[15px] font-bold" :class="p.o > p.p && 'text-brand'" x-text="$store.app.money(p.p)"></span>
+              <span x-show="p.o > p.p" class="text-[12px] text-ink-3 line-through" x-text="$store.app.money(p.o)"></span>
+            </div>
+            <p class="mt-0.5 text-[12px] text-ink-3" x-text="`★ ${p.r} · ${$store.app.num(p.sold)} ${$store.app.t('cl.soldn')}`"></p>
+          </a>
+        </template>
+      </div>
+
+      <div x-show="paged.length < result.length" x-cloak class="mt-7 text-center">
+        <button @click="page++" class="h-12 px-8 rounded-2xl bg-white border-2 border-ink font-semibold text-[15px] hover:bg-ink hover:text-white transition">
+          <span x-text="$store.app.t('cl.more')">Xem thêm</span>
+          <span class="text-ink-3 font-normal ml-1" x-text="`(${result.length - paged.length})`"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Drawer bộ lọc (mobile) ───────────────────────────────────────
+       Dùng lại đúng state f — không nhân bản logic lọc cho mobile.     -->
+  <div x-show="drawer" x-cloak x-transition.opacity class="lg:hidden fixed inset-0 bg-ink/50 z-[70]" @click="drawer = false"></div>
+  <aside x-show="drawer" x-cloak
+         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full"
+         class="lg:hidden fixed inset-x-0 bottom-0 max-h-[85vh] bg-canvas z-[80] rounded-t-3xl flex flex-col">
+    <div class="flex items-center justify-between px-5 h-14 border-b border-line shrink-0">
+      <p class="text-[17px] font-bold" x-text="$store.app.t('cl.filters')">Bộ lọc</p>
+      <button @click="drawer = false" class="w-9 h-9 rounded-full hover:bg-white grid place-items-center" aria-label="Đóng">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-5 space-y-5">
+      <div class="rounded-2xl bg-white border border-line p-4">
+        <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.type')">Loại sản phẩm</p>
+        <div class="space-y-1">
+          <template x-for="t in TYPES" :key="t.k">
+            <label class="flex items-center gap-2.5 py-1" :class="count('type', t.k) === 0 && 'opacity-40 pointer-events-none'">
+              <input type="checkbox" class="w-4 h-4 rounded accent-ink" :checked="f.types.includes(t.k)" @change="toggle('types', t.k)">
+              <span class="text-[14px]" x-text="$store.app.tr(t)"></span>
+              <span class="ml-auto text-[12px] text-ink-3 tabular-nums" x-text="count('type', t.k)"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-line p-4">
+        <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.price')">Khoảng giá</p>
+        <div class="space-y-1.5">
+          <template x-for="(b, i) in PRICE_BANDS" :key="i">
+            <label class="flex items-center gap-2.5 py-1" :class="countBand(i) === 0 && 'opacity-40 pointer-events-none'">
+              <input type="radio" name="band-m" class="w-4 h-4 accent-ink" :checked="f.band === i" @change="f.band = (f.band === i ? null : i); page = 1">
+              <span class="text-[14px]" x-text="bandLabel(b)"></span>
+              <span class="ml-auto text-[12px] text-ink-3 tabular-nums" x-text="countBand(i)"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-line p-4">
+        <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.brand')">Thương hiệu</p>
+        <div class="space-y-1">
+          <template x-for="b in BRANDS" :key="b">
+            <label class="flex items-center gap-2.5 py-1" :class="count('brand', b) === 0 && 'opacity-40 pointer-events-none'">
+              <input type="checkbox" class="w-4 h-4 rounded accent-ink" :checked="f.brands.includes(b)" @change="toggle('brands', b)">
+              <span class="text-[14px]" x-text="b"></span>
+              <span class="ml-auto text-[12px] text-ink-3 tabular-nums" x-text="count('brand', b)"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-line p-4">
+        <p class="text-[13.5px] font-semibold mb-3" x-text="$store.app.t('cl.color')">Màu sắc</p>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="c in COLORS" :key="c.k">
+            <button @click="toggle('colors', c.k)" :aria-label="$store.app.tr(c)"
+                    class="w-9 h-9 rounded-xl border-2 grid place-items-center transition"
+                    :class="f.colors.includes(c.k) ? 'border-ink' : 'border-line'">
+              <span class="w-5.5 h-5.5 rounded-lg border border-line" :style="`background:${c.hex}`"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-5 border-t border-line bg-white shrink-0 flex gap-3">
+      <button @click="clearAll()" class="h-12 px-5 rounded-2xl border border-line font-semibold text-[15px]" x-text="$store.app.t('cl.clearall')">Xoá tất cả</button>
+      <button @click="drawer = false" class="h-12 flex-1 rounded-2xl bg-ink text-white font-semibold text-[15px]">
+        <span x-text="$store.app.t('cl.apply')">Xem kết quả</span>
+        <span class="tabular-nums" x-text="`(${result.length})`"></span>
+      </button>
+    </div>
+  </aside>
+</main>
+
+<footer class="bg-white border-t border-line">
+  <div class="mx-auto max-w-[1320px] px-5 h-16 flex items-center justify-between text-[13px] text-ink-3">
+    <span x-text="$store.app.t('ft.note')">© 2026 infun.</span>
+    <a href="home-v1.html" class="hover:text-ink" x-text="$store.app.t('pd.home')">Trang chủ</a>
+  </div>
+</footer>
+
+<script>
+const CAT = { vi: 'Điện tử', en: 'Electronics' };
+
+const TYPES = [
+  { k:'headphone', vi:'Tai nghe',    en:'Headphones' },
+  { k:'speaker',   vi:'Loa',         en:'Speakers' },
+  { k:'keyboard',  vi:'Bàn phím',    en:'Keyboards' },
+  { k:'mouse',     vi:'Chuột',       en:'Mice' },
+  { k:'monitor',   vi:'Màn hình',    en:'Monitors' },
+  { k:'accessory', vi:'Phụ kiện',    en:'Accessories' }
+];
+
+const BRANDS = ['AUDIOLAB', 'NORDIC', 'KOVA', 'HAVEN', 'ATLAS', 'LUMEN'];
+
+const COLORS = [
+  { k:'black', vi:'Đen',    en:'Black',  hex:'#16151A' },
+  { k:'white', vi:'Trắng',  en:'White',  hex:'#EDEAE4' },
+  { k:'navy',  vi:'Navy',   en:'Navy',   hex:'#2C3E5A' },
+  { k:'terra', vi:'Cam đất',en:'Terracotta', hex:'#B54A2E' },
+  { k:'green', vi:'Xanh lá',en:'Green',  hex:'#0F9D6E' },
+  { k:'sand',  vi:'Be',     en:'Sand',   hex:'#C9BFA8' }
+];
+
+/* Khoảng giá theo VND (tiền tệ gốc). Nhãn hiển thị quy đổi sang tiền tệ
+   đang chọn — lọc vẫn so trên giá gốc, không bao giờ lệch vì làm tròn. */
+const PRICE_BANDS = [
+  { min: 0,       max: 500000 },
+  { min: 500000,  max: 1000000 },
+  { min: 1000000, max: 2000000 },
+  { min: 2000000, max: 5000000 },
+  { min: 5000000, max: Infinity }
+];
+
+const SORTS = [
+  { k:'relevant', key:'cl.s.relevant' }, { k:'new',    key:'cl.s.new' },
+  { k:'popular',  key:'cl.s.popular' },  { k:'rating', key:'cl.s.rating' },
+  { k:'asc',      key:'cl.s.asc' },      { k:'desc',   key:'cl.s.desc' }
+];
+
+/* [vi, en, type, brand, giá, giá gốc (0 = không giảm), sao, đã bán, màu, tồn] */
+const RAW = [
+  ['Tai nghe chống ồn chủ động Pro','Pro active noise-cancelling headphones','headphone','AUDIOLAB',2490000,3290000,4.8,5210,['black','white','navy','terra'],28],
+  ['Tai nghe true wireless mini','True wireless earbuds mini','headphone','AUDIOLAB',1890000,2390000,4.7,842,['black','white'],14],
+  ['Tai nghe chụp tai studio','Studio over-ear headphones','headphone','NORDIC',3290000,0,4.9,318,['black'],6],
+  ['Tai nghe thể thao chống nước','Waterproof sports earbuds','headphone','ATLAS',990000,1490000,4.5,1204,['black','green'],42],
+  ['Tai nghe có dây cổ điển','Classic wired headphones','headphone','LUMEN',450000,0,4.3,672,['black','sand'],0],
+  ['Loa bluetooth ngoài trời 30W','Outdoor bluetooth speaker 30W','speaker','KOVA',1190000,1590000,4.7,486,['black','terra','green'],19],
+  ['Loa để bàn 2.0 gỗ tự nhiên','Natural wood desktop speakers 2.0','speaker','NORDIC',2890000,0,4.8,142,['sand','black'],8],
+  ['Loa thanh soundbar 120W','120W soundbar','speaker','KOVA',3490000,4290000,4.6,231,['black'],11],
+  ['Loa mini bỏ túi','Pocket mini speaker','speaker','ATLAS',390000,590000,4.4,2140,['black','white','navy','terra','green','sand'],67],
+  ['Loa trần âm 6.5 inch','6.5-inch in-ceiling speaker','speaker','HAVEN',1690000,0,4.5,58,['white'],4],
+  ['Bàn phím cơ gõ êm 87 phím','Silent mechanical keyboard 87 keys','keyboard','KOVA',1250000,1990000,4.8,921,['black','white','navy'],23],
+  ['Bàn phím cơ không dây 65%','Wireless 65% mechanical keyboard','keyboard','NORDIC',1890000,0,4.9,412,['white','sand'],15],
+  ['Bàn phím mỏng cho laptop','Slim laptop keyboard','keyboard','LUMEN',590000,790000,4.2,1830,['black','white'],38],
+  ['Bàn phím cơ có đèn nền RGB','RGB backlit mechanical keyboard','keyboard','ATLAS',990000,0,4.4,644,['black'],0],
+  ['Bàn phím cơ custom nhôm CNC','CNC aluminium custom keyboard','keyboard','HAVEN',5490000,6990000,4.9,87,['black','navy'],3],
+  ['Chuột không dây yên tĩnh','Silent wireless mouse','mouse','LUMEN',290000,450000,4.5,3210,['black','white','sand'],92],
+  ['Chuột công thái học dọc','Vertical ergonomic mouse','mouse','NORDIC',790000,0,4.6,528,['black'],17],
+  ['Chuột gaming cảm biến 26K','26K sensor gaming mouse','mouse','ATLAS',1290000,1690000,4.7,1142,['black','white'],26],
+  ['Chuột bluetooth siêu nhẹ 49g','49g ultralight bluetooth mouse','mouse','KOVA',1490000,0,4.8,203,['white','green'],9],
+  ['Màn hình 27 inch 2K 165Hz','27-inch 2K 165Hz monitor','monitor','ATLAS',5990000,7490000,4.7,312,['black'],12],
+  ['Màn hình 24 inch Full HD văn phòng','24-inch Full HD office monitor','monitor','LUMEN',2790000,0,4.4,890,['black'],31],
+  ['Màn hình 32 inch 4K chuyên đồ hoạ','32-inch 4K design monitor','monitor','NORDIC',11900000,13900000,4.9,64,['black'],2],
+  ['Màn hình di động 15.6 inch','15.6-inch portable monitor','monitor','KOVA',3290000,3990000,4.5,176,['sand','black'],7],
+  ['Màn hình cong 34 inch ultrawide','34-inch ultrawide curved monitor','monitor','HAVEN',9490000,0,4.8,41,['black'],0],
+  ['Đế sạc không dây 3 trong 1','3-in-1 wireless charging dock','accessory','HAVEN',690000,890000,4.6,311,['black','white'],21],
+  ['Dây audio 3.5mm bọc dù 1.2m','Braided 3.5mm audio cable 1.2m','accessory','LUMEN',159000,0,4.8,1520,['black','navy'],120],
+  ['Túi đựng tai nghe chống sốc','Shockproof headphone case','accessory','ATLAS',249000,0,4.9,673,['black','sand'],54],
+  ['Hub USB-C 8 cổng','8-port USB-C hub','accessory','KOVA',890000,1190000,4.5,742,['black','white'],33],
+  ['Giá đỡ laptop nhôm gập được','Foldable aluminium laptop stand','accessory','NORDIC',450000,690000,4.7,1980,['sand','black'],48],
+  ['Đèn bàn LED chống cận','Eye-care LED desk lamp','accessory','LUMEN',259000,520000,4.6,2310,['white','black'],76],
+  ['Webcam 4K tự lấy nét','4K autofocus webcam','accessory','ATLAS',1690000,0,4.4,254,['black'],13],
+  ['Micro thu âm USB cardioid','USB cardioid recording microphone','accessory','HAVEN',1990000,2490000,4.8,188,['black','sand'],10],
+  ['Ổ cứng SSD di động 1TB','1TB portable SSD','accessory','KOVA',1890000,2290000,4.9,1104,['black','navy'],29],
+  ['Bộ chia HDMI 4K 2 cổng','2-port 4K HDMI splitter','accessory','LUMEN',390000,0,4.2,417,['black'],0],
+  ['Miếng lót chuột cỡ lớn','Extended desk mousepad','accessory','ATLAS',199000,299000,4.7,3420,['black','navy','sand'],140],
+  ['Quạt tản nhiệt laptop 5 fan','5-fan laptop cooling pad','accessory','KOVA',549000,0,4.3,596,['black'],22]
+];
+
+const PRODUCTS = RAW.map((r, i) => ({
+  id: 'p' + (i + 1), vi: r[0], en: r[1], type: r[2], brand: r[3],
+  p: r[4], o: r[5] || r[4], r: r[6], sold: r[7], colors: r[8], stock: r[9],
+  isNew: i % 7 === 0
+}));
+
+document.addEventListener('alpine:init', () => {
+  Alpine.data('catalog', () => ({
+    CAT, TYPES, BRANDS, COLORS, PRICE_BANDS, SORTS,
+    drawer: false, sort: 'relevant', page: 1, perPage: 12,
+    f: { q: '', types: [], brands: [], colors: [], band: null, rating: 0, inStock: false, onSale: false },
+
+    toggle(key, val) {
+      const a = this.f[key];
+      const i = a.indexOf(val);
+      i === -1 ? a.push(val) : a.splice(i, 1);
+      this.page = 1;
+    },
+
+    clearAll() {
+      this.f = { q: '', types: [], brands: [], colors: [], band: null, rating: 0, inStock: false, onSale: false };
+      this.page = 1;
+    },
+
+    /* Bộ vị từ tách riêng theo từng facet. Nhờ vậy đếm facet có thể BỎ QUA
+       chính facet đang đếm — nếu không, chọn "Tai nghe" xong mọi loại khác
+       hiện 0 và người dùng hết đường đổi ý. */
+    preds(skip) {
+      const f = this.f;
+      const p = [];
+      if (f.q.trim()) {
+        const q = f.q.trim().toLowerCase();
+        p.push(x => (x.vi + ' ' + x.en + ' ' + x.brand).toLowerCase().includes(q));
+      }
+      if (skip !== 'type'  && f.types.length)  p.push(x => f.types.includes(x.type));
+      if (skip !== 'brand' && f.brands.length) p.push(x => f.brands.includes(x.brand));
+      if (skip !== 'color' && f.colors.length) p.push(x => x.colors.some(c => f.colors.includes(c)));
+      if (skip !== 'band'  && f.band !== null) {
+        const b = PRICE_BANDS[f.band];
+        p.push(x => x.p >= b.min && x.p < b.max);
+      }
+      if (skip !== 'rating' && f.rating) p.push(x => x.r >= f.rating);
+      if (f.inStock) p.push(x => x.stock > 0);
+      if (f.onSale)  p.push(x => x.o > x.p);
+      return p;
+    },
+
+    apply(skip) {
+      const p = this.preds(skip);
+      return PRODUCTS.filter(x => p.every(fn => fn(x)));
+    },
+
+    get result() {
+      const list = this.apply(null);
+      const s = this.sort;
+      if (s === 'asc')     return [...list].sort((a, b) => a.p - b.p);
+      if (s === 'desc')    return [...list].sort((a, b) => b.p - a.p);
+      if (s === 'popular') return [...list].sort((a, b) => b.sold - a.sold);
+      if (s === 'rating')  return [...list].sort((a, b) => b.r - a.r);
+      if (s === 'new')     return [...list].sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+      return list;
+    },
+
+    get paged() { return this.result.slice(0, this.page * this.perPage); },
+
+    count(facet, val) {
+      const base = this.apply(facet);
+      if (facet === 'type')  return base.filter(x => x.type === val).length;
+      if (facet === 'brand') return base.filter(x => x.brand === val).length;
+      return 0;
+    },
+    countBand(i) {
+      const b = PRICE_BANDS[i];
+      return this.apply('band').filter(x => x.p >= b.min && x.p < b.max).length;
+    },
+    countRating(r) { return this.apply('rating').filter(x => x.r >= r).length; },
+
+    bandLabel(b) {
+      const st = this.$store.app;
+      if (b.max === Infinity) return st.money(b.min) + ' ' + st.t('cl.up');
+      if (b.min === 0) return '< ' + st.money(b.max);
+      return st.money(b.min) + ' – ' + st.money(b.max);
+    },
+
+    get activeCount() {
+      const f = this.f;
+      return f.types.length + f.brands.length + f.colors.length
+           + (f.band !== null ? 1 : 0) + (f.rating ? 1 : 0)
+           + (f.inStock ? 1 : 0) + (f.onSale ? 1 : 0) + (f.q.trim() ? 1 : 0);
+    },
+
+    get chips() {
+      const st = this.$store.app, f = this.f, out = [];
+      if (f.q.trim()) out.push({ id:'q', label:`"${f.q.trim()}"`, remove: () => { f.q = ''; this.page = 1; } });
+      f.types.forEach(k => out.push({ id:'t'+k, label: st.tr(TYPES.find(t => t.k === k)), remove: () => this.toggle('types', k) }));
+      f.brands.forEach(b => out.push({ id:'b'+b, label: b, remove: () => this.toggle('brands', b) }));
+      f.colors.forEach(k => out.push({ id:'c'+k, label: st.tr(COLORS.find(c => c.k === k)), remove: () => this.toggle('colors', k) }));
+      if (f.band !== null) out.push({ id:'band', label: this.bandLabel(PRICE_BANDS[f.band]), remove: () => { f.band = null; this.page = 1; } });
+      if (f.rating) out.push({ id:'r', label: '★'.repeat(f.rating) + ' ' + st.t('cl.up'), remove: () => { f.rating = 0; this.page = 1; } });
+      if (f.inStock) out.push({ id:'is', label: st.t('cl.instock'), remove: () => { f.inStock = false; this.page = 1; } });
+      if (f.onSale)  out.push({ id:'os', label: st.t('cl.onsale'),  remove: () => { f.onSale = false; this.page = 1; } });
+      return out;
+    },
+
+    init() { this.$watch('f.q', () => { this.page = 1; }); }
+  }));
+});
+</script>
+</body>
+</html>

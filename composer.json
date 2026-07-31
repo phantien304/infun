@@ -38,6 +38,7 @@
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
         "phpunit/phpunit": "^11.5.50",
+        "qossmic/deptrac": "^2.0",
         "spiral/roadrunner-cli": "*"
     },
     "autoload": {
@@ -71,6 +72,12 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "boundary": [
+            "@php vendor/bin/deptrac analyse --config-file=deptrac.yaml --cache-file=.deptrac.cache --no-progress"
+        ],
+        "boundary:graph": [
+            "@php vendor/bin/deptrac analyse --config-file=deptrac.yaml --cache-file=.deptrac.cache --formatter=graphviz-display --no-progress"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

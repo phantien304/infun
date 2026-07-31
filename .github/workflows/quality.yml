@@ -1,0 +1,41 @@
+name: Quality
+
+# Cổng chất lượng chạy trên MỌI PR + push vào economer.
+# Hiện chỉ gác 1 thứ: ranh giới module CMS / Storefront / Domain (deptrac).
+#
+# Vì sao tách khỏi deploy-staging.yml: deploy chỉ chạy khi push economer, mà
+# ranh giới cần được gác ở PR — lúc còn sửa được rẻ. Job này KHÔNG build image,
+# chạy ~1 phút, không chặn pipeline deploy.
+#
+# Thêm pint / larastan / phpunit vào đây khi muốn siết tiếp.
+
+on:
+  pull_request:
+  push:
+    branches: [economer]
+  workflow_dispatch: {}
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boundary:
+    name: Ranh giới module (deptrac)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      # Chỉ cần autoloader + deptrac để phân tích tĩnh — không cần .env, DB,
+      # Redis hay artisan. `--no-scripts` chặn package:discover (cần .env).
+      - name: Cài dependency
+        run: composer install --no-interaction --no-progress --no-scripts
+
+      - name: Kiểm tra ranh giới
+        run: composer boundary

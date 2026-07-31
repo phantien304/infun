@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype trang chủ — TMĐT đa ngành hàng</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="store.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style type="text/tailwindcss">
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #16151A;
+  --color-ink-2: #56545F;
+  --color-ink-3: #8B8895;
+  --color-line: #E7E5E4;
+  --color-canvas: #FAF9F7;
+  --color-brand: #E8452C;
+  --color-brand-tint: #FDEEEB;
+  --color-mint: #0F9D6E;
+  --color-mint-tint: #E6F5EF;
+}
+</style>
+<style>
+  body { background: var(--color-canvas); }
+  [x-cloak] { display: none !important; }
+  .ph { background-color: #EDEAE6; background-size: cover; background-position: center; }
+  .no-sb::-webkit-scrollbar { display: none; }
+  .no-sb { scrollbar-width: none; }
+</style>
+</head>
+<body class="font-sans text-ink antialiased" x-data>
+
+<!-- ══ 1. Thanh trên — ngôn ngữ + tiền tệ ═════════════════════════════ -->
+<div class="bg-ink text-white text-[13px]">
+  <div class="mx-auto max-w-[1320px] px-5 h-9 flex items-center justify-between gap-4">
+    <p class="font-medium truncate" x-text="$store.app.t('bar.ship')">Miễn phí vận chuyển cho đơn từ 299.000₫</p>
+
+    <div class="flex items-center gap-1 shrink-0">
+      <a href="#" class="hidden lg:block px-2 text-white/70 hover:text-white" x-text="$store.app.t('bar.track')">Tra cứu đơn hàng</a>
+      <a href="#" class="hidden lg:block px-2 text-white/70 hover:text-white" x-text="$store.app.t('bar.sell')">Bán hàng cùng chúng tôi</a>
+
+      <!-- Ngôn ngữ -->
+      <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+        <button @click="open = !open" class="h-7 px-2.5 rounded-lg hover:bg-white/10 flex items-center gap-1.5 font-medium transition">
+          <svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+          <span x-text="$store.app.L.short">VI</span>
+        </button>
+        <div x-show="open" x-cloak x-transition.opacity.duration.120ms
+             class="absolute right-0 top-full mt-1.5 w-44 bg-white text-ink rounded-xl border border-line shadow-lg py-1.5 z-[60]">
+          <template x-for="l in Object.values($store.app.locales)" :key="l.code">
+            <button @click="$store.app.setLocale(l.code); open = false"
+                    class="w-full px-3.5 py-2 flex items-center justify-between text-[14px] hover:bg-canvas transition"
+                    :class="$store.app.locale === l.code && 'font-semibold text-brand'">
+              <span x-text="l.label"></span>
+              <span class="text-[11px] text-ink-3" x-text="l.short"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Tiền tệ -->
+      <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+        <button @click="open = !open" class="h-7 px-2.5 rounded-lg hover:bg-white/10 flex items-center gap-1.5 font-medium transition">
+          <svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5a2.5 2.5 0 0 0-5 0c0 3 5 1.5 5 5a2.5 2.5 0 0 1-5 0M12 6v12"/></svg>
+          <span x-text="$store.app.C.code">VND</span>
+        </button>
+        <div x-show="open" x-cloak x-transition.opacity.duration.120ms
+             class="absolute right-0 top-full mt-1.5 w-40 bg-white text-ink rounded-xl border border-line shadow-lg py-1.5 z-[60]">
+          <template x-for="c in Object.values($store.app.currencies)" :key="c.code">
+            <button @click="$store.app.setCurrency(c.code); open = false"
+                    class="w-full px-3.5 py-2 text-left text-[14px] hover:bg-canvas transition"
+                    :class="$store.app.currency === c.code && 'font-semibold text-brand'"
+                    x-text="c.label"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 2. Header ══════════════════════════════════════════════════════ -->
+<header class="sticky top-0 z-50 bg-canvas/95 backdrop-blur border-b border-line">
+  <div class="mx-auto max-w-[1320px] px-5 h-[72px] flex items-center gap-4 lg:gap-6">
+
+    <button class="lg:hidden -ml-1 w-10 h-10 rounded-full hover:bg-white grid place-items-center" @click="$dispatch('open-drawer')" aria-label="Menu">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+
+    <a href="#" class="shrink-0 text-[22px] font-extrabold tracking-tight">infun<span class="text-brand">.</span></a>
+
+    <div class="flex-1 max-w-[560px] relative hidden sm:block">
+      <input type="text" :placeholder="$store.app.t('search.ph')" placeholder="Tìm sản phẩm, thương hiệu, danh mục…"
+             class="w-full h-11 pl-11 pr-24 rounded-full bg-white border border-line text-[15px]
+                    placeholder:text-ink-3 focus:outline-none focus:border-ink focus:ring-4 focus:ring-ink/5 transition">
+      <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-ink-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <button class="absolute right-1.5 top-1.5 h-8 px-4 rounded-full bg-ink text-white text-[13px] font-medium hover:bg-ink-2 transition"
+              x-text="$store.app.t('search.btn')">Tìm</button>
+    </div>
+
+    <div class="flex items-center gap-1 ml-auto">
+      <button class="h-10 px-3 rounded-full hover:bg-white flex items-center gap-2 text-[14px] font-medium transition">
+        <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+        <span class="hidden lg:inline" x-text="$store.app.t('acc.title')">Tài khoản</span>
+      </button>
+      <button class="h-10 w-10 rounded-full hover:bg-white grid place-items-center transition" aria-label="Wishlist">
+        <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 20s-7-4.6-7-9.3A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.7C19 15.4 12 20 12 20Z"/></svg>
+      </button>
+      <button class="h-10 pl-3 pr-4 rounded-full bg-white border border-line hover:border-ink flex items-center gap-2 transition">
+        <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M5 7h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 7Z"/><path d="M9 7V5.5a3 3 0 0 1 6 0V7"/></svg>
+        <span class="text-[13px] font-semibold tabular-nums" x-text="$store.app.cart">3</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ MEGA MENU — Alpine giữ trạng thái, mở bằng hover lẫn click ════ -->
+  <nav class="border-t border-line bg-white relative"
+       x-data="{ mega: false }" @mouseleave="mega = false">
+    <div class="mx-auto max-w-[1320px] px-5 h-11 flex items-center gap-1 overflow-x-auto no-sb text-[14px]">
+      <button @click="mega = !mega" @mouseenter="mega = true"
+              class="shrink-0 h-8 px-3 rounded-lg font-medium flex items-center gap-2 transition"
+              :class="mega ? 'bg-brand text-white' : 'bg-ink text-white'">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <span x-text="$store.app.t('nav.all')">Tất cả danh mục</span>
+        <svg class="w-3.5 h-3.5 transition-transform" :class="mega && 'rotate-180'" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <template x-for="c in TOP" :key="c.k">
+        <a href="category-v1.html" @mouseenter="mega = false" class="shrink-0 h-8 px-3 rounded-lg hover:bg-canvas font-medium" x-text="$store.app.tr(c)"></a>
+      </template>
+      <a href="#" class="shrink-0 h-8 px-3 rounded-lg text-brand font-semibold" x-text="$store.app.t('nav.new')">Hàng mới về</a>
+    </div>
+
+    <!-- Panel: 3 cột danh mục + ô nổi bật. Đây là kiểu mega menu hợp
+         catalog 3.000 SKU — cho thấy chiều sâu ngay, không bắt bấm 3 lần. -->
+    <div x-show="mega" x-cloak
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+         class="absolute left-0 right-0 top-full bg-white border-t border-line shadow-xl z-50">
+      <div class="mx-auto max-w-[1320px] px-5 py-7 grid grid-cols-12 gap-7">
+        <div class="col-span-12 lg:col-span-9 grid grid-cols-2 md:grid-cols-4 gap-x-7 gap-y-6" id="mega-cols"></div>
+        <div class="col-span-12 lg:col-span-3">
+          <p class="text-[12px] font-semibold text-ink-3 mb-3" x-text="$store.app.t('menu.featured')">Đang được quan tâm</p>
+          <a href="product-v1.html" class="block rounded-2xl overflow-hidden ph aspect-4/3 mb-3" style="background-image:url('https://picsum.photos/seed/mega/400/300')"></a>
+          <p class="text-[14px] font-semibold leading-snug">Tai nghe chống ồn thế hệ mới</p>
+          <p class="text-[14px] font-bold text-brand mt-1" x-text="$store.app.money(890000)">890.000₫</p>
+        </div>
+      </div>
+    </div>
+  </nav>
+</header>
+
+<!-- ══ Drawer mobile ══════════════════════════════════════════════════ -->
+<div x-data="{ open: false }" @open-drawer.window="open = true">
+  <div x-show="open" x-cloak x-transition.opacity class="fixed inset-0 bg-ink/50 z-[70]" @click="open = false"></div>
+  <aside x-show="open" x-cloak
+         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="-translate-x-full" x-transition:enter-end="translate-x-0"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-x-0" x-transition:leave-end="-translate-x-full"
+         class="fixed inset-y-0 left-0 w-[300px] bg-white z-[80] p-5 overflow-y-auto">
+    <div class="flex items-center justify-between mb-5">
+      <span class="text-[20px] font-extrabold tracking-tight">infun<span class="text-brand">.</span></span>
+      <button @click="open = false" class="w-9 h-9 rounded-full hover:bg-canvas grid place-items-center" aria-label="Đóng">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <input type="text" :placeholder="$store.app.t('search.ph')" class="w-full h-10 px-4 rounded-xl bg-canvas border border-line text-[14px] mb-5 focus:outline-none focus:border-ink">
+    <template x-for="c in TOP" :key="c.k">
+      <a href="#" class="block py-2.5 text-[15px] font-medium border-b border-line" x-text="$store.app.tr(c)"></a>
+    </template>
+  </aside>
+</div>
+
+<main class="mx-auto max-w-[1320px] px-5">
+
+  <!-- ══ 3. BENTO HERO ════════════════════════════════════════════════ -->
+  <section class="pt-6 pb-4 grid grid-cols-12 gap-3 auto-rows-[152px]">
+    <a href="#" class="col-span-12 lg:col-span-7 row-span-2 relative rounded-3xl overflow-hidden ph group"
+       style="background-image:url('https://picsum.photos/seed/infun-hero/1200/700')">
+      <div class="absolute inset-0 bg-gradient-to-tr from-ink/85 via-ink/45 to-transparent"></div>
+      <div class="relative h-full p-8 lg:p-10 flex flex-col justify-end text-white">
+        <span class="w-fit mb-4 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-[12px] font-semibold tracking-wide" x-text="$store.app.t('hero.badge')">BỘ SƯU TẬP THÁNG 8</span>
+        <h2 class="text-[38px] lg:text-[52px] leading-[1.02] font-extrabold tracking-tight max-w-[15ch]" x-text="$store.app.t('hero.h')">Mọi thứ bạn cần, một nơi duy nhất</h2>
+        <p class="mt-3 text-white/75 text-[15px] max-w-[42ch]" x-text="$store.app.t('hero.sub')">Hơn 3.000 sản phẩm từ 120 thương hiệu.</p>
+        <span class="mt-6 w-fit h-11 px-6 rounded-full bg-white text-ink font-semibold text-[15px] grid place-items-center group-hover:bg-brand group-hover:text-white transition" x-text="$store.app.t('hero.cta')">Khám phá ngay</span>
+      </div>
+    </a>
+
+    <a href="#" class="col-span-6 lg:col-span-5 row-span-1 rounded-3xl bg-brand text-white p-6 flex flex-col justify-between group"
+       x-data="countdown(2*3600 + 47*60 + 13)">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-[13px] font-semibold text-white/80" x-text="$store.app.t('flash.golden')">GIỜ VÀNG</p>
+          <p class="text-[26px] font-extrabold leading-tight mt-0.5" x-text="$store.app.t('flash.off')">Giảm đến 50%</p>
+        </div>
+        <svg class="w-6 h-6 opacity-60 group-hover:translate-x-1 transition" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[13px] text-white/80 mr-1" x-text="$store.app.t('flash.ends')">Kết thúc sau</span>
+        <span class="h-9 w-11 rounded-xl bg-white/20 grid place-items-center font-bold tabular-nums text-[16px]" x-text="hh"></span>
+        <span class="font-bold opacity-60">:</span>
+        <span class="h-9 w-11 rounded-xl bg-white/20 grid place-items-center font-bold tabular-nums text-[16px]" x-text="mm"></span>
+        <span class="font-bold opacity-60">:</span>
+        <span class="h-9 w-11 rounded-xl bg-white/20 grid place-items-center font-bold tabular-nums text-[16px]" x-text="ss"></span>
+      </div>
+    </a>
+
+    <a href="#" class="col-span-6 lg:col-span-2 row-span-1 rounded-3xl bg-mint-tint p-5 flex flex-col justify-between hover:ring-2 hover:ring-mint transition">
+      <svg class="w-7 h-7 text-mint" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8Z"/></svg>
+      <div>
+        <p class="text-[22px] font-extrabold text-mint leading-none" x-text="'-' + $store.app.money(100000)">-100.000₫</p>
+        <p class="text-[13px] text-ink-2 mt-1 font-medium" x-text="$store.app.t('vou.new')">Cho khách mới</p>
+      </div>
+    </a>
+
+    <a href="#" class="col-span-6 lg:col-span-3 row-span-1 rounded-3xl overflow-hidden ph relative group"
+       style="background-image:url('https://picsum.photos/seed/infun-new/500/320')">
+      <div class="absolute inset-0 bg-ink/35 group-hover:bg-ink/50 transition"></div>
+      <div class="relative h-full p-5 flex flex-col justify-end text-white">
+        <p class="text-[12px] font-semibold text-white/80" x-text="$store.app.t('new.badge')">VỪA LÊN KỆ</p>
+        <p class="text-[19px] font-bold leading-tight" x-text="$store.app.t('new.count')">142 sản phẩm mới</p>
+      </div>
+    </a>
+  </section>
+
+  <!-- ══ 4. Danh mục ══════════════════════════════════════════════════ -->
+  <section class="py-8">
+    <div class="flex items-end justify-between mb-4">
+      <h2 class="text-[24px] font-bold tracking-tight" x-text="$store.app.t('cat.title')">Danh mục nổi bật</h2>
+      <a href="#" class="text-[14px] font-medium text-ink-2 hover:text-ink" x-text="$store.app.t('sec.viewall')">Xem tất cả →</a>
+    </div>
+    <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      <template x-for="c in CATS" :key="c.k">
+        <a href="category-v1.html" class="rounded-2xl bg-white border border-line p-4 flex flex-col items-center gap-3 hover:border-ink hover:-translate-y-0.5 transition">
+          <div class="w-14 h-14 rounded-2xl ph" :style="`background-image:url('https://picsum.photos/seed/${c.k}/120')`"></div>
+          <span class="text-[13px] font-medium text-center leading-tight" x-text="$store.app.tr(c)"></span>
+        </a>
+      </template>
+    </div>
+  </section>
+
+  <!-- ══ 5. Flash sale ════════════════════════════════════════════════ -->
+  <section class="pb-8">
+    <div class="rounded-3xl bg-white border border-line p-5 lg:p-6" x-data="countdown(2*3600 + 47*60 + 13)">
+      <div class="flex flex-wrap items-center gap-4 mb-5">
+        <h2 class="text-[24px] font-bold tracking-tight flex items-center gap-2">
+          <span class="text-brand">⚡</span> <span x-text="$store.app.t('flash.title')">Flash sale</span>
+        </h2>
+        <div class="flex items-center gap-1.5">
+          <span class="h-8 w-9 rounded-lg bg-ink text-white grid place-items-center text-[14px] font-bold tabular-nums" x-text="hh"></span>
+          <span class="font-bold text-ink-3">:</span>
+          <span class="h-8 w-9 rounded-lg bg-ink text-white grid place-items-center text-[14px] font-bold tabular-nums" x-text="mm"></span>
+          <span class="font-bold text-ink-3">:</span>
+          <span class="h-8 w-9 rounded-lg bg-ink text-white grid place-items-center text-[14px] font-bold tabular-nums" x-text="ss"></span>
+        </div>
+        <a href="#" class="ml-auto text-[14px] font-medium text-ink-2 hover:text-ink" x-text="$store.app.t('sec.viewall')">Xem tất cả →</a>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <template x-for="p in FLASH" :key="p.seed">
+          <a href="product-v1.html" class="group">
+            <div class="relative aspect-square rounded-2xl overflow-hidden ph mb-2.5" :style="`background-image:url('https://picsum.photos/seed/${p.seed}/400')`">
+              <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-brand text-white text-[11px] font-bold"
+                    x-text="'-' + Math.round((1 - p.p / p.o) * 100) + '%'"></span>
+            </div>
+            <p class="text-[13.5px] leading-snug line-clamp-2 group-hover:text-brand transition" x-text="$store.app.tr(p)"></p>
+            <div class="mt-1 flex items-baseline gap-2 flex-wrap">
+              <span class="text-[15px] font-bold text-brand" x-text="$store.app.money(p.p)"></span>
+              <span class="text-[12.5px] text-ink-3 line-through" x-text="$store.app.money(p.o)"></span>
+            </div>
+            <div class="mt-2 h-1.5 rounded-full bg-brand-tint overflow-hidden">
+              <div class="h-full bg-brand rounded-full" :style="`width:${p.s}%`"></div>
+            </div>
+            <p class="mt-1 text-[11.5px] text-ink-3" x-text="`${$store.app.t('flash.sold')} ${p.s}%`"></p>
+          </a>
+        </template>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 6. BENTO khám phá ════════════════════════════════════════════ -->
+  <section class="pb-8 grid grid-cols-12 gap-3 auto-rows-[168px]">
+    <a href="#" class="col-span-12 lg:col-span-4 row-span-2 rounded-3xl bg-ink text-white p-7 flex flex-col justify-between">
+      <div>
+        <p class="text-[13px] font-semibold text-white/60" x-text="$store.app.t('best.badge')">BÁN CHẠY NHẤT</p>
+        <h3 class="text-[28px] font-extrabold leading-tight mt-2" x-text="$store.app.t('best.h')">Top 100 sản phẩm tuần này</h3>
+      </div>
+      <div class="flex -space-x-3">
+        <div class="w-14 h-14 rounded-2xl ring-3 ring-ink ph" style="background-image:url('https://picsum.photos/seed/t1/120')"></div>
+        <div class="w-14 h-14 rounded-2xl ring-3 ring-ink ph" style="background-image:url('https://picsum.photos/seed/t2/120')"></div>
+        <div class="w-14 h-14 rounded-2xl ring-3 ring-ink ph" style="background-image:url('https://picsum.photos/seed/t3/120')"></div>
+        <div class="w-14 h-14 rounded-2xl ring-3 ring-ink bg-white/10 grid place-items-center text-[13px] font-bold">+97</div>
+      </div>
+    </a>
+
+    <div class="col-span-12 sm:col-span-6 lg:col-span-4 row-span-1 rounded-3xl bg-white border border-line p-6 flex flex-col justify-between">
+      <div class="flex gap-0.5 text-brand text-[15px]">★★★★★</div>
+      <p class="text-[15px] leading-relaxed text-ink-2" x-text="$store.app.tr(QUOTE)"></p>
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-full ph" style="background-image:url('https://picsum.photos/seed/av1/80')"></div>
+        <span class="text-[13px] font-medium">Ngọc Anh · Hà Nội</span>
+      </div>
+    </div>
+
+    <a href="#" class="col-span-6 lg:col-span-2 row-span-1 rounded-3xl bg-brand-tint p-5 flex flex-col justify-between hover:ring-2 hover:ring-brand transition">
+      <svg class="w-7 h-7 text-brand" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></svg>
+      <div><p class="text-[17px] font-bold leading-tight" x-text="$store.app.t('trust.fast')">Giao 24h</p><p class="text-[13px] text-ink-2 mt-0.5" x-text="$store.app.t('trust.fastsub')">Nội thành</p></div>
+    </a>
+
+    <a href="#" class="col-span-6 lg:col-span-2 row-span-1 rounded-3xl bg-white border border-line p-5 flex flex-col justify-between hover:border-ink transition">
+      <svg class="w-7 h-7 text-ink" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8.2 8 9 4.6-.8 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+      <div><p class="text-[17px] font-bold leading-tight" x-text="$store.app.t('trust.ret')">Đổi trả 30 ngày</p><p class="text-[13px] text-ink-2 mt-0.5" x-text="$store.app.t('trust.retsub')">Miễn phí</p></div>
+    </a>
+
+    <a href="#" class="col-span-12 sm:col-span-6 lg:col-span-4 row-span-1 rounded-3xl overflow-hidden ph relative group"
+       style="background-image:url('https://picsum.photos/seed/infun-blog/600/340')">
+      <div class="absolute inset-0 bg-gradient-to-t from-ink/80 to-transparent"></div>
+      <div class="relative h-full p-6 flex flex-col justify-end text-white">
+        <p class="text-[12px] font-semibold text-white/70" x-text="$store.app.t('blog.badge')">CẨM NANG MUA SẮM</p>
+        <p class="text-[18px] font-bold leading-snug mt-1" x-text="$store.app.t('blog.h')">5 điều cần biết trước khi chọn máy lọc không khí</p>
+      </div>
+    </a>
+
+    <div class="col-span-12 lg:col-span-4 row-span-1 rounded-3xl bg-white border border-line p-6 flex flex-col justify-center gap-3">
+      <p class="text-[17px] font-bold leading-tight" x-text="$store.app.t('news.h')">Nhận ưu đãi sớm nhất</p>
+      <div class="flex gap-2">
+        <input type="email" placeholder="email@cua-ban.com" class="flex-1 h-10 px-3.5 rounded-xl bg-canvas border border-line text-[14px] placeholder:text-ink-3 focus:outline-none focus:border-ink transition">
+        <button class="h-10 px-4 rounded-xl bg-ink text-white text-[14px] font-semibold hover:bg-ink-2 transition" x-text="$store.app.t('news.btn')">Gửi</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 7. Lưới sản phẩm ═════════════════════════════════════════════ -->
+  <section class="pb-10" x-data="{ tab: 'all' }">
+    <div class="flex items-end justify-between mb-4 gap-3 flex-wrap">
+      <h2 class="text-[24px] font-bold tracking-tight" x-text="$store.app.t('grid.title')">Gợi ý cho bạn</h2>
+      <div class="flex gap-1.5">
+        <template x-for="[k, key] in [['all','grid.all'],['best','grid.best'],['cheap','grid.cheap']]" :key="k">
+          <button @click="tab = k" class="h-8 px-3.5 rounded-full text-[13px] font-medium transition"
+                  :class="tab === k ? 'bg-ink text-white' : 'bg-white border border-line hover:border-ink'"
+                  x-text="$store.app.t(key)"></button>
+        </template>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <template x-for="p in sortGrid(tab)" :key="p.seed">
+        <a href="product-v1.html" class="group bg-white border border-line rounded-2xl p-2.5 hover:border-ink hover:-translate-y-0.5 transition">
+          <div class="aspect-square rounded-xl overflow-hidden ph mb-2.5" :style="`background-image:url('https://picsum.photos/seed/${p.seed}/400')`"></div>
+          <p class="text-[13.5px] leading-snug line-clamp-2 min-h-[38px] group-hover:text-brand transition" x-text="$store.app.tr(p)"></p>
+          <div class="flex gap-1 mt-2 h-4">
+            <template x-for="(c, i) in p.sw" :key="i">
+              <span class="w-4 h-4 rounded-full border border-line" :style="`background:${c}`"></span>
+            </template>
+          </div>
+          <p class="mt-2 text-[15px] font-bold" x-text="$store.app.money(p.p)"></p>
+          <p class="mt-0.5 text-[12px] text-ink-3" x-text="`★ ${p.r} · ${$store.app.num(p.c)} ${$store.app.t('rev.count')}`"></p>
+        </a>
+      </template>
+    </div>
+  </section>
+</main>
+
+<!-- ══ 8. Footer ══════════════════════════════════════════════════════ -->
+<footer class="bg-white border-t border-line mt-4">
+  <div class="mx-auto max-w-[1320px] px-5 py-12 grid grid-cols-2 lg:grid-cols-5 gap-8 text-[14px]">
+    <div class="col-span-2 lg:col-span-1">
+      <p class="text-[20px] font-extrabold tracking-tight mb-3">infun<span class="text-brand">.</span></p>
+      <p class="text-ink-2 leading-relaxed" x-text="$store.app.t('ft.tagline')">Sàn thương mại điện tử đa ngành hàng.</p>
+    </div>
+    <div>
+      <p class="font-semibold mb-3" x-text="$store.app.t('ft.shop')">Mua sắm</p>
+      <ul class="space-y-2 text-ink-2">
+        <template x-for="c in CATS.slice(0,4)" :key="c.k"><li><a href="#" class="hover:text-ink" x-text="$store.app.tr(c)"></a></li></template>
+      </ul>
+    </div>
+    <div>
+      <p class="font-semibold mb-3" x-text="$store.app.t('ft.help')">Hỗ trợ</p>
+      <ul class="space-y-2 text-ink-2">
+        <li><a href="#" class="hover:text-ink" x-text="$store.app.t('bar.track')">Tra cứu đơn hàng</a></li>
+        <li><a href="#" class="hover:text-ink" x-text="$store.app.t('trust.ret')">Đổi trả 30 ngày</a></li>
+        <li><a href="#" class="hover:text-ink" x-text="$store.app.t('trust.fast')">Giao 24h</a></li>
+        <li><a href="#" class="hover:text-ink" x-text="$store.app.t('bar.help')">Hỗ trợ</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="font-semibold mb-3" x-text="$store.app.t('ft.about')">Về chúng tôi</p>
+      <ul class="space-y-2 text-ink-2">
+        <li><a href="#" class="hover:text-ink" x-text="$store.app.t('ft.about')">Về chúng tôi</a></li>
+        <li><a href="#" class="hover:text-ink" x-text="$store.app.t('bar.sell')">Bán hàng cùng chúng tôi</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="font-semibold mb-3" x-text="$store.app.t('ft.pay')">Thanh toán</p>
+      <div class="flex flex-wrap gap-2">
+        <div class="h-9 w-14 rounded-lg bg-canvas border border-line"></div>
+        <div class="h-9 w-14 rounded-lg bg-canvas border border-line"></div>
+        <div class="h-9 w-14 rounded-lg bg-canvas border border-line"></div>
+        <div class="h-9 w-14 rounded-lg bg-canvas border border-line"></div>
+      </div>
+    </div>
+  </div>
+  <div class="border-t border-line">
+    <div class="mx-auto max-w-[1320px] px-5 h-14 flex items-center justify-between text-[13px] text-ink-3">
+      <span x-text="$store.app.t('ft.note')">© 2026 infun.</span>
+      <span x-text="$store.app.L.label">Tiếng Việt</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+const TOP = [
+  { k:'dientu', vi:'Điện tử',  en:'Electronics' }, { k:'thoitrang', vi:'Thời trang', en:'Fashion' },
+  { k:'nhacua', vi:'Nhà cửa',  en:'Home' },        { k:'lamdep',    vi:'Làm đẹp',    en:'Beauty' },
+  { k:'mebe',   vi:'Mẹ & bé',  en:'Mom & baby' },  { k:'thethao',   vi:'Thể thao',   en:'Sports' },
+  { k:'sach',   vi:'Sách',     en:'Books' },       { k:'bachhoa',   vi:'Bách hoá',   en:'Grocery' }
+];
+
+const CATS = [
+  { k:'c1', vi:'Điện thoại',  en:'Phones' },      { k:'c2', vi:'Laptop',      en:'Laptops' },
+  { k:'c3', vi:'Thời trang nữ', en:"Women's wear" },{ k:'c4', vi:'Giày dép',    en:'Footwear' },
+  { k:'c5', vi:'Mỹ phẩm',     en:'Cosmetics' },   { k:'c6', vi:'Đồ gia dụng', en:'Appliances' },
+  { k:'c7', vi:'Thể thao',    en:'Sports' },      { k:'c8', vi:'Mẹ & bé',     en:'Mom & baby' }
+];
+
+const MEGA = [
+  { vi:'Điện tử', en:'Electronics', items:[
+    {vi:'Điện thoại',en:'Phones'},{vi:'Laptop & máy tính',en:'Laptops'},{vi:'Tai nghe & loa',en:'Audio'},
+    {vi:'Máy ảnh',en:'Cameras'},{vi:'Phụ kiện',en:'Accessories'}]},
+  { vi:'Thời trang', en:'Fashion', items:[
+    {vi:'Thời trang nữ',en:"Women's"},{vi:'Thời trang nam',en:"Men's"},{vi:'Giày dép',en:'Shoes'},
+    {vi:'Túi ví',en:'Bags'},{vi:'Đồng hồ',en:'Watches'}]},
+  { vi:'Nhà cửa & đời sống', en:'Home & living', items:[
+    {vi:'Đồ gia dụng',en:'Appliances'},{vi:'Nội thất',en:'Furniture'},{vi:'Bếp',en:'Kitchen'},
+    {vi:'Chăn ga gối',en:'Bedding'},{vi:'Trang trí',en:'Decor'}]},
+  { vi:'Sức khoẻ & làm đẹp', en:'Health & beauty', items:[
+    {vi:'Chăm sóc da',en:'Skincare'},{vi:'Trang điểm',en:'Makeup'},{vi:'Thực phẩm chức năng',en:'Supplements'},
+    {vi:'Chăm sóc tóc',en:'Hair care'},{vi:'Thiết bị y tế',en:'Medical devices'}]}
+];
+
+const FLASH = [
+  { vi:'Tai nghe không dây chống ồn', en:'Wireless noise-cancelling headphones', p:890000,  o:1790000, s:78, seed:'f1' },
+  { vi:'Bàn phím cơ gõ êm 87 phím',   en:'Silent mechanical keyboard, 87 keys',  p:1250000, o:1990000, s:45, seed:'f2' },
+  { vi:'Nồi chiên không dầu 5.5L',    en:'Air fryer 5.5L',                       p:1490000, o:2490000, s:92, seed:'f3' },
+  { vi:'Áo khoác gió chống nước',     en:'Water-resistant windbreaker',          p:349000,  o:699000,  s:31, seed:'f4' },
+  { vi:'Đèn bàn LED chống cận',       en:'Eye-care LED desk lamp',               p:259000,  o:520000,  s:64, seed:'f5' }
+];
+
+const GRID = [
+  { vi:'Máy pha cà phê espresso mini', en:'Mini espresso machine',        p:2390000, r:4.8, c:312,  sw:['#16151A','#C9C5BE','#B54A2E'], seed:'g1' },
+  { vi:'Ba lô laptop chống nước 20L',  en:'Water-resistant laptop backpack 20L', p:590000, r:4.9, c:1204, sw:['#16151A','#3E5C76','#7A6C57'], seed:'g2' },
+  { vi:'Loa bluetooth ngoài trời',     en:'Outdoor bluetooth speaker',     p:1190000, r:4.7, c:486,  sw:['#16151A','#E8452C'], seed:'g3' },
+  { vi:'Bộ nồi inox 3 đáy 5 món',      en:'5-piece tri-ply steel cookware', p:1890000, r:4.6, c:97,  sw:[], seed:'g4' },
+  { vi:'Giày chạy bộ đế êm',           en:'Cushioned running shoes',       p:1290000, r:4.8, c:2310, sw:['#FFFFFF','#16151A','#0F9D6E'], seed:'g5' },
+  { vi:'Máy hút bụi cầm tay không dây',en:'Cordless handheld vacuum',      p:1690000, r:4.5, c:158,  sw:[], seed:'g6' },
+  { vi:'Bình giữ nhiệt 750ml',         en:'Insulated bottle 750ml',        p:359000,  r:4.9, c:3021, sw:['#16151A','#C9C5BE','#3E5C76','#E8452C'], seed:'g7' },
+  { vi:'Đồng hồ thông minh thể thao',  en:'Sports smartwatch',             p:2490000, r:4.7, c:642,  sw:['#16151A','#C9C5BE'], seed:'g8' },
+  { vi:'Ghế công thái học lưới',       en:'Ergonomic mesh chair',          p:3290000, r:4.8, c:214,  sw:[], seed:'g9' },
+  { vi:'Serum dưỡng ẩm 30ml',          en:'Hydrating serum 30ml',          p:420000,  r:4.9, c:1876, sw:[], seed:'g10' }
+];
+
+const QUOTE = {
+  vi: '"Đặt tối, sáng hôm sau đã có hàng. Đóng gói chắc chắn, đúng mô tả."',
+  en: '"Ordered at night, arrived the next morning. Well packed, exactly as described."'
+};
+
+function sortGrid(tab) {
+  if (tab === 'best')  return [...GRID].sort((a, b) => b.c - a.c);
+  if (tab === 'cheap') return [...GRID].sort((a, b) => a.p - b.p);
+  return GRID;
+}
+
+/* Component đếm ngược dùng lại được — Alpine.data cho phép gọi countdown(n)
+   ở nhiều chỗ, mỗi chỗ một state riêng. */
+document.addEventListener('alpine:init', () => {
+  Alpine.data('countdown', (seconds) => ({
+    left: seconds,
+    get hh() { return String(Math.floor(this.left / 3600)).padStart(2, '0'); },
+    get mm() { return String(Math.floor(this.left % 3600 / 60)).padStart(2, '0'); },
+    get ss() { return String(this.left % 60).padStart(2, '0'); },
+    init() { setInterval(() => { if (this.left > 0) this.left--; }, 1000); }
+  }));
+});
+
+/* Mega menu dựng bằng JS thay vì lặp template — 4 cột × 5 mục, viết tay
+   trong HTML sẽ dài và khó sửa. */
+document.addEventListener('alpine:init', () => {
+  const render = () => {
+    const st = Alpine.store('app');
+    document.getElementById('mega-cols').innerHTML = MEGA.map(g => `
+      <div>
+        <p class="text-[14px] font-bold mb-3">${st.tr(g)}</p>
+        <ul class="space-y-2 text-[14px] text-ink-2">
+          ${g.items.map(i => `<li><a href="category-v1.html" class="hover:text-brand transition">${st.tr(i)}</a></li>`).join('')}
+          <li><a href="#" class="text-ink-3 hover:text-ink">${st.t('menu.viewall')} →</a></li>
+        </ul>
+      </div>`).join('');
+  };
+  queueMicrotask(() => { render(); Alpine.effect(() => { Alpine.store('app').locale; render(); }); });
+});
+</script>
+</body>
+</html>

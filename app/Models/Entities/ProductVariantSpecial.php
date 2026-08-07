@@ -12,6 +12,11 @@ class ProductVariantSpecial extends Base
     protected $table = 'product_variant_special';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'product_variant_id', 'product_id', 'user_group_id',
+        'priority', 'price', 'date_start', 'date_end',
+        'deleted_at',
+    ];
 
     protected $casts = [
         'date_start'    => 'datetime',

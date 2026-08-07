@@ -9,15 +9,8 @@ use App\Models\Entities\Product;
 use App\Repositories\Interfaces\ProductCmsRepositoryInterface;
 use App\Services\Product\ProductWriteService;
 use Illuminate\Http\Request;
+use Spatie\LaravelData\PaginatedDataCollection;
 
-/**
- * Product API (REST) cho CMS. Thin controller:
- *   read  → ProductRepository (no cache)
- *   write → ProductWriteService (transaction; variant cluster ở ProductVariantWriter)
- *   output→ ProductData / ProductListData (Spatie Data, snake_case)
- *   validate → ProductRequest
- * -----------------------------------------------------------
- */
 class ProductController extends BaseCmsController
 {
     protected string $permission = 'product';
@@ -30,7 +23,7 @@ class ProductController extends BaseCmsController
 
     public function index(Request $request)
     {
-        return ProductListData::collect($this->repo->listForCms($request));
+        return ProductListData::collect($this->repo->listForCms($request), PaginatedDataCollection::class);
     }
 
     public function show($id)
@@ -38,24 +31,21 @@ class ProductController extends BaseCmsController
         $product = $this->repo->getForCms((int) $id);
         abort_if($product === null, 404);
 
-        return response()->json(['data' => ProductData::from($product)]);
+        return respondSuccess(ProductData::from($product));
     }
 
     public function store(ProductRequest $request)
     {
         $product = $this->writeService->save(null, $request->validated());
 
-        return response()->json(
-            ['data' => ProductData::from($this->repo->getForCms($product->id))],
-            201
-        );
+        return respondCreated(ProductData::from($this->repo->getForCms($product->id)), 'product_created');
     }
 
     public function update(ProductRequest $request, Product $product)
     {
         $product = $this->writeService->save($product, $request->validated());
 
-        return response()->json(['data' => ProductData::from($this->repo->getForCms($product->id))]);
+        return respondSuccess(ProductData::from($this->repo->getForCms($product->id)), 'product_updated');
     }
 
     public function destroy(Product $product)
@@ -70,7 +60,7 @@ class ProductController extends BaseCmsController
         $product = $this->repo->restoreById((int) $id);
         abort_if($product === null, 404);
 
-        return response()->json(['restored' => true]);
+        return respondSuccess(['restored' => true]);
     }
 
     public function bulk(Request $request)
@@ -85,23 +75,26 @@ class ProductController extends BaseCmsController
             ? $this->repo->deleteByIds($data['ids'])
             : $this->repo->restoreByIds($data['ids']);
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected]);
     }
 
-    /** Sửa inline hàng loạt từ trang list (model/badge/price/quantity). */
     public function bulkUpdate(Request $request)
     {
         $data = $request->validate([
-            'items'   => 'required|array|min:1',
-            'items.*.id' => 'required|integer',
+            'items'           => 'required|array|min:1',
+            'items.*.id'      => 'required|integer',
+            'items.*.model'   => 'nullable|string|max:255',
+            'items.*.badge'   => 'nullable|string|max:255',
+            'items.*.price'   => 'nullable|numeric',
+            'items.*.quantity' => 'nullable|integer',
+            'warehouse_id' => 'nullable|integer',
         ]);
 
-        $affected = $this->writeService->bulkUpdate($data['items']);
+        $affected = $this->writeService->bulkUpdate($data['items'], $data['warehouse_id'] ?? null);
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected]);
     }
 
-    /** Duyệt product từ bản nháp (ProductDraft) — feature riêng, làm sau. */
     public function approve($id)
     {
         return response()->json(['message' => 'Chưa hỗ trợ duyệt product (draft)'], 501);

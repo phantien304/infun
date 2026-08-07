@@ -1,7 +1,3 @@
-{{--
-    Gift promo row — Shopee "Quà tặng". Click → mở modal _gift_modal.
-    Input: $gifts (Collection<GiftDTO>)
---}}
 @php
     $availableCount = isset($gifts) ? $gifts->where('availableToCart', true)->count() : 0;
     $pickedTotal = 0;

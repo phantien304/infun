@@ -9,6 +9,7 @@ class OrdersStatusLog extends Base
     protected $table = 'orders_status_log';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = ['order_id', 'order_status_id', 'user_id', 'log'];
 
     public function ordersStatus()
     {

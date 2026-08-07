@@ -1,8 +1,6 @@
-{{-- CSS scoped Shopee palette (#ee4d2d) — inline cho self-contained partial --}}
 <style>
     .review-shopee { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; background: #fff; }
 
-    /* Skeleton placeholder cho lazy-load list (tối ưu A 2026-06-10) */
     .review-skeleton { padding: 8px 0; }
     .review-skeleton .rs-item { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid #f0f0f0; }
     .review-skeleton .rs-avatar { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; background: #f0f0f0; }
@@ -27,7 +25,6 @@
     .rs-avg-slash  { font-size: 22px; color: #ee4d2d; }
     .rs-overview__stars { font-size: 20px; margin: 6px 0; }
 
-    /* CSS overlay technique cho half-star — FA 5.0.6 không có fa-star-half-alt */
     .rating-fractional { position: relative; display: inline-block; line-height: 1; letter-spacing: 2px; }
     .rating-fractional .rf-bg { color: #d4d4d4; }
     .rating-fractional .rf-fg { position: absolute; top: 0; left: 0; width: var(--rating-pct, 0%); color: #ee4d2d; overflow: hidden; white-space: nowrap; }

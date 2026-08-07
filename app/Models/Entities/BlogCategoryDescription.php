@@ -10,4 +10,8 @@ class BlogCategoryDescription extends Base
     public $primaryKey = ['category_id', 'language_code'];
     public $incrementing = false;
     public $timestamps = true;
+    protected $fillable = [
+        'category_id', 'language_code', 'title', 'description',
+        'slug', 'meta_title', 'meta_description',
+    ];
 }

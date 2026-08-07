@@ -10,4 +10,11 @@ class BannerValueDescription extends Base
     protected $primaryKey = ['banner_value_id', 'language_code'];
     public $incrementing = false;
     public $timestamps = true;
+
+    protected $fillable = [
+        'banner_value_id',
+        'language_code',
+        'title',
+        'content',
+    ];
 }

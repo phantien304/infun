@@ -5,7 +5,6 @@ namespace App\Repositories\Eloquent;
 use App\Models\Entities\Product;
 use App\Models\Entities\ProductAttribute;
 use App\Models\Entities\ProductDescription;
-use App\Models\Entities\ProductDiscount;
 use App\Models\Entities\ProductFilter;
 use App\Models\Entities\ProductImage;
 use App\Models\Entities\ProductIngredient;
@@ -14,11 +13,20 @@ use App\Models\Entities\ProductReward;
 use App\Models\Entities\ProductVariant;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\ProductCmsRepositoryInterface;
+use App\Services\Stock\WarehouseService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 
 class ProductCmsRepository extends QueryableRepository implements ProductCmsRepositoryInterface
 {
+    public function __construct(
+        Application $app,
+        private readonly WarehouseService $warehouseService,
+    ) {
+        parent::__construct($app);
+    }
+
     public function model(): string
     {
         return Product::class;
@@ -35,18 +43,18 @@ class ProductCmsRepository extends QueryableRepository implements ProductCmsRepo
             'productAttributes',
             'productImages',
             'productRewards',
-            'productDiscounts',
             'productOptions.option',
-            'productVariants.productVariantAttributes',
+            'productVariants.productVariantAttributes.option',
             'productVariants.productStocks',
             'productVariants.productVariantSpecials',
-            'defaultVariant',
+            'productVariants.productVariantDiscounts',
+            'defaultVariant.productStock',
         ];
     }
 
     public function listForCms(Request $request): LengthAwarePaginator
     {
-        $defaultLang = getConfigDb('config_language') ?: 'vi';
+        $defaultLang = getConfigDb('config_language_admin') ?: 'vi';
         $lang    = $request->input('language_code') ?: $defaultLang;
         $order   = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
         $deleted = (int) $request->input('deleted_at', -1);
@@ -57,11 +65,29 @@ class ProductCmsRepository extends QueryableRepository implements ProductCmsRepo
             'id'                       => 'product.id',
             'model'                    => 'product.model',
             'badge'                    => 'product.badge',
-            'quantity'                 => 'product.quantity',
             'name'                     => 'product_description.name',
             'product_description.name' => 'product_description.name',
         ];
-        $sortColumn = $sortMap[$request->input('sort', 'id')] ?? 'product.id';
+        $sortField  = $request->input('sort', 'id');
+        $sortColumn = $sortMap[$sortField] ?? 'product.id';
+        $requestedWarehouseId = (int) $request->input('warehouse_id', 0);
+        $warehouseIds = $requestedWarehouseId > 0
+            ? [$requestedWarehouseId]
+            : $this->warehouseService->sellableWarehouseIds();
+        $placeholders = implode(',', array_fill(0, count($warehouseIds), '?'));
+
+        $quantitySql = "(
+            SELECT COALESCE(SUM(ps.on_hand), 0)
+            FROM product_variant pv
+            JOIN product_stock ps ON ps.product_variant_id = pv.id
+            WHERE pv.product_id = product.id AND pv.deleted_at IS NULL
+              AND ps.warehouse_id IN ({$placeholders})
+        )";
+
+        $variantCountSql = '(
+            SELECT COUNT(*) FROM product_variant pvc
+            WHERE pvc.product_id = product.id AND pvc.deleted_at IS NULL
+        )';
 
         $query = Product::query()
             ->leftJoin('product_description', function ($join) use ($lang) {
@@ -69,6 +95,8 @@ class ProductCmsRepository extends QueryableRepository implements ProductCmsRepo
                     ->where('product_description.language_code', '=', $lang);
             })
             ->select('product.*', 'product_description.name')
+            ->selectRaw($quantitySql . ' as agg_quantity', $warehouseIds)
+            ->selectRaw($variantCountSql . ' as variant_count')
             ->with(['defaultVariant', 'productDraft']);
 
         if ($deleted === 0) {
@@ -78,10 +106,17 @@ class ProductCmsRepository extends QueryableRepository implements ProductCmsRepo
         }
 
         if ($keyword !== '') {
-            $query->where('product_description.name', 'like', '%' . $keyword . '%');
+            $query->where('product.model', 'like', '%' . $keyword . '%')
+                  ->orWhere('product.sku', 'like', '%' . $keyword . '%');
         }
 
-        return $query->orderBy($sortColumn, $order)->paginate($perPage);
+        if ($sortField === 'quantity') {
+            $query->orderByRaw($quantitySql . ' ' . $order, $warehouseIds);
+        } else {
+            $query->orderBy($sortColumn, $order);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function getForCms(int $id): ?Product
@@ -231,22 +266,6 @@ class ProductCmsRepository extends QueryableRepository implements ProductCmsRepo
             $row->product_variant_id = null;
             $row->image              = $it['image'];
             $row->sort_order         = (int) ($it['sort_order'] ?? 0);
-            $row->save();
-        }
-    }
-
-    public function syncDiscounts(int $productId, array $items): void
-    {
-        ProductDiscount::where('product_id', $productId)->delete();
-        foreach ($items as $it) {
-            $row = new ProductDiscount();
-            $row->product_id    = $productId;
-            $row->user_group_id = (int) ($it['user_group_id'] ?? 0);
-            $row->quantity      = (int) ($it['quantity'] ?? 0);
-            $row->priority      = (int) ($it['priority'] ?? 0);
-            $row->price         = ($it['price'] ?? '') !== '' ? (float) $it['price'] : 0;
-            $row->date_start    = $it['date_start'] ?: null;
-            $row->date_end      = $it['date_end'] ?: null;
             $row->save();
         }
     }

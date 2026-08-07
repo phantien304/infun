@@ -10,6 +10,7 @@ class ProductCategory extends Base
     public $primaryKey = ['product_id', 'category_id'];
     public $incrementing = false;
     public $timestamps = false;
+    protected $fillable = ['product_id', 'category_id'];
 
     public function category()
     {

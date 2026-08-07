@@ -17,8 +17,22 @@
 @if (isset($linkCanonical))
     <link href="{{ $linkCanonical }}" rel="canonical" />
 @endif
-<link rel="stylesheet" href="{{ publicUrl('web/css/main.css?v=' . getConfigDb('config_theme_version')) }}">
-<link rel="stylesheet" href="{{ publicUrl('web/css/custom.css?v=' . getConfigDb('config_theme_version')) }}">
-@vite(['resources/web/css/app.css'])
+
+@php $themeOwnsPage = \App\Helpers\ThemeManager::ownsView(); @endphp
+
+@unless ($themeOwnsPage)
+    <link rel="stylesheet" href="{{ publicUrl('web/css/main.css?v=' . getConfigDb('config_theme_version')) }}">
+    <link rel="stylesheet" href="{{ publicUrl('web/css/custom.css?v=' . getConfigDb('config_theme_version')) }}">
+@endunless
+
+@if (\App\Helpers\ThemeManager::current())
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+@endif
+
+@vite([\App\Helpers\ThemeManager::viteEntry()])
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+@include('web::share._theme_preview')
 {{ getConfigDb('config_google_analytics') }}

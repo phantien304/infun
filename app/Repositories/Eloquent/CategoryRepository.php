@@ -55,15 +55,15 @@ class CategoryRepository extends QueryableRepository implements CategoryReposito
 
     public function listForCms(Request $request): LengthAwarePaginator
     {
-        $defaultLang = getConfigDb('config_language') ?: 'vi';
+        $defaultLang = getConfigDb('config_language_admin') ?: 'vi';
         $lang    = $request->input('language_code') ?: $defaultLang;
         $sort    = $request->input('sort') === 'title' ? 'category_description.title' : 'category.id';
         $order   = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
-        $deleted = (int) $request->input('deleted_at', -1); // -1 tất cả, 1 hiển thị, 0 đã xoá
+        $deleted = (int) $request->input('deleted_at', -1);
         $keyword = trim((string) $request->input('keyword', ''));
         $perPage = max(1, (int) $request->input('per_page', 50));
 
-        $query = Category::query()
+        $query = $this->resetModel()->query()
             ->leftJoin('category_description', function ($join) use ($lang) {
                 $join->on('category_description.category_id', '=', 'category.id')
                     ->where('category_description.language_code', '=', $lang);

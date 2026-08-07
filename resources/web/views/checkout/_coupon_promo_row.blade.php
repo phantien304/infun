@@ -24,7 +24,6 @@
         <i class="fi-rs-angle-small-right text-gray-400 text-xl"></i>
     </button>
 
-    {{-- Hiển thị chip mã đã áp + nút bỏ --}}
     @if ($appliedCount > 0)
         <div class="flex flex-wrap gap-2 mt-2 px-3">
             @foreach ($appliedCouponCodes as $code)

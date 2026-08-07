@@ -1,15 +1,3 @@
-{{--
-    Shared OG / Twitter / schema meta block for product-listing pages
-    (product list, special, category, manufacturer).
-
-    Required parent variables:
-      $titleSeo       — already set by Controller::processMetaSeo()
-      $descriptionSeo — already set by Controller::processMetaSeo()
-
-    Optional overrides:
-      $resourceUrl    — canonical URL of the listing (defaults to fullUrl)
-      $resourceImage  — OG / Twitter image (defaults to module img_default)
---}}
 @php
     $resourceUrl   = $resourceUrl   ?? request()->fullUrl();
     $resourceImage = $resourceImage ?? thumbnail(getModuleConfig('img_default'), 800, 354);

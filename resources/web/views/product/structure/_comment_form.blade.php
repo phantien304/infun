@@ -44,7 +44,6 @@
                 @csrf
                 <input type="hidden" name="product_id" value="{{ $entity->id }}">
 
-                {{-- Multi-criteria rating --}}
                 <div class="rw-criteria">
                     @forelse ($reviewCriteria as $c)
                         <div class="rw-crit-row" data-criteria="{{ $c->code }}">
@@ -68,7 +67,6 @@
                             </div>
                         </div>
                     @empty
-                        {{-- Fallback: 1 rating tổng thể nếu chưa seed criteria --}}
                         <div class="rw-crit-row">
                             <label class="rw-crit-label">Đánh giá tổng thể <span class="rw-required">*</span></label>
                             <div class="rw-stars">
@@ -83,7 +81,6 @@
                     @endforelse
                 </div>
 
-                {{-- Tags --}}
                 @if ($reviewTags->isNotEmpty())
                     <div class="rw-tags">
                         <label class="rw-section-label">Chọn các đặc điểm phù hợp:</label>
@@ -98,14 +95,12 @@
                     </div>
                 @endif
 
-                {{-- Title --}}
                 <div class="rw-field">
                     <label for="rw-title">Tiêu đề (không bắt buộc)</label>
                     <input type="text" id="rw-title" name="title" maxlength="255" class="form-control"
                         placeholder="Tóm tắt cảm nhận của bạn">
                 </div>
 
-                {{-- Body --}}
                 <div class="rw-field">
                     <label for="rw-text">Nội dung đánh giá <span class="rw-required">*</span></label>
                     <textarea id="rw-text" name="text" rows="5" required class="form-control"
@@ -114,7 +109,6 @@
                     <div class="rw-counter"><span class="rw-counter-now">0</span>/2000</div>
                 </div>
 
-                {{-- Media upload --}}
                 <div class="rw-field rw-media">
                     <label>Thêm ảnh / video (tối đa 9 ảnh + 1 video)</label>
                     <div class="rw-media-drop" id="rwMediaDrop">
@@ -127,7 +121,6 @@
                     </div>
                 </div>
 
-                {{-- Anonymous (chỉ hiện khi login — guest mặc định đã ẩn danh qua author field) --}}
                 @if ($isLoggedIn)
                     <div class="rw-field rw-anon">
                         <label class="rw-checkbox">
@@ -136,7 +129,6 @@
                         </label>
                     </div>
                 @else
-                    {{-- Guest cần điền tên + email --}}
                     <div class="rw-field">
                         <label for="rw-author">Tên hiển thị <span class="rw-required">*</span></label>
                         <input type="text" id="rw-author" name="author" required maxlength="255"
@@ -150,9 +142,6 @@
                 @endif
 
                 <div class="rw-actions">
-                    {{-- .btn (component layer Tailwind) đã có brand color default
-                         → bỏ .btn-primary Bootstrap. .btn-link reset: dùng
-                         arbitrary để tránh ghi đè brand background. --}}
                     <button type="submit" class="btn rw-submit">
                         <i class="fa fa-paper-plane"></i> Gửi đánh giá
                     </button>

@@ -2,7 +2,6 @@
     <div
         class="flex bg-white rounded overflow-hidden shadow-sm border
                 @if (!$coupon->applicableToCart) opacity-50 @endif">
-        {{-- Left ribbon — type icon + color --}}
         <div
             class="flex-shrink-0 w-20 flex items-center justify-center text-white text-3xl font-bold
                     @if ($coupon->type === \App\Enums\CouponType::Percent->value) bg-orange-500
@@ -11,7 +10,6 @@
             {{ $coupon->typeIcon }}
         </div>
 
-        {{-- Body --}}
         <div class="flex-1 p-3 min-w-0">
             @if ($coupon->badge)
                 <span class="inline-block px-2 py-0.5 mb-1 text-xs font-bold bg-red-100 text-red-700 rounded">
@@ -27,7 +25,6 @@
             @endif
         </div>
 
-        {{-- Action --}}
         <div class="flex-shrink-0 flex flex-col items-end justify-center pr-3 gap-2">
             @if ($coupon->applicableToCart)
                 <input type="checkbox" :checked="selected.includes('{{ $coupon->code }}')"

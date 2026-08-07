@@ -18,22 +18,27 @@ class User extends CmsUser
     public $incrementing = true;
     public $timestamps = true;
     protected $casts = ['email_verified_at' => 'datetime'];
-    protected static array $destroyRelations = ['roleUsers2', 'userAddress', 'userPhones', 'userRewards', 'userWishlists'];
 
-    public function roleUser()
-    {
-        return $this->belongsTo(RoleUser::class, 'id', 'user_id');
-    }
-
-    public function roleUsers()
-    {
-        return $this->belongsToMany(RoleUser::class, 'role_user', 'user_id', 'role_id');
-    }
-
-    public function roleUsers2()
-    {
-        return $this->hasMany(RoleUser::class, 'user_id', 'id');
-    }
+    protected $fillable = [
+        'username',
+        'email',
+        'password',
+        'full_name',
+        'avatar',
+        'status',
+        'type',
+        'address',
+        'sex',
+        'newsletter',
+        'user_group_id',
+        'confirm_code',
+        'confirmed',
+        'social_id',
+        'type_register',
+        'remember_token',
+        'deleted_at',
+    ];
+    protected static array $destroyRelations = ['userAddress', 'userPhones', 'userRewards', 'userWishlists'];
 
     public function userAddress()
     {
@@ -60,25 +65,8 @@ class User extends CmsUser
         return $this->hasMany(UserWishlist::class, 'user_id', 'id');
     }
 
-    public function roles()
+    public function userGroup()
     {
-        return $this->morphToMany(
-            Role::class,
-            'user',
-            'role_user',
-            'user_id',
-            'role_id'
-        );
-    }
-
-    public function permissions()
-    {
-        return $this->morphToMany(
-            Permission::class,
-            'user',
-            'permission_user',
-            'user_id',
-            'permission_id'
-        );
+        return $this->belongsTo(UserGroup::class, 'user_group_id', 'id');
     }
 }

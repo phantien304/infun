@@ -3,14 +3,7 @@
 return [
     'image_disk' => env('IMAGE_DISK', 'image'),
 
-    'thumbnail_sizes' => [
-        [300, 300],   // card trang list (_product.blade)
-        [147, 147],   // thumb gallery trang chi tiết
-        [1000, 1000], // ảnh lớn trang chi tiết
-        [100, 100], // ảnh thumb trang giỏ hàng
-        [50, 50],     // sidebar
-        [800, 354],   // og:image / social
-    ],
+    'thumbnail_sizes' => [[300, 300], [400, 400], [147, 147], [1000, 1000], [100, 100], [50, 50], [800, 354], [635, 420]],
 
     'cf_resizing' => [
         'enabled' => (bool) env('CF_IMAGE_RESIZING', false),

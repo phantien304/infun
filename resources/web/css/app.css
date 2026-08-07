@@ -175,3 +175,21 @@
     .mr-15 { margin-right: 15px; }
     .mr-30 { margin-right: 30px; }
 }
+
+/*
+ * Vá lỗi cascade layer: main.css có
+ * `@media(min-width:1200px){.header-action-right{display:flex}}` (dòng
+ * ~8463) — CSS THƯỜNG (không @layer). Theo spec CSS Cascade Layers, một
+ * declaration KHÔNG nằm trong layer nào luôn thắng declaration THƯỜNG nằm
+ * trong layer, bất kể specificity hay thứ tự nạp file. Tailwind bọc mọi
+ * utility (kể cả biến thể responsive như `lg:hidden`) trong `@layer
+ * utilities`, nên `lg:hidden` — và cả `lg:!hidden` khi thử qua thực tế
+ * không ăn thua — vẫn thua luật cũ ở ≥1200px. Cụm yêu thích/giỏ hàng
+ * "chỉ dành cho mobile" (share/menu.blade.php, class `header-action-right
+ * block lg:hidden`) vì vậy vẫn hiện trên desktop, chiếm mất ô cuối hàng
+ * `justify-between`, đẩy hotline dạt vào giữa.
+ *
+ * Rule dưới đây viết THƯỜNG (không đặt trong @layer) + đặt SAU main.css
+ * trong thứ tự nạp file → thắng bằng cả hai tiêu chí (layer priority lẫn
+ * thứ tự nạp), không phụ thuộc suy đoán về !important nữa.
+ */

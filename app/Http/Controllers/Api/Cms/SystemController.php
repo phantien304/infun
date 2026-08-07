@@ -26,12 +26,12 @@ class SystemController extends Controller
             $this->settingRepo->listPublicCached()
         );
 
-        return response()->json([
-            'data' => [
-                'config'        => $config,
-                'languageTexts' => $texts,
-                'languages'     => Language::query()->get(),
-            ],
+        return respondSuccess([
+            'config'        => $config,
+            'languageTexts' => $texts,
+            'languages'     => Language::query()->get(),
+            'themes'        => array_values((array) config('theme.available', [])),
+            'imageDomain'   => rtrim((string) config('filesystems.disks.image.url'), '/'),
         ]);
     }
 }

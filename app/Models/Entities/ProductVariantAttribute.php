@@ -10,6 +10,7 @@ class ProductVariantAttribute extends Base
     protected $primaryKey = ['product_variant_id', 'option_id'];
     public $incrementing = false;
     public $timestamps = false;
+    protected $fillable = ['product_variant_id', 'option_id', 'option_value_id'];
 
     public function productVariant()
     {

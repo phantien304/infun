@@ -10,6 +10,10 @@ class BlogDescription extends Base
     public $incrementing = false;
     public $timestamps = true;
     public $primaryKey = ['blog_id', 'language_code'];
+    protected $fillable = [
+        'blog_id', 'language_code', 'title', 'description', 'content',
+        'slug', 'tag', 'meta_title', 'meta_description',
+    ];
 
     public function blog()
     {

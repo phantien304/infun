@@ -1,71 +1,43 @@
-{{--
-    Sản phẩm nổi bật — mosaic layout 6 sản phẩm:
-        ┌──────────┬─────┬─────┐
-        │          │  1  │     │
-        │    0     ├─────┤  5  │
-        │          │  2  │     │
-        ├─────┬────┴─────┼─────┤
-        │  3  │     4    │     │
-        └─────┴──────────┴─────┘
-    Class theme `.card-1`, `.image`, `.title` styled main.css.
-    Bootstrap col-md-6 → Tailwind grid 2-col responsive.
---}}
-@if(count($features))
+@if (count($features))
+    @php $customCtaThreshold = 8; @endphp
     <section class="section-padding product-feature">
         <div class="container mx-auto max-w-7xl px-4">
-            <h3 class="mb-30 text-center text-9">Sản phẩm nổi bật</h3>
-            @php
-                $list = [];
-                $key = 0;
-                foreach ($features as $i => $product) {
-                    $list[$key] = '<div class="card-1">
-                                <figure class="image">
-                                    <a href="' . $product->url . '"
-                                    title="' . $product->name . '" class="flex">
-                                        <img src="' . $product->thumbnail(635, 420) . '"
-                                             alt="' . $product->name . '">
-                                        <h3 class="title p-2 font-xl">' . $product->name . '</h3>
-                                    </a>
-                                </figure>
-                            </div>';
-                    $key++;
-                }
-            @endphp
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="space-y-4">
-                    @if(filled(data_get($list, 0)))
-                        {!! data_get($list, 0) !!}
-                    @endif
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            @if(filled(data_get($list, 1)))
-                                {!! data_get($list, 1) !!}
-                            @endif
+            <div class="mb-10 text-center">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand">Xưởng gia công</p>
+                <h3 class="text-2xl font-bold text-gray-900 sm:text-3xl">Sản phẩm nổi bật</h3>
+            </div>
+
+            <div class="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 sm:gap-x-6 lg:grid-cols-4 lg:gap-x-8">
+                @foreach ($features as $product)
+                    <a href="{{ $product->url }}" title="{{ $product->name }}" class="group block">
+                        <figure class="aspect-square overflow-hidden rounded-lg bg-gray-50">
+                            <img src="{{ $product->thumbnail(500, 500) }}" alt="{{ $product->name }}"
+                                loading="lazy"
+                                onerror="this.onerror=null;this.src='https://picsum.photos/seed/p{{ $product->id }}/500/500'"
+                                class="h-full w-full object-cover transition duration-500 group-hover:scale-105">
+                        </figure>
+                        <div class="mt-4">
+                            <h3 class="mb-1 line-clamp-2 text-sm text-gray-800 transition group-hover:text-brand">
+                                {{ $product->name }}
+                            </h3>
+                            <p class="text-sm font-semibold text-gray-900">{{ $product->priceLabel }}</p>
                         </div>
-                        <div>
-                            @if(filled(data_get($list, 2)))
-                                {!! data_get($list, 2) !!}
-                            @endif
+                    </a>
+                @endforeach
+
+                @if (count($features) < $customCtaThreshold)
+                    <a href="{{ route('contact.index') }}" title="Đặt thiết kế theo yêu cầu" class="group block">
+                        <div class="flex aspect-square flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50/60 p-3 text-center transition group-hover:border-brand group-hover:bg-brand-50">
+                            <svg class="h-7 w-7 text-gray-400 transition group-hover:text-brand" fill="none"
+                                stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
+                                <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+                            </svg>
+                            <span class="text-sm font-semibold text-gray-700 group-hover:text-brand">
+                                Đặt thiết kế<br>theo yêu cầu
+                            </span>
                         </div>
-                    </div>
-                </div>
-                <div class="space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            @if(filled(data_get($list, 3)))
-                                {!! data_get($list, 3) !!}
-                            @endif
-                        </div>
-                        <div>
-                            @if(filled(data_get($list, 4)))
-                                {!! data_get($list, 4) !!}
-                            @endif
-                        </div>
-                    </div>
-                    @if(filled(data_get($list, 5)))
-                        {!! data_get($list, 5) !!}
-                    @endif
-                </div>
+                    </a>
+                @endif
             </div>
         </div>
     </section>

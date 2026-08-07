@@ -19,7 +19,47 @@
                         <div class="header-action-right">
                             <div class="header-action-2 flex items-center gap-4">
                                 @include('web::share._locale_switcher')
-                                <div class="header-action-icon-2 relative">
+                                @if (\App\Helpers\ThemeManager::shouldShowSwitcher())
+                                    <div class="header-action-icon-2 relative" x-data="{ open: false }"
+                                        @mouseenter="open = true" @mouseleave="open = false">
+                                        <a href="#" class="block" title="Xem thử giao diện khác"
+                                            @click.prevent="open = !open">
+                                            <svg class="inline-block align-middle" width="20" height="20"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-width="1.7" aria-hidden="true">
+                                                <circle cx="12" cy="12" r="9" />
+                                                <path
+                                                    d="M12 3a9 9 0 0 0 0 18 4.5 4.5 0 0 0 0-9 2.25 2.25 0 0 1 0-4.5A4.5 4.5 0 0 0 12 3Z" />
+                                            </svg>
+                                            <span class="lable ml-0">Giao diện</span>
+                                        </a>
+                                        <div class="absolute right-0 top-full z-50 rounded-lg border border-gray-100 bg-white pb-2 pt-3 shadow-lg"
+                                            x-show="open" x-cloak style="display:none;width:16rem"
+                                            x-transition:enter="transition ease-out duration-150"
+                                            x-transition:enter-start="opacity-0 -translate-y-1"
+                                            x-transition:enter-end="opacity-100 translate-y-0">
+                                            <p class="mb-1 border-b border-gray-100 px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                                Xem thử giao diện
+                                            </p>
+                                            <ul class="m-0 list-none p-0">
+                                                @foreach (\App\Helpers\ThemeManager::options() as $option)
+                                                    <li>
+                                                        <a href="{{ \App\Helpers\ThemeManager::urlWithTheme($option['slug']) }}"
+                                                            class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 {{ $option['active'] ? 'font-semibold text-brand' : '' }}">
+                                                            <span class="inline-block h-3 w-3 flex-shrink-0 rounded-full"
+                                                                style="background:{{ $option['swatch'] }}"></span>
+                                                            <span class="flex-1">{{ $option['label'] }}</span>
+                                                            @if ($option['active'])
+                                                                <span class="text-[11px] text-gray-400">Đang xem</span>
+                                                            @endif
+                                                        </a>
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    </div>
+                                @endif
+                                {{-- <div class="header-action-icon-2 relative">
                                     <a href="{!! route('account.wishlist') !!}" title="Yêu thích" class="block">
                                         <img class="svgInject" alt="Sản phẩm yêu thích"
                                             src="/web/images/theme/icons/icon-heart.svg">
@@ -38,7 +78,7 @@
                                     <a class="mini-cart-icon" href="{{ route('checkout.cart') }}" title="Giỏ hàng">
                                         <span class="lable">Giỏ hàng</span>
                                     </a>
-                                </div>
+                                </div> --}}
                                 <div class="header-action-icon-2 relative"
                                     @if (auth()->check()) x-data="{ open: false }"
                                                        @mouseenter="open = true"
@@ -51,32 +91,37 @@
                                         <span class="lable ml-0">Tài khoản</span>
                                     </a>
                                     @if (auth()->check())
-                                        <div class="cart-dropdown-wrap cart-dropdown-hm2 account-dropdown absolute right-0 top-full z-50 mt-1 w-56 bg-white shadow-lg rounded-md py-2"
-                                            x-show="open" x-cloak x-transition:enter="transition ease-out duration-150"
+                                        {{-- Bỏ class cart-dropdown-wrap/account-dropdown — cùng bug width:200px
+                                             + xung đột hover CSS thuần với x-show của Alpine, xem giải thích
+                                             đầy đủ ở share/_theme_switcher.blade.php. Áp sát trigger
+                                             (top-full, không margin), đệm khoảng cách bằng padding trong panel. --}}
+                                        <div class="absolute right-0 top-full z-50 w-56 rounded-lg border border-gray-100 bg-white pb-2 pt-3 shadow-lg"
+                                            x-show="open" x-cloak style="display:none"
+                                            x-transition:enter="transition ease-out duration-150"
                                             x-transition:enter-start="opacity-0 -translate-y-1"
                                             x-transition:enter-end="opacity-100 translate-y-0">
                                             <ul class="list-none m-0 p-0">
                                                 <li>
                                                     <a href="{{ route('account.index') }}" title="Thông tin tài khoản"
-                                                        class="flex items-center gap-2 px-4 py-2 hover:bg-gray-50">
+                                                        class="flex items-center gap-2 whitespace-nowrap px-4 py-2 hover:bg-gray-50">
                                                         <i class="fi fi-rs-user"></i> Tài khoản của tôi
                                                     </a>
                                                 </li>
                                                 <li>
                                                     <a href="{{ route('order.search') }}" title="Theo dõi đơn hàng"
-                                                        class="flex items-center gap-2 px-4 py-2 hover:bg-gray-50">
+                                                        class="flex items-center gap-2 whitespace-nowrap px-4 py-2 hover:bg-gray-50">
                                                         <i class="fi fi-rs-location-alt"></i> Theo dõi đơn hàng
                                                     </a>
                                                 </li>
                                                 <li>
                                                     <a href="{{ route('account.wishlist') }}" title="Sản phẩm yêu thích"
-                                                        class="flex items-center gap-2 px-4 py-2 hover:bg-gray-50">
+                                                        class="flex items-center gap-2 whitespace-nowrap px-4 py-2 hover:bg-gray-50">
                                                         <i class="fi fi-rs-heart"></i> Sản phẩm yêu thích
                                                     </a>
                                                 </li>
                                                 <li>
                                                     <a href="{{ route('account.logout') }}" title="Đăng xuất"
-                                                        class="flex items-center gap-2 px-4 py-2 hover:bg-gray-50">
+                                                        class="flex items-center gap-2 whitespace-nowrap px-4 py-2 hover:bg-gray-50">
                                                         <i class="fi fi-rs-sign-out"></i> Đăng xuất
                                                     </a>
                                                 </li>
@@ -119,7 +164,21 @@
                             <span class="burger-icon-bottom"></span>
                         </button>
                     </div>
-                    <div class="header-action-right block lg:hidden">
+                    {{-- CỐ Ý bỏ class `header-action-right` (dùng `mobile-action-right`
+                         thay thế) — main.css có
+                         `@media(min-width:1200px){.header-action-right{display:flex}}`
+                         (dòng ~8463), CSS THƯỜNG (không @layer) nên LUÔN thắng
+                         `lg:hidden` của Tailwind ở ≥1200px bất kể specificity/thứ tự nạp
+                         file (theo cascade layers spec, unlayered thắng layered — đã thử
+                         `lg:!hidden` và một luật CSS thường viết tay ở app.css, cả hai
+                         đều KHÔNG ăn thua trong môi trường dev hiện tại, nghi HMR của
+                         Tailwind Vite plugin không invalidate lại đúng cho các thay đổi
+                         chỉnh trực tiếp trong app.css). Cách chắc ăn nhất: đừng đụng độ
+                         tên class với main.css — cụm yêu thích/giỏ hàng mobile-only này
+                         không cần style riêng gì từ `.header-action-right` (chỉ mượn tên),
+                         nên đổi hẳn sang tên khác là xong, không phải thắng cuộc chiến
+                         specificity nào cả. --}}
+                    <div class="mobile-action-right block lg:hidden">
                         <div class="header-action-2 flex items-center gap-3">
                             <div class="header-action-icon-2 relative">
                                 <a href="{!! route('account.wishlist') !!}" class="block">
@@ -128,8 +187,7 @@
                                 </a>
                             </div>
                             <div class="header-action-icon-2 relative">
-                                <a class="mini-cart-icon block" href="{{ route('checkout.cart') }}"
-                                    title="Giỏ hàng">
+                                <a class="mini-cart-icon block" href="{{ route('checkout.cart') }}" title="Giỏ hàng">
                                     <img alt="Giỏ hàng" src="/web/images/theme/icons/icon-cart.svg">
                                     <span class="pro-count white" id="cart-total" data-cart-badge>0</span>
                                 </a>
@@ -230,152 +288,4 @@
         </div>
     </div>
 </div>
-<style>
-    [x-cloak] {
-        display: none !important;
-    }
-</style>
-<script>
-    (function() {
-        var badgeSeq = 0;
-
-        function setBadges(sel, value) {
-            document.querySelectorAll(sel).forEach(function(el) {
-                el.textContent = value;
-            });
-        }
-
-        function hydrateBadges() {
-            var seq = ++badgeSeq;
-            fetch('{{ route('cart.badge') }}', {
-                    headers: {
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'same-origin',
-                    cache: 'no-store'
-                })
-                .then(function(r) {
-                    return r.ok ? r.json() : null;
-                })
-                .then(function(json) {
-                    if (seq !== badgeSeq) return;
-                    var d = (json && json.data) || null;
-                    if (!d) return;
-                    setBadges('[data-cart-badge]', d.cart);
-                    setBadges('[data-wishlist-badge]', d.wishlist);
-                })
-                .catch(function() {});
-        }
-
-
-        function bindMutationSync() {
-            if (!window.jQuery) return;
-            window.jQuery(document).ajaxComplete(function(e, xhr, settings) {
-                var url = (settings && settings.url) || '';
-                if (/add-to-cart|checkout\/(add|update|remove|cart)|wish/i.test(url)) {
-                    hydrateBadges();
-                }
-            });
-        }
-
-        function markActiveMenu() {
-            var path = location.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
-            if (!path) return;
-            document.querySelectorAll('.main-menu a[data-link], .mobile-menu-wrap a[data-link]')
-                .forEach(function(a) {
-                    if (a.getAttribute('data-link') === path) a.classList.add('active');
-                });
-        }
-
-        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-        var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
-
-        function applyToken(token) {
-            if (!token) return;
-            csrfToken = token;
-            document.querySelectorAll('meta[name="csrf-token"]').forEach(function(m) {
-                m.setAttribute('content', token);
-            });
-            document.querySelectorAll('input[name="_token"]').forEach(function(i) {
-                i.value = token;
-            });
-        }
-
-        function refreshCsrf() {
-            fetch('{{ route('csrf.index') }}', {
-                    headers: {
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'same-origin',
-                    cache: 'no-store'
-                })
-                .then(function(r) {
-                    return r.ok ? r.json() : null;
-                })
-                .then(function(json) {
-                    applyToken(json && json.data);
-                })
-                .catch(function() {});
-        }
-
-        function bindCsrfRetry() {
-            if (!window.jQuery) return;
-            var $ = window.jQuery;
-
-            $.ajaxPrefilter(function(options) {
-                var method = (options.type || options.method || 'GET').toUpperCase();
-                if (method !== 'GET' && method !== 'HEAD' && csrfToken) {
-                    options.headers = options.headers || {};
-                    options.headers['X-CSRF-TOKEN'] = csrfToken; // ghi đè token cũ handler set
-                }
-            });
-
-            $(document).ajaxError(function(event, jqXHR, settings) {
-                if (jqXHR.status !== 419) return;
-                if (settings.headers && settings.headers['X-CSRF-Retry']) return; // đã retry 1 lần
-                fetch('{{ route('csrf.index') }}', {
-                        headers: {
-                            'Accept': 'application/json'
-                        },
-                        credentials: 'same-origin',
-                        cache: 'no-store'
-                    })
-                    .then(function(r) {
-                        return r.ok ? r.json() : null;
-                    })
-                    .then(function(json) {
-                        var token = json && json.data;
-                        if (!token) return;
-                        applyToken(token);
-                        var retry = $.extend({}, settings);
-                        retry.headers = $.extend({}, settings.headers, {
-                            'X-CSRF-TOKEN': token,
-                            'X-CSRF-Retry': '1'
-                        });
-                        if (typeof retry.data === 'string' && /(^|&)_token=/.test(retry.data)) {
-                            retry.data = retry.data.replace(/(^|&)_token=[^&]*/, '$1_token=' +
-                                encodeURIComponent(token));
-                        } else if (retry.data && typeof retry.data === 'object' && '_token' in retry
-                            .data) {
-                            retry.data._token = token;
-                        }
-                        $.ajax(retry);
-                    })
-                    .catch(function() {});
-            });
-        }
-
-        function init() {
-            refreshCsrf();
-            bindCsrfRetry();
-            hydrateBadges();
-            markActiveMenu();
-            bindMutationSync();
-        }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
-    })();
-</script>
+@include('web::share._badge_script')

@@ -10,6 +10,7 @@ class ProductFilter extends Base
     public $primaryKey = ['product_id', 'filter_value_id'];
     public $incrementing = false;
     public $timestamps = false;
+    protected $fillable = ['product_id', 'filter_id', 'filter_value_id'];
 
     public function filterValue()
     {

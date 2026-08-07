@@ -6,30 +6,6 @@ use App\Jobs\ProcessImageUpload;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Sinh sẵn thumbnail cho ảnh sản phẩm TRÊN R2 (không resize lúc render).
- *
- * Tiền đề: ảnh GỐC đã ở R2 (đã rclone copy). Command gom mọi path ảnh DISTINCT
- * trong DB rồi dispatch ProcessImageUpload cho từng path — job đọc gốc từ R2,
- * sinh các size trang list ('config/media.php') và ghi lại lên R2.
- *
- * Nguồn path (mọi bảng có cột ảnh được render qua thumbnail()):
- *   - product.image          ảnh chính card list
- *   - product_image.image    gallery (gồm cả gallery gắn variant)
- *   - product_variant.image  swatch/ảnh variant (variantSwatchImages,
- *                            variant_image trong ProductOptionService, cart)
- *   - option_value.image     swatch fallback khi variant không có ảnh riêng
- *                            ($ov->image trong buildImageAndOptionValues, cart)
- *
- * Dedupe theo path vì seed thường tái dùng chung một pool ảnh → tránh sinh
- * lại cùng thumbnail hàng nghìn lần. Job idempotent (bỏ qua nếu thumb đã có).
- *
- * YÊU CẦU: disk đích phải trỏ R2 — đặt IMAGE_DISK_DRIVER=s3 + AWS_* khi chạy.
- *
- *   php artisan images:migrate-r2 --dry-run     # đếm trước
- *   php artisan images:migrate-r2 --sync        # chạy inline, không cần worker
- *   php artisan images:migrate-r2               # đẩy vào queue (nhớ queue:work)
- */
 class MigrateImagesToR2 extends Command
 {
     protected $signature = 'images:migrate-r2
@@ -46,12 +22,13 @@ class MigrateImagesToR2 extends Command
         $sourceDisk = (string) ($this->option('source') ?: $targetDisk);
         $sync       = (bool) $this->option('sync');
         $dryRun     = (bool) $this->option('dry-run');
-
         $paths = collect()
             ->merge($this->distinctImages('product'))
             ->merge($this->distinctImages('product_image'))
             ->merge($this->distinctImages('product_variant'))
             ->merge($this->distinctImages('option_value'))
+            ->merge($this->distinctImages('blog'))
+            ->merge($this->distinctImages('banner_value'))
             ->map(fn ($p) => ltrim(str_replace('\\', '/', (string) $p), '/'))
             ->filter(fn ($p) => $p !== '' && ! str_starts_with($p, 'http'))
             ->unique()
@@ -68,7 +45,6 @@ class MigrateImagesToR2 extends Command
 
         $bar = $this->output->createProgressBar($paths->count());
         $bar->start();
-
         foreach ($paths as $path) {
             $sync
                 ? ProcessImageUpload::dispatchSync($path, $sourceDisk, $targetDisk)
@@ -85,7 +61,6 @@ class MigrateImagesToR2 extends Command
         return self::SUCCESS;
     }
 
-    /** @return \Illuminate\Support\Collection<int, string> */
     private function distinctImages(string $table): \Illuminate\Support\Collection
     {
         return DB::table($table)

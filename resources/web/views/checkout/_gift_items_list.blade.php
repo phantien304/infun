@@ -1,10 +1,3 @@
-{{--
-    Shopee-style "Quà tặng kèm" section trong danh sách SP cart/checkout.
-    Read-only — gift items KHÔNG có nút edit qty / remove. User muốn đổi quà
-    phải qua modal pick.
-
-    Input: $giftItems (array)
---}}
 @if (! empty($giftItems))
     <div class="mt-3 mb-3 border rounded p-3 bg-pink-50">
         <div class="flex items-center gap-2 mb-3">

@@ -9,4 +9,5 @@ class OrdersTotal extends Base
     protected $table = 'orders_total';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = ['order_id', 'code', 'title', 'value', 'sort_order'];
 }

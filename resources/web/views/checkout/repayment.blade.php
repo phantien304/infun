@@ -68,10 +68,6 @@
                                         @php $products = $entity->ordersProducts;@endphp
                                         @foreach ($products as $product)
                                             @php
-                                                // Product có thể đã bị xoá / hết hiệu lực (eager-load dateAvailable
-                                                // ở OrderRepository::getOrderForUser) → fallback "#" cho URL +
-                                                // ảnh placeholder. Relation `description` (KHÔNG còn
-                                                // `productDescription` sau refactor cluster).
                                                 $productEntity = $product->product ?? null;
                                                 $productDescription = $productEntity?->description;
                                                 $productUrl = '#';
@@ -115,11 +111,6 @@
                                                                 @if (count($product->ordersProductOptions))
                                                                     @foreach ($product->ordersProductOptions as $opt)
                                                                         @php
-                                                                            // Schema mới luôn ghi variation = 2
-                                                                            // (CreateOrderService) — block variation == 1
-                                                                            // dưới đây chỉ phục vụ order legacy còn lưu
-                                                                            // children serialize. Dữ liệu hỏng có thể
-                                                                            // throw → wrap try/catch để không phá page.
                                                                             $child = [];
                                                                             if ((int) $opt->variation === 1 && filled($opt->children)) {
                                                                                 try {

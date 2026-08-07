@@ -98,26 +98,14 @@ class Base extends Model
 
     public function save(array $options = [])
     {
-        $attrs = $this->getAttributes();
-        $ids = (array)$this->getKeyName();
-        $update = true;
-        foreach ($ids as $id) {
-            $id = $id ? $id : 'id';
-            if (!isset($attrs[$id])) {
-                $update = false;
-                unset($attrs[$id]);
-            }
-        }
         if ($this->allowBlankField) {
             foreach ($this->getFillable() as $field) {
-                if (isset($attrs[$field]) || in_array($field, $this->getExceptAllowBlankField())) {
+                if (isset($this->attributes[$field]) || in_array($field, $this->getExceptAllowBlankField())) {
                     continue;
                 }
-                $attrs[$field] = '';
+                $this->attributes[$field] = '';
             }
         }
-        $update && $this->allowFillActionAt() ? $attrs[getSystemConfig('updated_at_column.field')] = now()->toDateTimeString() : null;
-        $this->setRawAttributes([])->fill($attrs);
         return parent::save($options);
     }
 

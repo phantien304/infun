@@ -28,8 +28,12 @@ Tặng khi đơn chuyển sang trạng thái hoàn tất, thu hồi khi hủy �
 - [x] Repo hỗ trợ thêm vào `VoucherRepository`(+interface): `createVoucher`,
   `revokeUnused`, `reactivateRevoked` (pattern `markFullyUsed` có sẵn).
 - ⚠ **Voucher tặng KHÔNG set `order_id`** (khác plan gốc): `resolveVoucher` coi
-  voucher có `order_id` là "voucher MUA trong đơn" → đòi link `orders_voucher`
-  (legacy) → sẽ không redeem được. Truy vết đơn gốc = `voucher_reward_grant.order_id`.
+  voucher có `order_id` là "voucher MUA trong đơn" → đòi đơn nguồn ở trạng thái
+  hoàn tất → voucher tặng sẽ không redeem được. Truy vết đơn gốc =
+  `voucher_reward_grant.order_id`.
+  *(Cập nhật 2026-08-03: check link `orders_voucher` legacy đã bị bỏ cùng bảng
+  đó; ràng buộc còn lại chỉ là "đơn `voucher.order_id` phải complete" — kết luận
+  trên KHÔNG đổi.)*
 - Mail: hook `notifyGranted()` để sẵn — TODO Bước 3.
 
 ## Bước 2 — Observer nối vào luồng order ✅ (2026-07-17)

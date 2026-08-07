@@ -12,10 +12,20 @@ class UserGroup extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['productRewards', 'taxRateToUserGroups'];
+    protected $fillable = [
+        'approval',
+        'sort_order',
+        'deleted_at',
+    ];
 
     public function descriptions()
     {
         return $this->hasMany(UserGroupDescription::class, 'user_group_id', 'id');
+    }
+
+    public function description()
+    {
+        return $this->hasOne(UserGroupDescription::class, 'user_group_id', 'id')->forLocale();
     }
 
     public function productRewards()
@@ -23,9 +33,9 @@ class UserGroup extends Base
         return $this->hasMany(ProductReward::class, 'user_group_id', 'id');
     }
 
-    public function productDiscounts()
+    public function productVariantDiscounts()
     {
-        return $this->hasMany(ProductDiscount::class, 'user_group_id', 'id');
+        return $this->hasMany(ProductVariantDiscount::class, 'user_group_id', 'id');
     }
 
     public function taxRateToUserGroups()

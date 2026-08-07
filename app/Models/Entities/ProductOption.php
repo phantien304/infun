@@ -13,6 +13,7 @@ class ProductOption extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['productOptionValues'];
+    protected $fillable = ['product_id', 'option_id', 'value', 'required', 'price', 'deleted_at'];
 
     public function option()
     {

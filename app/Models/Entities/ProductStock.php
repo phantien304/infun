@@ -10,6 +10,10 @@ class ProductStock extends Base
     protected $table = 'product_stock';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'product_variant_id', 'warehouse_id', 'on_hand', 'reserved',
+        'subtract', 'inventory_policy', 'version',
+    ];
 
     protected $casts = [
         'on_hand'          => 'integer',

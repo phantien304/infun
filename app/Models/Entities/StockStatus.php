@@ -9,6 +9,16 @@ class StockStatus extends Base
 {
     use SoftDeletes;
     protected $table = 'stock_status';
-    protected $primaryKeyAutoIncrement = ['id', 'language_code'];
+    protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+
+    public function descriptions()
+    {
+        return $this->hasMany(StockStatusDescription::class, 'stock_status_id', 'id');
+    }
+
+    public function description()
+    {
+        return $this->hasOne(StockStatusDescription::class, 'stock_status_id', 'id')->forLocale();
+    }
 }

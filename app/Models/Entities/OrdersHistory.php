@@ -9,6 +9,7 @@ class OrdersHistory extends Base
     protected $table = 'orders_history';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = ['order_id', 'order_status_id', 'user_id', 'notify', 'comment'];
 
     public function ordersStatus()
     {

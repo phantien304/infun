@@ -6,6 +6,10 @@ use App\Models\Entities\Menu;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\MenuRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class MenuRepository extends QueryableRepository implements MenuRepositoryInterface
 {
@@ -16,10 +20,16 @@ class MenuRepository extends QueryableRepository implements MenuRepositoryInterf
         return Menu::class;
     }
 
-    public function getMenuByPosition($position = 'top')
+    public function getMenuByPosition($position = 'top', ?string $theme = null): Collection
     {
         return $this->resetModel()
             ->where('position', $position)
+            ->where(function ($q) use ($theme) {
+                $q->whereNull('theme');
+                if ($theme !== null && $theme !== '') {
+                    $q->orWhere('theme', $theme);
+                }
+            })
             ->with([
                 'menuValues.description'
             ])
@@ -27,19 +37,90 @@ class MenuRepository extends QueryableRepository implements MenuRepositoryInterf
     }
 
     /**
-     * Menu cache thực sự ghi ở `App\Http\Supports\MenusClient::getMenus()`
-     * với key `getCoreConfig('cache.menu') . locale` — NHƯNG invalidation
-     * vẫn thuộc trách nhiệm MenuRepository theo convention "repo sở hữu
-     * cache lifecycle của entity của nó", để `CacheFlushObserver` (đăng ký
-     * cho Menu + MenuValue trong AppServiceProvider) có 1 chỗ duy nhất gọi.
-     *
-     * Dùng `forgetSystem` (không phải `forgetCache`) vì MenusClient ghi qua
-     * `CacheGate::systemStore()` — bypass-debug-exempt. Nếu xoá qua
-     * `forgetCache` (đi qua `store()` thường) → debug=1 sẽ no-op và cache
-     * menu cũ vẫn còn.
+     * KHÔNG dùng forgetSystem() ở đây — key thật (xem MenusClient::getMenus/
+     * getMenuTree) là `{base}{locale}_{theme|'default'}`, có thêm chiều
+     * "theme" mà forgetSystem() (chỉ lặp qua locale) không biết enumerate.
+     * Tự lặp locale × (theme hiện có + 'default') để khớp CHÍNH XÁC key đã
+     * build lúc set — quên sai key thì cache menu admin vừa sửa vẫn đứng
+     * yên tới hết TTL.
      */
     public function flushCache(): void
     {
-        $this->forgetSystem(getCoreConfig('cache.menu'));
+        $store    = \App\Helpers\CacheGate::systemStore();
+        $base     = getCoreConfig('cache.menu');
+        $themes   = array_merge(['default'], (array) config('theme.available', []));
+        $locales  = config('app.locales', [app()->getLocale()]);
+
+        foreach ($locales as $locale) {
+            foreach ($themes as $theme) {
+                $store->forget($base . $locale . '_' . $theme);
+                $store->forget($base . 'tree_' . $locale . '_' . $theme);
+            }
+        }
+    }
+
+    // ===================== CMS (admin) =====================
+
+    public function listForCms(Request $request): LengthAwarePaginator
+    {
+        $sort    = $request->input('sort') === 'title' ? 'title' : 'id';
+        $order   = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $deleted = (int) $request->input('deleted_at', -1); // -1 tất cả, 1 hiển thị, 0 đã xoá
+        $keyword = trim((string) $request->input('keyword', ''));
+        $perPage = max(1, (int) $request->input('per_page', 50));
+
+        $query = $this->resetModel()->newQuery();
+
+        if ($deleted === 0) {
+            $query->onlyTrashed();
+        } elseif ($deleted === -1) {
+            $query->withTrashed();
+        }
+
+        if ($keyword !== '') {
+            $query->where('title', 'like', '%' . $keyword . '%');
+        }
+
+        return $query->orderBy($sort, $order)->paginate($perPage);
+    }
+
+    public function getForCms(int $id): ?Menu
+    {
+        return $this->resetModel()->withTrashed()->find($id);
+    }
+
+    /**
+     * Menu KHÔNG có bảng dịch (`menu` chỉ 1 bản ghi/menu, không đa ngôn
+     * ngữ) — khác Category/Blog, không có vòng lặp sync *_descriptions.
+     */
+    public function saveFromCms(?Menu $menu, array $data): Menu
+    {
+        return DB::transaction(function () use ($menu, $data) {
+            $menu ??= new Menu();
+            $menu->title    = $data['title'] ?? $menu->title;
+            $menu->position = $data['position'] ?? $menu->position;
+            $menu->theme    = ! empty($data['theme']) ? $data['theme'] : null;
+            $menu->save();
+
+            return $menu;
+        });
+    }
+
+    public function deleteByIds(array $ids): int
+    {
+        return $this->resetModel()->whereIn('id', $ids)->delete();
+    }
+
+    public function restoreByIds(array $ids): int
+    {
+        return $this->resetModel()->withTrashed()->whereIn('id', $ids)->restore();
+    }
+
+    public function restoreById(int $id): ?Menu
+    {
+        $menu = $this->resetModel()->withTrashed()->find($id);
+        $menu?->restore();
+
+        return $menu;
     }
 }

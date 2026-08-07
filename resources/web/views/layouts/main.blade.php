@@ -14,6 +14,9 @@
         @yield('content')
     </main>
     @include('web::share.footer')
+    @if (request()->is('/'))
+        @include('web::share._theme_popup')
+    @endif
     @yield('script')
 </body>
 

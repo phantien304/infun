@@ -10,4 +10,10 @@ class BannerDescription extends Base
     protected $primaryKey = ['banner_id', 'language_code'];
     public $incrementing = false;
     public $timestamps = true;
+
+    protected $fillable = [
+        'banner_id',
+        'language_code',
+        'title',
+    ];
 }

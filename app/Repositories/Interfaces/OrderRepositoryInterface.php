@@ -25,7 +25,7 @@ interface OrderRepositoryInterface extends BaseRepositoryInterface
 
     public function upsertOrder(array $data): Orders;
 
-    public function appendHistory(int $orderId, int $statusId, ?int $userId = null): OrdersHistory;
+    public function appendHistory(int $orderId, int $statusId, ?int $userId = null, ?string $comment = null, bool $notify = false): OrdersHistory;
 
     public function createOrderItem(array $productData, array $optionsData): OrdersProduct;
 

@@ -8,6 +8,7 @@ use App\Repositories\Interfaces\OrderRepositoryInterface;
 use App\Repositories\Interfaces\UserPhoneRepositoryInterface;
 use App\Repositories\Interfaces\UserRepositoryInterface;
 use App\Services\Checkout\RefundService;
+use Illuminate\Support\Facades\Auth;
 
 class AccountService
 {
@@ -48,9 +49,16 @@ class AccountService
 
     public function changePassword(int $userId, string $newPassword): ?User
     {
-        return $this->userRepo->transaction(
+        $user = $this->userRepo->transaction(
             fn () => $this->userRepo->updatePasswordById($userId, $newPassword),
         );
+
+        if ($user) {
+            Auth::setUser($user);
+            Auth::logoutOtherDevices($newPassword);
+        }
+
+        return $user;
     }
 
     public function updateNewsletter(int $userId, bool $opted): ?User

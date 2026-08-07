@@ -16,10 +16,16 @@ class CachePage
 
     protected array $cacheableParams = ['page', 'per_page', 'sort', 'filter'];
 
+    protected array $neverCacheParams = ['theme'];
+
     protected array $cacheableFilterKeys = ['category_id', 'manufacturer_id', 'filter_value_id'];
 
     public function handle($request, Closure $next)
     {
+        if (! filter_var(env('PAGE_CACHE', false), FILTER_VALIDATE_BOOL)) {
+            return $next($request)->header('X-Cache', 'DISABLED');
+        }
+
         if (! $request->isMethod('get') || auth()->check()) {
             return $next($request);
         }
@@ -31,7 +37,9 @@ class CachePage
 
         $query = array_diff_key($request->query(), array_flip($this->ignoredQueryParams));
 
-        if ($this->isExcepted($request) || ! $this->isCacheableQuery($query)) {
+        if (array_intersect_key($query, array_flip($this->neverCacheParams))
+            || $this->isExcepted($request)
+            || ! $this->isCacheableQuery($query)) {
             return $next($request)->header('X-Cache', 'BYPASS');
         }
 
@@ -145,7 +153,9 @@ class CachePage
             (string) getCoreConfig('currency.base_code', 'VND'),
         ));
 
-        $signature = $request->path() . '|' . $locale . '|' . $currency;
+        $theme = \App\Helpers\ThemeManager::current() ?? 'base';
+
+        $signature = $request->path() . '|' . $locale . '|' . $currency . '|' . $theme;
         if (! empty($query)) {
             $signature .= '|' . $this->normalizeQuery($query);
         }

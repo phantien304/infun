@@ -10,6 +10,7 @@ class ProductIngredient extends Base
     public $primaryKey = ['product_id', 'ingredient_id'];
     public $incrementing = false;
     public $timestamps = false;
+    protected $fillable = ['product_id', 'ingredient_id'];
 
     public function ingredient()
     {

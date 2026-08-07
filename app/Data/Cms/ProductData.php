@@ -52,7 +52,6 @@ class ProductData extends Data
         public array $product_attributes,
         public array $product_images,
         public array $product_rewards,
-        public array $product_discounts,
         public array $product_options,
         public array $product_variants,
     ) {
@@ -71,9 +70,8 @@ class ProductData extends Data
             mpn: $p->mpn,
             location: $p->location,
             image: $p->image,
-            // accessor không fire → đọc thẳng default variant.
             price: ($v = $p->defaultVariant?->price) !== null ? (string) $v : null,
-            quantity: $p->quantity !== null ? (string) $p->quantity : null,
+            quantity: ($q = $p->defaultVariant?->productStock?->on_hand) !== null ? (string) $q : null,
             minimum: ($m = $p->defaultVariant?->minimum) !== null ? (string) $m : null,
             badge: $p->badge,
             manufacturer_id: $p->manufacturer_id !== null ? (int) $p->manufacturer_id : null,
@@ -139,33 +137,44 @@ class ProductData extends Data
                 'user_group_id' => $r->user_group_id,
                 'points'        => $r->points,
             ])->values()->all(),
-            product_discounts: $p->productDiscounts->map(fn ($d) => [
-                'id'            => $d->id,
-                'user_group_id' => $d->user_group_id,
-                'quantity'      => $d->quantity,
-                'priority'      => $d->priority,
-                'price'         => $d->price,
-                'date_start'    => $d->date_start,
-                'date_end'      => $d->date_end,
-            ])->values()->all(),
-            product_options: $p->productOptions->map(function ($po) use ($p) {
-                $role = $po->option?->role ?? OptionRole::CustomField;
-                $valueIds = [];
-                if ($role->isVariant()) {
-                    $valueIds = $p->productVariants
-                        ->flatMap(fn ($v) => $v->productVariantAttributes)
-                        ->where('option_id', $po->option_id)
-                        ->pluck('option_value_id')
-                        ->unique()->values()->all();
-                }
-                return [
-                    'option_id'        => $po->option_id,
-                    'role'             => $role->value,
-                    'required'         => $po->required,
-                    'value'            => $po->value,
-                    'option_value_ids' => $valueIds,
-                ];
-            })->values()->all(),
+            product_options: (function () use ($p) {
+                $variantGroups = $p->productVariants
+                    ->flatMap(fn ($v) => $v->productVariantAttributes)
+                    ->filter(fn ($attr) => $attr->optionValue)
+                    ->groupBy('option_id')
+                    ->map(function ($attrs, $optionId) {
+                        $option = $attrs->first()->option;
+                        if (!$option || !$option->isVariant()) {
+                            return null;
+                        }
+                        $valueIds = $attrs->pluck('option_value_id')->unique()->values()->all();
+                        if (empty($valueIds)) {
+                            return null;
+                        }
+                        return [
+                            'option_id'        => (int) $optionId,
+                            'role'             => $option->role->value,
+                            'required'         => true,
+                            'value'            => null,
+                            'option_value_ids' => $valueIds,
+                        ];
+                    })
+                    ->filter()
+                    ->values()->all();
+
+                $customFieldGroups = $p->productOptions
+                    ->filter(fn ($po) => $po->option?->isCustomField() ?? false)
+                    ->map(fn ($po) => [
+                        'option_id'        => $po->option_id,
+                        'role'             => OptionRole::CustomField->value,
+                        'required'         => $po->required,
+                        'value'            => $po->value,
+                        'option_value_ids' => [],
+                    ])
+                    ->values()->all();
+
+                return array_merge($variantGroups, $customFieldGroups);
+            })(),
             product_variants: $p->productVariants->map(function ($v) {
                 $special = $v->productVariantSpecials
                     ?->firstWhere('user_group_id', 1);
@@ -192,11 +201,29 @@ class ProductData extends Data
                     'reserved'           => $reserved,
                     'available'          => max(0, $onHand - $reserved),
                     'inventory_policy'   => $policy,
+                    'stocks' => $stocks->map(fn ($s) => [
+                        'warehouse_id'     => (int) $s->warehouse_id,
+                        'on_hand'          => (int) $s->on_hand,
+                        'reserved'         => (int) $s->reserved,
+                        'available'        => max(0, (int) $s->on_hand - (int) $s->reserved),
+                        'inventory_policy' => $s->inventory_policy instanceof \App\Enums\StockPolicy
+                            ? $s->inventory_policy->value
+                            : (int) $s->inventory_policy,
+                    ])->values()->all(),
                     'special_price'      => $special?->price !== null ? (string) $special->price : '',
                     'special_date_start' => $special?->date_start?->toDateString() ?? '',
                     'special_date_end'   => $special?->date_end?->toDateString() ?? '',
                     'option_value_ids'   => $v->productVariantAttributes
                         ->pluck('option_value_id')->values()->all(),
+                    'discounts' => ($v->productVariantDiscounts ?? collect())->map(fn ($d) => [
+                        'id'            => $d->id,
+                        'user_group_id' => $d->user_group_id,
+                        'quantity'      => $d->quantity,
+                        'priority'      => $d->priority,
+                        'price'         => (string) $d->price,
+                        'date_start'    => $d->date_start?->toDateString() ?? '',
+                        'date_end'      => $d->date_end?->toDateString() ?? '',
+                    ])->values()->all(),
                 ];
             })->values()->all(),
         );

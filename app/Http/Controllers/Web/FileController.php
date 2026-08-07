@@ -32,7 +32,7 @@ class FileController extends Controller
     protected function validationError(): ?string
     {
         $validator = Validator::make(request()->all(), [
-            'file' => ['required', 'image', 'mimes:jpeg,jpg,png', 'mimetypes:image/jpeg,image/png', 'max:2048'],
+            'file' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'mimetypes:image/jpeg,image/png,image/webp', 'max:2048'],
         ]);
 
         return $validator->fails() ? $validator->errors()->first() : null;

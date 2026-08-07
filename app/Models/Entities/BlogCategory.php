@@ -11,6 +11,13 @@ class BlogCategory extends Base
     protected $table = 'blog_category';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'parent_id',
+        'banner_id',
+        'icon',
+        'image',
+        'deleted_at'
+    ];
 
     public function description()
     {

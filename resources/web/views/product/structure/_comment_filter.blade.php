@@ -1,15 +1,3 @@
-{{--
-    Filter chips + sort. KHÔNG dùng href submit form GET — toàn bộ tương tác
-    đi qua AJAX (xem _comment_script.blade.php).
-
-    Trạng thái filter chứa trong các data-attr trên section + chip:
-      data-review-filter='{"rating":5}'
-      data-review-filter='{"has_media":1}'
-      data-review-filter='{"tag":"fast_delivery"}'  (toggle, multi-select)
-      data-review-clear="1"                          (chip "Tất cả")
-    Sort token đồng bộ với repo: review.helpful_count / review.created_at / review.rating
-    (prefix bảng để disambiguate trong query JOIN của QueryableRepository).
---}}
 <div class="review-filter" id="reviewFilterBar">
     <div class="rf-row">
         <button type="button" class="rf-chip is-active" data-review-clear="1">

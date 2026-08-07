@@ -10,6 +10,7 @@ use App\Models\Entities\ProductOption;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
 use App\Models\Entities\ProductVariantAttribute;
+use App\Models\Entities\ProductVariantDiscount;
 use App\Models\Entities\ProductVariantSpecial;
 use App\Services\Stock\WarehouseService;
 
@@ -36,6 +37,10 @@ class ProductVariantWriter
                 continue;
             }
 
+            if (OptionRole::fromInput($o['role'] ?? null)->isVariant()) {
+                continue;
+            }
+
             $po = ProductOption::withTrashed()
                 ->where('product_id', $product->id)
                 ->where('option_id', $optionId)
@@ -44,9 +49,7 @@ class ProductVariantWriter
             $po->product_id = $product->id;
             $po->option_id  = $optionId;
             $po->required   = ! empty($o['required']) ? 1 : 0;
-            $po->value = OptionRole::fromInput($o['role'] ?? null)->isVariant()
-                ? null
-                : ($o['value'] ?? null);
+            $po->value = $o['value'] ?? null;
             $po->price = ($o['price'] ?? '') !== '' ? (float) $o['price'] : 0;
             $po->deleted_at = null;
             $po->save();
@@ -120,20 +123,10 @@ class ProductVariantWriter
                 $attr->save();
             }
 
-            $warehouseId = $this->warehouseService->defaultId();
-            $stock = ProductStock::where('product_variant_id', $variant->id)
-                ->where('warehouse_id', $warehouseId)
-                ->first() ?? new ProductStock();
-            $policy = StockPolicy::fromInput($v['inventory_policy'] ?? 0);
-            $stock->product_variant_id = $variant->id;
-            $stock->warehouse_id       = $warehouseId;
-            $stock->on_hand            = max(0, (int) ($v['on_hand'] ?? 0));
-            $stock->inventory_policy   = $policy;
-            // Giữ cột legacy `subtract` đồng bộ với policy: untracked = không trừ kho.
-            $stock->subtract           = $policy !== StockPolicy::Untracked;
-            $stock->save();
+            $this->syncVariantStocks($variant, $v);
 
             $this->syncVariantSpecial($product, $variant, $v);
+            $this->syncVariantDiscounts($product, $variant, $v);
         }
 
         if (! $hasDefault && ! empty($keepIds)) {
@@ -142,6 +135,45 @@ class ProductVariantWriter
 
         ProductVariant::where('product_id', $product->id)
             ->whereNotIn('id', $keepIds ?: [0])
+            ->delete();
+    }
+
+    protected function syncVariantStocks(ProductVariant $variant, array $v): void
+    {
+        $rows = $v['stocks'] ?? [];
+        if (empty($rows)) {
+            $rows = [[
+                'warehouse_id'     => $this->warehouseService->defaultId(),
+                'on_hand'          => $v['on_hand'] ?? 0,
+                'inventory_policy' => $v['inventory_policy'] ?? 0,
+            ]];
+        }
+
+        $keepWarehouseIds = [];
+
+        foreach ($rows as $row) {
+            $warehouseId = (int) ($row['warehouse_id'] ?? 0);
+            if (! $warehouseId) {
+                continue;
+            }
+
+            $stock = ProductStock::where('product_variant_id', $variant->id)
+                ->where('warehouse_id', $warehouseId)
+                ->first() ?? new ProductStock();
+
+            $policy = StockPolicy::fromInput($row['inventory_policy'] ?? 0);
+            $stock->product_variant_id = $variant->id;
+            $stock->warehouse_id       = $warehouseId;
+            $stock->on_hand            = max(0, (int) ($row['on_hand'] ?? 0));
+            $stock->inventory_policy   = $policy;
+            $stock->subtract           = $policy !== StockPolicy::Untracked;
+            $stock->save();
+
+            $keepWarehouseIds[] = $warehouseId;
+        }
+
+        ProductStock::where('product_variant_id', $variant->id)
+            ->whereNotIn('warehouse_id', $keepWarehouseIds ?: [0])
             ->delete();
     }
 
@@ -177,5 +209,48 @@ class ProductVariantWriter
         $special->date_start         = $start !== '' ? $start . ' 00:00:00' : null;
         $special->date_end           = $end !== '' ? $end . ' 23:59:59' : null;
         $special->save();
+    }
+
+    protected function syncVariantDiscounts(Product $product, ProductVariant $variant, array $v): void
+    {
+        $rows = $v['discounts'] ?? [];
+        $keepIds = [];
+
+        foreach ($rows as $row) {
+            $price = $row['price'] ?? '';
+            if ($price === '' || $price === null) {
+                continue;
+            }
+
+            $discount = null;
+            if (! empty($row['id'])) {
+                $discount = ProductVariantDiscount::withTrashed()
+                    ->where('product_variant_id', $variant->id)
+                    ->find($row['id']);
+            }
+            $discount ??= new ProductVariantDiscount();
+            if ($discount->exists && $discount->trashed()) {
+                $discount->restore();
+            }
+
+            $start = $row['date_start'] ?? '';
+            $end   = $row['date_end'] ?? '';
+
+            $discount->product_variant_id = $variant->id;
+            $discount->product_id         = $product->id;
+            $discount->user_group_id      = (int) ($row['user_group_id'] ?? 1);
+            $discount->quantity           = max(1, (int) ($row['quantity'] ?? 1));
+            $discount->priority           = (int) ($row['priority'] ?? 0);
+            $discount->price              = (float) $price;
+            $discount->date_start         = $start !== '' ? $start . ' 00:00:00' : null;
+            $discount->date_end           = $end !== '' ? $end . ' 23:59:59' : null;
+            $discount->save();
+
+            $keepIds[] = $discount->id;
+        }
+
+        ProductVariantDiscount::where('product_variant_id', $variant->id)
+            ->whereNotIn('id', $keepIds ?: [0])
+            ->delete();
     }
 }

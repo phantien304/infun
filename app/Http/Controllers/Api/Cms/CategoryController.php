@@ -7,63 +7,53 @@ use App\Http\Requests\Cms\CategoryRequest;
 use App\Models\Entities\Category;
 use App\Repositories\Interfaces\CategoryRepositoryInterface;
 use Illuminate\Http\Request;
+use Spatie\LaravelData\PaginatedDataCollection;
 
-/**
- * Category API (REST) cho CMS.
- * -----------------------------------------------------------
- * Controller chỉ điều phối: request → repository → DTO. KHÔNG chứa code
- * tương tác DB (query/transaction nằm ở CategoryRepository — house style).
- *
- * Response: App\Data\Cms\CategoryData (Spatie Data, snake_case).
- * Validate: CategoryRequest. Phân quyền: middleware cms.permission.
- * -----------------------------------------------------------
- */
 class CategoryController extends BaseCmsController
 {
     protected string $permission = 'category';
 
     public function __construct(
-        private readonly CategoryRepositoryInterface $repo
+        private readonly CategoryRepositoryInterface $categoryRepo
     ) {
     }
 
     public function index(Request $request)
     {
-        return CategoryData::collect($this->repo->listForCms($request));
+        return CategoryData::collect($this->categoryRepo->listForCms($request), PaginatedDataCollection::class);
     }
 
     public function store(CategoryRequest $request)
     {
-        $category = $this->repo->saveFromCms(null, $request->validated());
-
-        return response()->json(['data' => CategoryData::from($category)], 201);
+        $category = $this->categoryRepo->saveFromCms(null, $request->validated());
+        return respondCreated(CategoryData::from($category), 'category_created');
     }
 
     public function show(Category $category)
     {
-        return response()->json(['data' => CategoryData::from($category->load('descriptions'))]);
+        return respondSuccess(CategoryData::from($category->load('descriptions')));
     }
 
     public function update(CategoryRequest $request, Category $category)
     {
-        $category = $this->repo->saveFromCms($category, $request->validated());
+        $category = $this->categoryRepo->saveFromCms($category, $request->validated());
 
-        return response()->json(['data' => CategoryData::from($category)]);
+        return respondSuccess(CategoryData::from($category), 'category_updated');
     }
 
     public function destroy(Category $category)
     {
-        $this->repo->deleteByIds([$category->id]);
+        $this->categoryRepo->deleteByIds([$category->id]);
 
         return response()->noContent();
     }
 
     public function restore($id)
     {
-        $category = $this->repo->restoreById((int) $id);
+        $category = $this->categoryRepo->restoreById((int) $id);
         abort_if($category === null, 404);
 
-        return response()->json(['data' => CategoryData::from($category)]);
+        return respondSuccess(CategoryData::from($category), 'category_restored');
     }
 
     public function bulk(Request $request)
@@ -75,9 +65,9 @@ class CategoryController extends BaseCmsController
         ]);
 
         $affected = $data['action'] === 'delete'
-            ? $this->repo->deleteByIds($data['ids'])
-            : $this->repo->restoreByIds($data['ids']);
+            ? $this->categoryRepo->deleteByIds($data['ids'])
+            : $this->categoryRepo->restoreByIds($data['ids']);
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected]);
     }
 }

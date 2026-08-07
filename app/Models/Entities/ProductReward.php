@@ -10,6 +10,7 @@ class ProductReward extends Base
     protected $primaryKey = ['product_id', 'user_group_id'];
     public $incrementing = false;
     public $timestamps = false;
+    protected $fillable = ['product_id', 'user_group_id', 'points'];
 
     public function product()
     {

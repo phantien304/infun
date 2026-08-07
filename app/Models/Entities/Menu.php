@@ -12,6 +12,12 @@ class Menu extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['menuValues'];
+    protected $fillable = [
+        'title',
+        'position',
+        'theme',
+        'deleted_at'
+    ];
 
     public function menuValues()
     {

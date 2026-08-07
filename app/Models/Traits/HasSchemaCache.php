@@ -4,6 +4,8 @@ namespace App\Models\Traits;
 
 trait HasSchemaCache
 {
+    private const CACHE_TTL_HOURS = 6;
+
     protected static array $schemaCacheMemo = [];
 
     public function getTableColumnAndTypeList(): array
@@ -25,7 +27,7 @@ trait HasSchemaCache
             return $columns;
         }
 
-        cache()->forever($key, $columns);
+        cache()->put($key, $columns, now()->addHours(self::CACHE_TTL_HOURS));
 
         return static::$schemaCacheMemo[$key] = $columns;
     }
@@ -36,11 +38,6 @@ trait HasSchemaCache
 
         if (empty($fields)) {
             return array_keys($this->getTableColumnAndTypeList());
-        }
-
-        $updatedAt = getSystemConfig('updated_at_column.field');
-        if ($updatedAt) {
-            $fields[] = $updatedAt;
         }
 
         return $fields;

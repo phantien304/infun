@@ -1,14 +1,6 @@
 @php
     $special = $product->productVariantSpecial;
 @endphp
-{{--
-    Product card — KHÔNG còn col-* Bootstrap vì wrapper grid Tailwind đã lo
-    column responsive. Mỗi card chỉ là 1 grid item.
-    Class theme `.product-cart-wrap`, `.product-img-action-wrap`,
-    `.product-img-zoom`, `.product-badges*`, `.img-manufacture`,
-    `.product-content-wrap`, `.product-price`, `.old-price`, `.countdown-price`
-    styled trong main.css.
---}}
 <div class="product-cart-wrap mb-30">
     <div class="product-img-action-wrap">
         <div class="product-img product-img-zoom">
@@ -35,7 +27,6 @@
     </div>
 
     @if ($product->manufacturer && $product->manufacturer?->image)
-        {{-- Manufacturer logo chỉ hiện mobile (< lg) — desktop có tên ở dưới. --}}
         <div class="self-center block lg:hidden">
             <div class="img-manufacture flex justify-center">
                 <img alt="{{ $product->manufacturer->name }}" src="{{ $product->manufacturer->thumbnail(90, 43) }}"

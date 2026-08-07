@@ -168,14 +168,6 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             if (! $orderOk) {
                 return [];
             }
-
-            $linkOk = DB::table('orders_voucher')
-                ->where('order_id', $voucher->order_id)
-                ->where('voucher_id', $voucher->id)
-                ->exists();
-            if (! $linkOk) {
-                return [];
-            }
         }
 
         $usedDelta = (int) DB::table('voucher_history')

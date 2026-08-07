@@ -11,6 +11,11 @@ class BlogTag extends Base
     protected $table = 'blog_tag';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'background',
+        'sort_order',
+        'deleted_at'
+    ];
 
     public function description()
     {

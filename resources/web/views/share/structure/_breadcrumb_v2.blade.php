@@ -1,7 +1,3 @@
-{{--
-    Breadcrumb dạng minimal — chỉ navigation chain, không có title block.
-    Dùng ở checkout, account, product detail.
---}}
 @if(isset($breadcrumbs) && count($breadcrumbs))
     <div class="page-header breadcrumb-wrap">
         <div class="container mx-auto max-w-7xl px-4">

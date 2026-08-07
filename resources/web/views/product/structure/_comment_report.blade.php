@@ -1,14 +1,3 @@
-{{--
-    Modal báo cáo review — Alpine state, KHÔNG dùng Bootstrap modal.
-
-    Mở/đóng qua CustomEvent global:
-      window.dispatchEvent(new CustomEvent('open-report-modal', { detail: { reviewId } }))
-      window.dispatchEvent(new CustomEvent('close-report-modal'))
-
-    JS `_comment_script.blade.php` đã update:
-      - Click `.ri-btn--report` → dispatch open
-      - Submit thành công → dispatch close
---}}
 @auth
     <div x-data="{ open: false, reviewId: '' }"
          @open-report-modal.window="

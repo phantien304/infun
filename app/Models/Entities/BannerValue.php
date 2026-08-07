@@ -11,6 +11,16 @@ class BannerValue extends Base
     public $timestamps = true;
     protected static array $destroyRelations = ['bannerValueDescriptions'];
 
+    protected $fillable = [
+        'banner_id',
+        'link',
+        'sort_order',
+        'image',
+        'media_type',
+        'video_provider',
+        'video_url',
+    ];
+
     public function descriptions()
     {
         return $this->hasMany(BannerValueDescription::class, 'banner_value_id', 'id');

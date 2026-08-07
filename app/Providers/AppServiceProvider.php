@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Database\Eloquent\Model;
 use File;
 use Illuminate\Support\Str;
 
@@ -27,16 +28,32 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(\App\Services\Measurement\WeightService::class);
         $this->app->scoped(\App\Services\ConfigDbService::class);
         $this->app->scoped(\App\Services\Stock\WarehouseService::class);
+        $this->app->scoped(\App\Helpers\ThemeManager::class);
     }
 
     public function boot(): void
     {
+        Model::preventSilentlyDiscardingAttributes(! $this->app->isProduction());
         $this->optimizes('repository:cache', 'repository:clear', 'repositories');
         $this->registerViewNamespaces();
         $this->registerRouteMacros();
         $this->registerRateLimiters();
-        // $this->logSql();
+        $this->registerSuperAdminBypass();
+        $this->logSql();
         $this->registerObservers();
+    }
+
+    protected function registerSuperAdminBypass(): void
+    {
+        \Illuminate\Support\Facades\Gate::before(function ($user, string $ability) {
+            if (! $user instanceof \App\Models\Entities\User) {
+                return null;
+            }
+
+            return $user->hasRole(\App\Services\Cms\RoleWriteService::SUPER_ADMIN_ROLE, 'web')
+                ? true
+                : null;
+        });
     }
 
     protected function registerRateLimiters(): void
@@ -82,6 +99,10 @@ class AppServiceProvider extends ServiceProvider
     {
         View::addNamespace('web', resource_path('web/views'));
         View::addNamespace('cms', resource_path('cms/views'));
+
+        if ($this->app->runningInConsole()) {
+            \App\Helpers\ThemeManager::apply(config('theme.active'));
+        }
     }
 
     protected function registerObservers(): void
@@ -120,6 +141,7 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\Entities\Menu::class                  => [\App\Repositories\Interfaces\MenuRepositoryInterface::class],
             \App\Models\Entities\MenuValue::class             => [\App\Repositories\Interfaces\MenuRepositoryInterface::class],
             \App\Models\Entities\StoreReview::class           => [\App\Repositories\Interfaces\StoreReviewRepositoryInterface::class],
+            \App\Models\Entities\Warehouse::class              => [\App\Repositories\Interfaces\WarehouseRepositoryInterface::class],
         ];
 
         $prefix = defined('EVENT_MODEL_TYPE') ? getConstant('EVENT_MODEL_TYPE') : 'eloquent';

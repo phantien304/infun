@@ -12,6 +12,11 @@ class Warehouse extends Base
     protected $table = 'warehouse';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'code', 'name', 'address', 'zone_id', 'district_id', 'ward_id',
+        'telephone', 'priority', 'is_active', 'is_sellable',
+        'deleted_at',
+    ];
 
     protected $casts = [
         'priority'    => 'integer',

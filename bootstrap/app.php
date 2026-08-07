@@ -10,11 +10,6 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Sau LB (nginx/HAProxy/ALB) mọi request mang IP của proxy — phải
-        // trust X-Forwarded-* để request->ip() ra IP client thật (throttle
-        // đếm đúng từng khách, log đúng) và detect HTTPS đúng.
-        // '*' an toàn KHI app server chỉ nhận traffic từ LB (không expose
-        // thẳng ra internet). Prod muốn chặt hơn: liệt kê dải IP của LB.
         $middleware->trustProxies(at: '*');
 
         $middleware->append([
@@ -26,11 +21,16 @@ return Application::configure(basePath: dirname(__DIR__))
             App\Http\Middleware\VerifyCsrfToken::class,
             App\Http\Middleware\DetectArea::class,
             App\Http\Middleware\SetLocale::class,
+            App\Http\Middleware\ResolveTheme::class,
             App\Http\Middleware\TrackAffiliateRef::class,
+        ]);
+        $middleware->api(prepend: [
+            Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
         $middleware->alias([
             'check_js_request' => \App\Http\Middleware\CheckJsRequest::class,
             'auth' => \App\Http\Middleware\Authenticate::class,
+            'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
             'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
             'check_login' => \App\Http\Middleware\CheckLogin::class,
             'maintenance' => \App\Http\Middleware\Maintenance::class,

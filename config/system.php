@@ -11,5 +11,5 @@ return [
     'log_debug_filename' => 'debug',
     'tmp_upload_dir' => 'tmp_uploads',
     'media_dir' => 'media',
-    'sql_log' => env('SQL_LOG', true),
+    'sql_log' => env('SQL_LOG', false),
 ];

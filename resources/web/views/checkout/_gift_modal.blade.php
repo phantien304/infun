@@ -114,7 +114,6 @@
         return {
             show: false,
             loading: false,
-            // picks shape: { gift_id_X: [item_id_a, item_id_b] }
             picks: @json($gifts->mapWithKeys(fn($g) => [(int) $g->id => array_map('intval', $g->pickedItemIds)])->all()),
 
             open() {
@@ -136,7 +135,6 @@
                 } else {
                     if (limit !== null && this.picks[key].length >= limit) {
                         alert(@json(trans('messages.checkout.gift.js_max_per_gift')).replace('%s', limit));
-                        // Uncheck UI vì state không update.
                         event.target.checked = false;
                         return;
                     }

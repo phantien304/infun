@@ -11,6 +11,12 @@ class OrdersProduct extends Base
     public $timestamps = true;
     protected static array $destroyRelations = ['ordersProductOptions'];
 
+    // Khai báo thật 2026-08-03 — xem docs/SCHEMA-CACHE-FILLABLE.md.
+    protected $fillable = [
+        'order_id', 'product_id', 'product_variant_id', 'name', 'model',
+        'quantity', 'price', 'total', 'tax', 'reward',
+    ];
+
     public function ordersProductOptions()
     {
         return $this->hasMany(OrdersProductOption::class, 'order_product_id', 'id');

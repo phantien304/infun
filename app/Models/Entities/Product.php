@@ -17,6 +17,15 @@ class Product extends Base implements Auditable
 
     protected $table = 'product';
     protected $primaryKeyAutoIncrement = 'id';
+    protected $fillable = [
+        'model', 'sku', 'upc', 'ean', 'jan', 'isbn', 'mpn', 'location',
+        'image', 'badge', 'date_available', 'link_sale', 'link_sale_custom',
+        'manufacturer_id', 'tax_class_id', 'stock_status_id', 'shipping',
+        'subtract', 'is_add_cart', 'is_custom', 'is_review',
+        'length', 'width', 'height', 'length_class_id',
+        'weight', 'weight_class_id', 'points', 'sort_order', 'has_variants',
+        'deleted_at',
+    ];
     protected $auditExclude = [
         'viewed', 'updated_at',
         'rating_avg', 'rating_sum', 'review_count', 'rating_distribution', 'rating_updated_at',
@@ -26,7 +35,6 @@ class Product extends Base implements Auditable
     protected static array $destroyRelations = [
         'productAttributes',
         'productCategories',
-        'productDiscounts',
         'productDrafts',
         'productFilters',
         'productImages',
@@ -109,11 +117,6 @@ class Product extends Base implements Auditable
         return $this->hasMany(ProductImage::class, 'product_id', 'id');
     }
 
-    public function productDiscounts()
-    {
-        return $this->hasMany(ProductDiscount::class, 'product_id', 'id');
-    }
-
     public function description()
     {
         return $this->hasOne(ProductDescription::class, 'product_id', 'id')->forLocale();
@@ -182,7 +185,7 @@ class Product extends Base implements Auditable
 
     public function stockStatus()
     {
-        return $this->hasOne(StockStatus::class, 'id', 'stock_status_id')->forLocale();
+        return $this->hasOne(StockStatusDescription::class, 'stock_status_id', 'stock_status_id')->forLocale();
     }
 
     public function weightClass()

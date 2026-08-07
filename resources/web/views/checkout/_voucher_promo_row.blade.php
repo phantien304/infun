@@ -1,9 +1,3 @@
-{{--
-    Promo row "Thẻ quà tặng" (voucher gift card).
-    Input:
-      $myVouchers (Collection<VoucherDTO>) — chỉ có khi user logged in
-      $appliedVoucherCodes (array<string>)
---}}
 @php
     $appliedCount = is_array($appliedVoucherCodes ?? null) ? count($appliedVoucherCodes) : 0;
     $myRedeemableCount = isset($myVouchers) ? $myVouchers->where('redeemable', true)->count() : 0;

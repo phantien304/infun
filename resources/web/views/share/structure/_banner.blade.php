@@ -1,10 +1,3 @@
-{{--
-    Banner slider chung — variant của trang chủ với subscribe form, background
-    image full-bleed. Slick init `.hero-slider-1` ở style.js.
-    Class theme `.home-slider`, `.single-hero-slider`, `.slider-content`,
-    `.form-subcriber`, `.noti-subcriber`, `.slider-arrow.hero-slider-1-arrow`
-    styled main.css.
---}}
 @section('banner')
     @foreach($banners as $banner)
         <section class="home-slider relative mb-30">

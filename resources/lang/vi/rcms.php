@@ -232,6 +232,8 @@ return [
     'DeleteCategory' => 'Xóa danh mục',
     'CreateMenuValue' => 'Tạo menu value',
     'EditMenuValue' => 'Sửa menu value',
+    'ItemDeleted' => 'Đã xoá',
+    'ItemDeletedWarning' => 'Đối tượng liên kết (danh mục/sản phẩm/...) đã bị xoá — link này đang chết ngoài site.',
     'UpdateOrder' => 'Cập nhật thứ tự',
     'Role' => 'Phân quyền',
     'RoleList' => 'Danh sách phân quyền',

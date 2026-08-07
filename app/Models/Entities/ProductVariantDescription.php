@@ -10,4 +10,5 @@ class ProductVariantDescription extends Base
     protected $primaryKey = ['product_variant_id', 'language_code'];
     public $incrementing = false;
     public $timestamps = true;
+    protected $fillable = ['product_variant_id', 'language_code', 'label', 'note'];
 }

@@ -54,6 +54,15 @@ php artisan optimize:clear >/dev/null 2>&1 || true
 if [ "${RUN_MIGRATIONS:-0}" = "1" ]; then
     echo "[entrypoint] RUN_MIGRATIONS=1 → php artisan migrate --force"
     php artisan migrate --force --isolated || true
+
+    # Đồng bộ sp_permissions với registry App\Enums\CmsPermissionEntity
+    # (docs/ROLE-PERMISSION-PLAN.md Phase 1) — PHẢI sau migrate (bảng
+    # sp_permissions phải tồn tại), PHẢI trước config:cache (không liên quan
+    # config nhưng gom cùng nhóm "việc 1 lần lúc migrate" cho dễ đọc log).
+    # Idempotent — an toàn chạy lại mỗi lần container khởi động với
+    # RUN_MIGRATIONS=1, kể cả khi không có migration mới.
+    echo "[entrypoint] permission:sync"
+    php artisan permission:sync || true
 fi
 
 php artisan config:cache

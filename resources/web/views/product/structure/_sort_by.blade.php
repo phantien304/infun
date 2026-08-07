@@ -1,9 +1,3 @@
-{{--
-    Sort + per-page dropdowns. Class theme `.sort-by-product-area`,
-    `.sort-by-cover`, `.sort-by-dropdown` styled main.css với hover CSS để
-    show/hide dropdown — KHÔNG cần Alpine. Tailwind chỉ thêm gap + flex
-    wrapper cho 2 group nằm cạnh.
---}}
 <div class="sort-by-product-area flex items-center gap-3 flex-wrap">
     <div class="sort-by-cover relative mr-10">
         <div class="sort-by-product-wrap flex items-center gap-1">

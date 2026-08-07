@@ -3,20 +3,6 @@
 /*
 |--------------------------------------------------------------------------
 | Cross-Origin Resource Sharing (CORS) Configuration
-|--------------------------------------------------------------------------
-|
-| Cho phép CMS chạy ở origin riêng (cms.infun.test) gọi API của Laravel
-| ở infun.test. Laravel 12 đã nạp sẵn middleware HandleCors toàn cục, chỉ
-| cần file config này để khai báo origin được phép.
-|
-| 'paths' = các URL chịu CORS. API CMS nằm dưới /rcms (xem
-| VITE_API_BASE_URL của infun_cms) -> khớp 'rcms/*'. Endpoint upload cũ
-| '/vcms/file/save' (nếu còn dùng) được thêm tường minh.
-|
-| supports_credentials = true để sẵn sàng cho auth bằng session-cookie
-| (cần withCredentials=true ở frontend + SESSION_DOMAIN=.infun.test).
-| Khi bật credentials, allowed_origins KHÔNG được dùng '*', nên ta liệt
-| kê origin tường minh bên dưới.
 |
 */
 
@@ -29,12 +15,15 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'http://cms.infun.test',
-        'https://cms.infun.test',
-        'http://cms.infun.co',
-        'https://cms.infun.co',
-    ],
+    'allowed_origins' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', env('CORS_ALLOWED_ORIGINS', implode(',', [
+            'http://cms.infun.test',
+            'https://cms.infun.test',
+            'http://cms.infun.co',
+            'https://cms.infun.co',
+        ]))),
+    ))),
 
     'allowed_origins_patterns' => [],
 

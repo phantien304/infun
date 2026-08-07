@@ -15,6 +15,18 @@ class Orders extends Base implements Auditable
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected $auditExclude = ['fee', 'updated_at'];
+
+    protected $fillable = [
+        'invoice_no', 'invoice_prefix', 'app_trans_id', 'zp_refund_id', 'zp_trans_id',
+        'carrier_order_id', 'user_id', 'user_address_id', 'full_name', 'email',
+        'telephone', 'address', 'country', 'country_id', 'zone', 'zone_id',
+        'district', 'district_id', 'ward', 'ward_id', 'payment_method', 'payment_code',
+        'carrier_code', 'comment', 'voucher', 'coupon', 'length_class_id', 'width',
+        'height', 'length', 'weight_class_id', 'weight', 'total', 'order_status_id',
+        'affiliate_id', 'language_code', 'currency_id', 'currency_code', 'currency_value',
+        'fee', 'ip', 'forwarded_ip', 'user_agent', 'accept_language', 'chanel',
+        'is_read', 'idempotency_key', 'deleted_at',
+    ];
     protected static array $destroyRelations = [
         'ordersCancels',
         'ordersHistories',

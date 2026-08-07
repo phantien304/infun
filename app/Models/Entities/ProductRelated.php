@@ -10,6 +10,7 @@ class ProductRelated extends Base
     public $primaryKey = ['product_id', 'related_id'];
     public $incrementing = false;
     public $timestamps = false;
+    protected $fillable = ['product_id', 'related_id'];
 
     public function product()
     {

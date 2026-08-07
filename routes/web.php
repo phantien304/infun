@@ -13,9 +13,6 @@ Route::get('l/{slug}', 'AffiliateRedirectController@show')
     ->name('affiliate.redirect')
     ->middleware(['maintenance', 'throttle:60,1'])
     ->where('slug', '[A-Za-z0-9]{1,10}');
-// cache_page: BẬT LẠI (Phương án B đã xử các per-user footgun: badge giỏ/wishlist
-// → JS, menu active-state → JS, CSRF token refresh từ /give-me-csrf). cache_page
-// chỉ cache guest+GET; các route động (badge/csrf/checkout...) đã ->withoutMiddleware.
 Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function () {
     Route::get('/cart/badge', 'CartBadgeController@index')->name('cart.badge')->withoutMiddleware(['cache_page']);
     Route::get('/san-pham', 'ProductController@getList')->name('product.getList');
@@ -28,7 +25,7 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
     Route::prefix('review')->group(function () {
         Route::post('/', 'ReviewController@saveReview')->name('review.saveReview');
         Route::get('/list/{productId}', 'ReviewController@list')->name('review.list');
-        Route::middleware('auth')->group(function () {
+        Route::middleware(['auth', 'auth.session'])->group(function () {
             Route::post('/vote', 'ReviewController@vote')->name('review.vote');
             Route::post('/report', 'ReviewController@report')->name('review.report');
         });
@@ -37,7 +34,7 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
     Route::get('/lien-he', 'ContactController@index')->name('contact.index');
     Route::post('/lien-he/send', 'ContactController@send')->name('contact.send');
     Route::prefix('checkout')->group(function () {
-        Route::middleware('auth')->group(function () {
+        Route::middleware(['auth', 'auth.session'])->group(function () {
             Route::get('repayment/{id?}', 'CheckoutController@repayment')->name('checkout.repayment');
             Route::post('saveRepayment', 'CheckoutController@saveRepayment')->name('checkout.saveRepayment');
         });
@@ -90,7 +87,7 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
         Route::post('add-address', 'AccountController@addAddress')->name('account.addAddress');
     });
 
-    Route::middleware('auth')->group(function () {
+    Route::middleware(['auth', 'auth.session'])->group(function () {
         Route::prefix('account')->group(function () {
             Route::any('/', 'AccountController@index')->name('account.index');
             Route::any('edit', 'AccountController@edit')->name('account.edit');

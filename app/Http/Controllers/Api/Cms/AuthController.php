@@ -6,13 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Entities\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
-    private const TOKEN_NAME = 'cms';
-
     public function login(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
@@ -20,7 +19,7 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
         if ($validator->fails()) {
-            return response()->json(['message' => $validator->errors()->first()], 422);
+            return respondUnprocessable($validator->errors()->first());
         }
 
         $user = User::query()
@@ -28,41 +27,35 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check((string) $request->input('password'), (string) $user->password)) {
-            return response()->json(['message' => trans('messages.auth.login_failed')], 422);
+            return respondUnprocessable(trans('messages.auth.login_failed'));
         }
 
-        $user->tokens()->where('name', self::TOKEN_NAME)->delete();
+        Auth::guard('web')->login($user, true);
+        $request->session()->regenerate();
 
-        $token = $user->createToken(self::TOKEN_NAME, ['cms'])->plainTextToken;
-
-        // Contract REST thống nhất: { data, message }.
-        return response()->json([
-            'data' => [
-                'token'       => $token,
-                'account'     => $this->accountPayload($user),
-                'permissions' => $this->resolvePermissions($user),
-            ],
-            'message' => 'login_success',
-        ]);
+        return respondSuccess([
+            'account'     => $this->accountPayload($user),
+            'permissions' => $this->resolvePermissions($user),
+        ], 'login_success');
     }
 
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        return response()->json([
-            'data' => [
-                'account'     => $this->accountPayload($user),
-                'permissions' => $this->resolvePermissions($user),
-            ],
+        return respondSuccess([
+            'account'     => $this->accountPayload($user),
+            'permissions' => $this->resolvePermissions($user),
         ]);
     }
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()?->currentAccessToken()?->delete();
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
-        return response()->json(['message' => 'logout_success']);
+        return respondMessage('logout_success');
     }
 
     private function accountPayload(User $user): array
@@ -78,8 +71,10 @@ class AuthController extends Controller
 
     private function resolvePermissions(User $user): array
     {
-        // spatie: gộp quyền trực tiếp + quyền qua role → mảng mã ('list-category'...).
-        // Frontend dùng để ẩn/hiện nút theo quyền.
+        if ($user->hasRole(\App\Services\Cms\RoleWriteService::SUPER_ADMIN_ROLE, 'web')) {
+            return \App\Enums\CmsPermissionEntity::allPermissionCodes();
+        }
+
         return $user->getAllPermissions()->pluck('name')->all();
     }
 }

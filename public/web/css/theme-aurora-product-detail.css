@@ -1,0 +1,378 @@
+/*
+ * Aurora — CSS "giữ nguyên" cho khu vực gallery + chọn biến thể + nút mua
+ * hàng của trang chi tiết sản phẩm (product/index.blade.php).
+ *
+ * BỐI CẢNH: theme aurora chạy theo mô hình "sở hữu cả trang" — khi trang
+ * này thuộc theme, ThemeManager bỏ hẳn main.css/custom.css (tránh reset
+ * toàn cục kiểu `section{display:block}` đè lưới Tailwind). Nhưng gallery
+ * (slick), swatch biến thể (.radio-choose-v2...), nút mua (.btn/.button)
+ * đang phụ thuộc ĐÚNG main.css/custom.css đó để hiển thị đúng, và phần này
+ * CỐ Ý giữ nguyên class/JS/HTML như base — không viết lại bằng Tailwind
+ * (rủi ro đụng logic chống oversell trong style.js).
+ *
+ * File này KHÔNG import toàn bộ main.css — chỉ 2 việc:
+ *   1. @import 3 file plugin/vendor tự sạch (không có reset thẻ trần nào):
+ *      slick (carousel), fontawesome + flaticon uicons (icon `fa-*`/`fi-rs-*`
+ *      dùng trong khu vực này).
+ *   2. COPY NGUYÊN VĂN các rule của main.css/custom.css áp cho đúng các
+ *      class khu vực này cần (.detail-gallery, .radio-choose-v2,
+ *      .btn/.button, .detail-qty, .stock-status...) — trích bằng script,
+ *      đối chiếu tay, KHÔNG viết lại.
+ *
+ * CHỈ load ở trang chi tiết sản phẩm (theme aurora), qua
+ * resources/themes/aurora/views/product/index.blade.php — KHÔNG đưa vào
+ * app.css chung của theme, vì `.btn`/`.button` là selector 2 lớp rất rộng,
+ * lẫn vào các trang khác (đã dựng bằng Tailwind thuần) sẽ đè nhầm.
+ *
+ * Nguồn: public/web/css/custom.css + public/web/css/main.css (bản đang
+ * chạy — xem git blame nếu 2 file gốc đổi mà quên đồng bộ lại đây).
+ */
+
+@import url(vendors/fontawesome.min.css);
+@import url(vendors/uicons-regular-straight.css);
+@import url(plugins/slick.css);
+
+/* ── Nút mua / thêm giỏ — base .btn,.button + biến thể dùng trong buy-box ── */
+.btn, .button {
+  display: inline-block;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 30px;
+  border-radius: 4px;
+  color: #fff;
+  background-color: #F4a883;
+  cursor: pointer;
+  transition: all 300ms linear 0s;
+  letter-spacing: 0.5px;
+}
+.btn:hover, .button:hover {
+  background-color: #FDC040;
+  color: #fff;
+}
+.btn-brand {
+  background-color: #F4a883;
+  border-color: #F4a883;
+}
+.btn-brand:hover {
+  background-color: #F4a883 !important;
+}
+.btn.btn-secondary, .button.btn-secondary {
+  background-color: #3e5379;
+  border-color: #3e5379;
+}
+.button.button-add-to-cart {
+  padding: 8px 40px;
+}
+
+/* ── Badge giảm giá + nhãn tồn kho ── */
+.border-radius-10 {
+  border-radius: 10px;
+}
+.stock-status {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  font-family: "Roboto", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+.stock-status.in-stock {
+  background: #DEF9EC;
+  color: #F4a883;
+}
+.stock-status.out-stock {
+  color: #f74b81;
+  background: #fde0e9;
+}
+.required {
+  color: #f50b24;
+}
+
+/* ── Giá (dự phòng nếu view nào còn dùng .detail-info .product-price cũ) ── */
+.detail-info .product-price-cover {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.detail-info .product-price-cover .product-price {
+  line-height: 1;
+}
+.detail-info .product-price {
+  display: flex;
+  align-items: center;
+  margin: 15px 0 30px 0;
+}
+.detail-info .product-price .current-price {
+  font-size: 58px;
+  text-decoration: none;
+  font-weight: 900;
+}
+.detail-info .product-price .old-price {
+  text-decoration: line-through;
+  color: #B6B6B6;
+  margin-left: 20px;
+  font-size: 28px;
+  font-weight: 700;
+  display: block;
+}
+.detail-info .product-price .save-price {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: block;
+  color: #FDC040;
+}
+.detail-info .product-meta {
+  border-top: 1px solid #ececec;
+  padding-top: 15px;
+}
+
+/* ── Số lượng ── */
+.detail-qty {
+  max-width: 80px;
+  padding: 9px 20px;
+  position: relative;
+  width: 100%;
+  border-radius: 5px;
+}
+.detail-qty > a {
+  font-size: 16px;
+  position: absolute;
+  right: 8px;
+  color: #F4a883;
+}
+.detail-qty > a:hover {
+  color: #F4a883;
+}
+.detail-qty > a.qty-up {
+  top: 0;
+}
+.detail-qty > a.qty-down {
+  bottom: -4px;
+}
+.detail-extralink > div {
+  display: inline-block;
+  vertical-align: top;
+}
+.detail-extralink .detail-qty {
+  margin: 0 6px 6px 0;
+  background: #fff;
+  border: 2px solid #adadad !important;
+  font-size: 16px;
+  font-weight: 700;
+  color: #adadad;
+  border-radius: 5px;
+  padding: 8px 20px 11px 20px;
+  max-width: 90px;
+}
+
+/* ── Wishlist ── */
+.wishlist .product-icon {
+  margin-left: 5px;
+  background: #ffffff;
+  cursor: pointer;
+  color: #f4a883;
+  text-align: center;
+  line-height: 41px;
+  border: 1px solid #f4a883;
+  width: 41px;
+  height: 41px;
+  border-radius: 3px;
+  display: inline-block;
+  transition: background-color 400ms linear;
+}
+.wishlist.active .product-icon,
+.wishlist .product-icon:hover {
+  background-color: #f4a883;
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* ── Gallery: wrapper + main slider + thumbnail strip (slick) ── */
+.detail-gallery {
+  position: relative;
+}
+.detail-gallery .zoom-icon {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 2;
+  font-size: 22px;
+  opacity: 0.6;
+}
+.detail-gallery .product-image-slider {
+  background-color: #fff;
+  margin-bottom: 30px;
+  border-radius: 15px;
+  border: 1px solid #ececec;
+  overflow: hidden;
+}
+.detail-gallery .product-image-slider img {
+  opacity: 1;
+  border-radius: 16px;
+}
+.detail-gallery .product-image-slider button.slick-arrow {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 14px;
+}
+.detail-gallery .product-image-slider button.slick-arrow i {
+  color: #adadad;
+}
+.zoomContainer, .zoomWindow {
+  z-index: 99;
+}
+
+.slider-nav-thumbnails .slick-list {
+  margin: 0 -10px;
+}
+.slider-nav-thumbnails .slick-slide {
+  position: relative;
+  border-radius: 15px;
+  overflow: hidden;
+}
+.slider-nav-thumbnails .slick-slide img {
+  border-radius: 17px;
+}
+.slider-nav-thumbnails div.slick-slide {
+  margin: 0 10px;
+}
+.slider-nav-thumbnails .slick-slide.slick-current::before,
+.slider-nav-thumbnails .slick-slide.is-hover-active::before {
+  border-bottom: 5px solid #333;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  content: "";
+  height: 0;
+  left: 50%;
+  margin-left: -5px;
+  position: absolute;
+  top: -6px;
+  width: 0;
+}
+.slider-nav-thumbnails .slick-slide.slick-current img,
+.slider-nav-thumbnails .slick-slide.is-hover-active img {
+  border: 2px solid #F4a883;
+}
+.slider-nav-thumbnails.is-hovering .slick-slide.slick-current:not(.is-hover-active) img {
+  border-color: transparent;
+}
+.slider-nav-thumbnails.is-hovering .slick-slide.slick-current:not(.is-hover-active)::before {
+  display: none;
+}
+.slider-nav-thumbnails button {
+  opacity: 0;
+}
+.slider-nav-thumbnails button.slick-arrow {
+  margin: 0;
+  border: 0;
+  background: #F2F3F4;
+  border-radius: 40px;
+  width: 40px;
+  height: 40px;
+  line-height: 44px;
+  font-size: 24px;
+  z-index: 9;
+  color: #333333;
+}
+.slider-nav-thumbnails button.slick-arrow:hover {
+  color: #fff;
+  background-color: #F4a883;
+}
+.slider-nav-thumbnails button.slick-arrow.slick-prev {
+  left: -20px;
+}
+.slider-nav-thumbnails button.slick-arrow.slick-next {
+  right: -20px;
+}
+.slider-nav-thumbnails:hover button {
+  opacity: 1;
+}
+.slider-nav-thumbnails .slick-prev,
+.slider-nav-thumbnails .slick-next {
+  font-size: 12px;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ── Swatch biến thể (radio/checkbox/select choose-v2) — _option.blade.php ── */
+.radio-choose-v2,
+.select-choose-v2 {
+  display: flex;
+}
+.checkbox-choose-v2 div,
+.radio-choose-v2 div,
+.select-choose-v2 div {
+  display: inline-block;
+}
+.radio-choose-v2 input[type="radio"] {
+  display: none;
+}
+.radio-choose-v2.no-image div,
+.radio-choose-v2 div {
+  margin-right: 5px;
+}
+.radio-choose-v2 .img-thumbnail {
+  padding: 0;
+  max-width: 50px;
+}
+.radio-choose-v2 div label {
+  padding: 0.25rem;
+  cursor: pointer;
+}
+.radio-choose-v2.no-image div label {
+  padding: 5px 10px;
+  background: #f3f3f3;
+  border-radius: 5px;
+}
+.radio-choose-v2.no-image .active label,
+.radio-choose-v2 .active .img-thumbnail {
+  border: 1px solid #f4a883;
+}
+.radio-choose-v2 .out-of-stock,
+.checkbox-choose-v2 .out-of-stock,
+.input-option .form-check.out-of-stock {
+  opacity: 0.45;
+  position: relative;
+}
+.radio-choose-v2 .out-of-stock label,
+.checkbox-choose-v2 .out-of-stock label,
+.input-option label.out-of-stock-label {
+  color: #999;
+}
+.radio-choose-v2.no-image .out-of-stock label,
+.checkbox-choose-v2.no-image .out-of-stock label {
+  background: #fafafa !important;
+  border: 1px dashed #cbd5e0 !important;
+  color: #a0aec0 !important;
+  text-decoration: line-through;
+}
+.radio-choose-v2 .out-of-stock .img-thumbnail {
+  border-color: #e2e8f0 !important;
+  filter: grayscale(70%);
+}
+.radio-choose-v2 .out-of-stock::after,
+.checkbox-choose-v2 .out-of-stock::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 1px),
+    rgba(160, 174, 192, 0.7) calc(50% - 1px),
+    rgba(160, 174, 192, 0.7) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}
+.select-choose-v2 option:disabled {
+  color: #cbd5e0;
+  background: #f7fafc;
+  text-decoration: line-through;
+}

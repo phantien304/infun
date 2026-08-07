@@ -70,4 +70,15 @@ abstract class BaseRepository implements BaseRepositoryInterface
             return Carbon::createFromFormat($fromFormat, $date)->format($toFormat);
         }
     }
+
+    /**
+     * Chuẩn hoá field FK/số optional từ input CMS: rỗng/thiếu/'0' → null,
+     * có giá trị thật → ép kiểu int. Dùng ở saveFromCms cho các cột FK
+     * nullable (vd category_id, author_id) thay vì lặp ternary
+     * `!empty($x) ? (int)$x : null` ở từng repository.
+     */
+    protected function nullableInt(mixed $value): ?int
+    {
+        return ! empty($value) ? (int) $value : null;
+    }
 }

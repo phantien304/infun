@@ -38,7 +38,5 @@ interface ProductCmsRepositoryInterface extends BaseRepositoryInterface
 
     public function syncImages(int $productId, array $items): void;
 
-    public function syncDiscounts(int $productId, array $items): void;
-
     public function syncRewards(int $productId, array $items): void;
 }

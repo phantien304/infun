@@ -1,13 +1,3 @@
-{{--
-    Product gallery — slick main slider + thumbnails strip.
-    JS hooks BẮT BUỘC giữ (init ở public/web/js/style.js):
-      - `.product-image-slider` — main slick
-      - `.slider-nav-thumbnails` — thumbs strip
-      - `.detail-gallery` — wrapper
-      - `#product-image` — outer wrapper id
-      - `[data-product-gallery]`, `[data-product-gallery-thumbs]` — data hooks
-      - `.zoom-icon`, `.border-radius-10` — theme styles
---}}
 <div class="product-image">
     <div class="detail-gallery w-full" id="product-image">
         <div class="detail-gallery">

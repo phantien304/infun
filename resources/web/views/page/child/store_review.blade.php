@@ -1,9 +1,3 @@
-{{--
-    Store review carousel — slick 5-cột (init `#review-5-columns` ở
-    public/web/js/style.js). Class theme `.card-1`, `.img-hover-scale`,
-    `.author-review`, `.carausel-5-columns`, `.section-padding` styled trong
-    main.css/custom.css → giữ nguyên.
---}}
 @if (count($storeReviews))
     <section class="store-review section-padding">
         <div class="container mx-auto max-w-7xl px-4 wow fadeIn animated">

@@ -1,0 +1,78 @@
+/*
+ * Theme AURORA — entry CSS.
+ *
+ * QUAN TRỌNG: import app.css của base thay vì copy nội dung. Hai lý do:
+ *   1. Toàn bộ utility bridge Bootstrap (mb-30, pt-15…) và palette gốc vẫn
+ *      còn — view nào theme này KHÔNG ghi đè sẽ rơi về base và cần chúng.
+ *   2. Tailwind v4 dò class từ các chỉ thị @source; base app.css đã trỏ vào
+ *      resources/web/views/**. Copy nội dung thì phải nhớ đồng bộ tay mãi mãi.
+ */
+@import '../../../web/css/app.css';
+
+/* Blade của riêng theme này — base app.css không biết đường dẫn này. */
+@source '../views/**/*.blade.php';
+
+/*
+ * Ghi đè token. Vì @theme của base đã chạy trước, khai lại cùng tên biến là
+ * thắng — không cần !important, không cần đụng file base.
+ *
+ * Bảng màu lấy từ public/prototype/home-v1.html (bento).
+ */
+@theme {
+    --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-heading: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
+
+    --color-ink: #16151a;
+    --color-ink-2: #56545f;
+    --color-ink-3: #8b8895;
+    --color-line: #e7e5e4;
+    --color-canvas: #faf9f7;
+
+    /* brand: từ peach #F4A883 của base sang coral đậm hơn, tương phản tốt
+       với nền trắng và đủ mạnh để làm nhãn giảm giá. */
+    --color-brand: #e8452c;
+    --color-brand-tint: #fdeeeb;
+    --color-mint: #0f9d6e;
+    --color-mint-tint: #e6f5ef;
+}
+
+@layer base {
+    body {
+        background-color: var(--color-canvas);
+        color: var(--color-ink);
+    }
+}
+
+/*
+ * Footer nhận HTML DỰNG SẴN từ getConfigDb('config_footerN') nên theme không
+ * sửa được markup — chỉ chỉnh phần nhìn từ ngoài. Ngoài @layer, cùng lý do
+ * với khối display ở base app.css: main.css không nằm trong layer nên utility
+ * Tailwind thua nó.
+ *
+ * Nav KHÔNG còn ở đây: từ khi có MenusClient::getMenuTree(), aurora tự dựng
+ * markup nav bằng utility Tailwind, không phải vá HTML render sẵn nữa.
+ */
+.aurora-footer-col ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.aurora-footer-col li {
+    margin-bottom: 0.5rem;
+}
+
+.aurora-footer-col a:hover {
+    color: var(--color-ink);
+}
+
+.aurora-footer-col h1,
+.aurora-footer-col h2,
+.aurora-footer-col h3,
+.aurora-footer-col h4,
+.aurora-footer-col h5 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-ink);
+    margin-bottom: 0.75rem;
+}

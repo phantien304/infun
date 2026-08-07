@@ -10,6 +10,7 @@ use App\Models\Entities\ProductOption;
 use App\Models\Entities\ProductOptionValue;
 use App\Models\Entities\ProductStock;
 use App\Models\Entities\ProductVariant;
+use App\Models\Entities\ProductVariantDiscount;
 use App\Services\Measurement\LengthService;
 use App\Services\Measurement\WeightService;
 use App\Services\Reward\RewardEarnService;
@@ -195,6 +196,8 @@ class CartService
             'weightClass',
             'defaultVariant.productStocks',
             'defaultVariant.productVariantSpecial',
+            'defaultVariant.productVariantDiscounts' => fn ($q) => $q->dateStartToEnd()
+                ->where('user_group_id', getUserGroupId()),
             'productRewards' => fn ($q) => $q->where('user_group_id', getUserGroupId()),
         ])->whereIn('id', $productIds)->dateAvailable()->get()->keyBy('id');
 
@@ -205,6 +208,8 @@ class CartService
                 'productVariantAttributes.optionValue.description',
                 'productVariantAttributes.option.description',
                 'productVariantSpecial',
+                'productVariantDiscounts' => fn ($q) => $q->dateStartToEnd()
+                    ->where('user_group_id', getUserGroupId()),
             ])->whereIn('id', $productVariantIds)->get()->keyBy('id')
             : collect();
 
@@ -219,10 +224,11 @@ class CartService
             }
 
             $variant = isset($row['product_variant_id']) ? $variants->get($row['product_variant_id']) : null;
+            $quantity = (int) $row['quantity'];
 
-            $price = $this->resolvePrice($product, $variant)
+            $price = $this->resolvePrice($product, $variant, $quantity)
                 + $this->customOptionsSurcharge((int) ($row['product_id'] ?? 0), $row['custom_options'] ?? []);
-            $stockOk = $this->checkStock($product, $variant, (int) $row['quantity']);
+            $stockOk = $this->checkStock($product, $variant, $quantity);
 
             $desc = $product->description;
             $name = $desc->name ?? '';
@@ -234,7 +240,6 @@ class CartService
             $weightClassId = (int) $product->weight_class_id ?? getConfigDb('config_weight_class_id');
             $lengthClassId = (int) $product->length_class_id ?? getConfigDb('config_length_class_id');
 
-            $quantity = (int) $row['quantity'];
             $items[$key] = [
                 'key'                => $key,
                 'id'                 => $product->id,
@@ -402,23 +407,44 @@ class CartService
         return $this->rewardEarnService->perUnit($product, $price) * $quantity;
     }
 
-    protected function resolvePrice(Product $product, ?ProductVariant $variant): int
+    protected function resolvePrice(Product $product, ?ProductVariant $variant, int $quantity = 1): int
     {
-        if ($variant) {
-            $vs = $variant->productVariantSpecial;
-            if ($vs) {
-                return (int) $vs->price;
+        $targetVariant = $variant ?: $product->defaultVariant;
+
+        if (! $targetVariant) {
+            return (int) $product->price;
+        }
+
+        $candidates = [(float) $targetVariant->price];
+
+        if ($special = $targetVariant->productVariantSpecial) {
+            $candidates[] = (float) $special->price;
+        }
+
+        if ($tier = $this->bestDiscountTier($targetVariant->productVariantDiscounts ?? collect(), $quantity)) {
+            $candidates[] = (float) $tier->price;
+        }
+
+        return (int) min($candidates);
+    }
+
+    protected function bestDiscountTier(Collection $discounts, int $quantity): ?ProductVariantDiscount
+    {
+        $best = null;
+        foreach ($discounts as $tier) {
+            if ((int) $tier->quantity > $quantity) {
+                continue;
             }
-
-            return (int) $variant->price;
+            if (
+                $best === null
+                || $tier->quantity > $best->quantity
+                || ($tier->quantity === $best->quantity && $tier->priority > $best->priority)
+            ) {
+                $best = $tier;
+            }
         }
 
-        $special = $product->defaultVariant?->productVariantSpecial;
-        if ($special) {
-            return (int) $special->price;
-        }
-
-        return (int) $product->price;
+        return $best;
     }
 
     protected function customOptionsSurcharge(int $productId, array $customOptions): int

@@ -28,9 +28,6 @@
 @endsection
 @include('web::page.child.banner')
 @section('content')
-    {{-- Wrapper layout giữ class theme (.home-page, .infunstudio-package,
-         .pd-infunstudio, .wrap-content) đã styled trong main.css. Container
-         Tailwind w-full thay container-fluid Bootstrap. --}}
     <div class="home-page infunstudio-package pd-infunstudio wrap-content">
         <div class="w-full">
             @include('web::page.child.about_us')

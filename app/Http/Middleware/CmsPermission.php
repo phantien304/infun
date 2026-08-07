@@ -16,6 +16,12 @@ class CmsPermission
         'destroy' => 'del',
         'restore' => 'del',
         'bulk'    => 'del',
+        'reorder'          => 'edit',
+        'importCategory'   => 'create',
+        'deleteCategories' => 'del',
+        'previewTotal'     => 'detail',
+        'adminList'        => 'list',
+        'permissionsRegistry' => 'list',
     ];
 
     public function handle(Request $request, Closure $next)

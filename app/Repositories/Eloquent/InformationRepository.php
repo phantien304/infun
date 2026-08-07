@@ -5,13 +5,8 @@ namespace App\Repositories\Eloquent;
 use App\Models\Entities\Information;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\InformationRepositoryInterface;
+use Illuminate\Database\Eloquent\Collection;
 
-/**
- * Trang nội dung tĩnh (giới thiệu / chính sách / điều khoản...). Detail page
- * mirror pattern `BlogRepository` / `StoreReviewRepository`: eager-load
- * `description` (đã tự `->forLocale()`), KHÔNG cache để view counter
- * (`increment('viewed')`) luôn fresh — đồng nhất với 2 detail repo kia.
- */
 class InformationRepository extends QueryableRepository implements InformationRepositoryInterface
 {
     public function model(): string
@@ -29,5 +24,10 @@ class InformationRepository extends QueryableRepository implements InformationRe
         return $this->resetModel()
             ->with('description')
             ->find($id);
+    }
+
+    public function listWithDescription(): Collection
+    {
+        return $this->resetModel()->with('description')->get();
     }
 }

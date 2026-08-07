@@ -1,10 +1,3 @@
-{{--
-    Total summary rows — partial dùng chung giữa SSR render
-    (web::checkout.index + web::checkout.cart) và AJAX update DOM
-    (CheckoutCouponController::apply trả HTML từ partial này).
-
-    Input: $totalData (array<int, {code,title,text,value}>)
---}}
 @foreach ($totalData as $i => $item)
     @if ($i == count($totalData) - 1)
         <tr>

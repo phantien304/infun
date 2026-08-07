@@ -14,6 +14,14 @@ class Banner extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['bannerValues'];
+    protected $fillable = [
+        'position',
+        'page',
+        'type',
+        'sort_order',
+        'theme',
+        'deleted_at',
+    ];
 
     public function bannerValues()
     {

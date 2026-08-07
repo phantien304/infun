@@ -57,7 +57,6 @@ class ProductWriteService
                 $this->productCmsRepo->syncIngredients($product->id, $data['product_ingredients'] ?? []);
                 $this->productCmsRepo->syncAttributes($product->id, $data['product_attributes'] ?? []);
                 $this->productCmsRepo->syncImages($product->id, $data['product_images'] ?? []);
-                $this->productCmsRepo->syncDiscounts($product->id, $data['product_discounts'] ?? []);
                 $this->productCmsRepo->syncRewards($product->id, $data['product_rewards'] ?? []);
 
                 $this->productVariantWriter->sync(
@@ -92,13 +91,13 @@ class ProductWriteService
         }
     }
 
-    public function bulkUpdate(array $items): int
+    public function bulkUpdate(array $items, ?int $warehouseId = null): int
     {
         $count   = 0;
         $touched = [];
 
         Product::withoutSyncingToSearch(
-            fn () => $this->productCmsRepo->transaction(function () use ($items, &$count, &$touched) {
+            fn () => $this->productCmsRepo->transaction(function () use ($items, $warehouseId, &$count, &$touched) {
                 foreach ($items as $it) {
                     $id = (int) ($it['id'] ?? 0);
                     if (! $id) {
@@ -119,12 +118,12 @@ class ProductWriteService
 
                     $variant = $product->defaultVariant;
                     if ($variant) {
-                        if (($it['price'] ?? '') !== '') {
+                        if (($it['price'] ?? '') !== '' && (float) $it['price'] !== (float) $variant->price) {
                             $variant->price = (float) $it['price'];
                             $this->productCmsRepo->saveVariant($variant);
                         }
-                        if (array_key_exists('quantity', $it)) {
-                            $this->productStockRepo->updateOnHand($variant->id, (int) $it['quantity']);
+                        if (array_key_exists('quantity', $it) && ! $product->has_variants) {
+                            $this->productStockRepo->updateOnHand($variant->id, (int) $it['quantity'], $warehouseId);
                         }
                     }
 

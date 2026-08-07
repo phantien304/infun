@@ -2,6 +2,95 @@
 
 Ghi chú quy ước kiến trúc cho Claude. Đọc file này trước khi sửa code.
 
+## ⚠️ KHÔNG chạy `artisan config:cache`/`optimize` khi Docker đang chạy
+
+> Sự cố 2026-08-06: `bootstrap/cache/config.php` bị bake cứng
+> `REDIS_HOST=127.0.0.1`/`DB_HOST=127.0.0.1` (từ một lần `config:cache` chạy
+> ngoài Herd/Windows). Vì `./:/var/www/html` bind-mount dùng chung cho
+> `infun-php`/`infun-queue`/`infun-scheduler`, cache này đè luôn override
+> đúng (`REDIS_HOST: redis`) mà `docker-compose.yml` truyền vào container →
+> `infun-queue` crash-loop **2696 lần**, container `infun-scheduler` mồ côi
+> (rác từ lần test `docker-compose.scale.yml`, trỏ `mysql-replica1/2` không
+> tồn tại) crash-loop **4587 lần** suốt ~1 tháng. Hậu quả: `vmmem` (VM nền
+> Docker Desktop) ăn CPU 40%+ liên tục, máy giật lag. Xem thêm ghi chú
+> "config:cache đóng băng kết nối" ở mục an toàn bên dưới — đây là lần thứ 2
+> cùng một cơ chế gây sự cố.
+
+- Nếu thấy `bootstrap/cache/config.php`/`events.php`/`packages.php`/
+  `services.php`/`repositories.php` tồn tại trong lúc debug container Docker
+  không kết nối được Redis/DB dù `docker-compose.yml` đã set đúng host — xoá
+  các file cache đó rồi restart container, KHÔNG sửa `.env`/compose trước.
+- Trước khi kết luận container "bị lỗi", kiểm tra `docker inspect
+  <container> --format 'RestartCount={{.RestartCount}}'` — số lớn bất
+  thường (hàng trăm/nghìn) là dấu hiệu crash-loop âm thầm, không phải lỗi
+  nhất thời.
+- Container không có trong `docker-compose.yml` hiện tại nhưng vẫn `docker ps`
+  ra (vd còn sót từ `.scale.yml`/`.staging.yml` chạy thử) có thể là rác mồ côi
+  — đối chiếu tên service với file compose đang dùng trước khi coi nó là một
+  phần của stack dev.
+
+## ⚠️ QUY TẮC AN TOÀN — ƯU TIÊN CAO NHẤT, áp dụng cho MỌI thao tác
+
+> Đặt ra sau sự cố thật 2026-08-04: Claude viết 1 test (`tests/Feature/
+> PermissionSyncCommandTest.php`) có `tearDown()` gọi `Schema::drop()` trên 5
+> bảng phân quyền spatie thật, rồi yêu cầu user chạy lệnh `composer test
+> -- --filter=...` mà KHÔNG nói rõ lệnh đó có khả năng đụng DB thật. Test
+> chạy nhắm nhầm vào DB thật (nghi do container đã `config:cache` đóng băng
+> kết nối) → xoá sạch dữ liệu role/permission vừa build ở Phase 0. User phải
+> tự phát hiện và hỏi lại mới biết. KHÔNG được để việc này lặp lại — với BẤT
+> KỲ AI đọc file này (Claude phiên chat, Claude Code, agent khác).
+
+**Trước khi đề xuất, viết, hoặc yêu cầu user chạy bất kỳ lệnh/script/test nào
+có khả năng KHÔNG THỂ HOÀN TÁC** — xoá/đổi cấu trúc bảng (`DROP`,
+`TRUNCATE`, `ALTER ... DROP COLUMN`), xoá dữ liệu hàng loạt (`DELETE`/
+`UPDATE` không `WHERE` chặt, `migrate:rollback`/`migrate:reset`/
+`migrate:fresh`), ghi đè file/secret, force-push git, deploy production,
+hoặc BẤT KỲ code nào tự viết ra có thao tác kiểu trên (kể cả trong test,
+kể cả trong `tearDown()`, kể cả khi "chỉ chạy trên DB test") —
+Claude PHẢI:
+
+1. **Nói thẳng trong câu trả lời gửi user** (không giấu trong comment code,
+   không giả định user tự đọc source) rằng thao tác này CÓ KHẢ NĂNG phá huỷ
+   dữ liệu thật, và điều kiện cụ thể nào khiến nó nguy hiểm — trước khi user
+   bấm Enter, không phải sau khi đã hỏng mới giải thích.
+2. **Không tự tin thay cho việc cảnh báo.** Có safety guard trong code
+   (assert connection, if/else, try/catch...) KHÔNG miễn trừ bước 1 — guard
+   có thể có bug (đã xảy ra thật), môi trường chạy có thể khác giả định
+   (config cache, connection khác, quyền khác). Luôn nói rõ trước, dù chắc
+   chắn đến đâu.
+3. **Verify môi trường đích trước khi đề xuất chạy**, đừng giả định "chắc
+   đang là DB test/staging vì phpunit.xml nói vậy" — container/CI có thể đã
+   cache config, đổi env, hoặc trỏ khác với những gì source code khai báo.
+4. Nếu lỡ đã xảy ra: dừng ngay, xác nhận thiệt hại thật (không suy đoán),
+   rồi đưa bước khôi phục cụ thể — không phòng thủ, không đổ lỗi hoàn cảnh.
+
+## ⚠️ MÔI TRƯỜNG LOCAL — Herd + Docker, KHÔNG PHẢI XAMPP
+
+> Claude đã đoán sai "XAMPP/Apache" NHIỀU LẦN chỉ vì thấy đường dẫn
+> `E:\xampp82\htdocs\...` trong path/stack trace. Đó chỉ là tên thư mục còn
+> sót lại — user đã bỏ XAMPP từ lâu. Đọc mục này TRƯỚC KHI nói bất kỳ điều gì
+> về "restart Apache", "XAMPP Control Panel", hay giả định runtime.
+
+- PHP phục vụ web (`infun.co`, `cms.infun.co`, ...) chạy qua **Laravel Herd**
+  (PHP native trên Windows, KHÔNG phải container). Stack trace/exception show
+  path Windows thật (`E:\xampp82\htdocs\infun\vendor\...`) là vì Herd chạy PHP
+  trực tiếp trên Windows, không phải bên trong container Linux.
+- **Docker** (`docker-compose.yml` ở root) chỉ chạy hạ tầng phụ trợ cho local:
+  MySQL/MariaDB, Redis, Meilisearch, Mailpit... KHÔNG chạy PHP-FPM cho dev
+  hàng ngày. Các service `infun-php`/`infun-admin-php` trong
+  `docker-compose.yml`/`.staging.yml`/`.production.yml` là cho staging/CI/
+  production trên EC2 (xem `deploy/prod-deploy.sh`), KHÔNG phải máy dev này —
+  đừng suy luận runtime local từ các file compose đó.
+- **Opcache:** Herd bật opcache cho cả web và CLI, nhưng là 2 tiến trình
+  RIÊNG BIỆT (web qua nginx/php-fpm của Herd, CLI qua `php artisan ...`).
+  Triệu chứng: sửa code xong, `php artisan tinker` chạy đúng nhưng web vẫn
+  500/lỗi cũ → do opcache của tiến trình WEB (Herd) đang stale, KHÔNG PHẢI do
+  config/DB sai. Fix: restart Herd (icon khay hệ thống → Restart All
+  Services, hoặc lệnh `herd restart`) — không đụng DB/data, chỉ gián đoạn vài
+  giây.
+- TUYỆT ĐỐI không đề xuất "restart Apache" / "mở XAMPP Control Panel" — sai
+  môi trường, đã bị nhắc nhiều lần.
+
 ## Tổng quan
 
 Website thương mại điện tử (Laravel). **Đang refactor mạnh** — tồn tại song song
@@ -681,7 +770,8 @@ Gotcha:
 
 ## PHP opcache với migration
 
-XAMPP82 default bật opcache cho cả CLI. Sửa file migration → opcache vẫn
+(Runtime local thật = Herd, xem mục "MÔI TRƯỜNG LOCAL" đầu file — không phải
+XAMPP/Apache.) Herd bật opcache cho cả CLI. Sửa file migration → opcache vẫn
 serve version cũ → error message thấy SQL cũ chứ không phải code mới đã sửa.
 Fix:
 
@@ -693,7 +783,8 @@ Fix:
   FROM INFORMATION_SCHEMA.TABLES
   WHERE TABLE_SCHEMA = DATABASE() AND ENGINE = 'MyISAM';
   ```
-- Restart Apache KHÔNG giúp CLI — CLI có process riêng với opcache riêng.
+- Restart Herd KHÔNG giúp CLI — CLI có process riêng với opcache riêng
+  (ngược lại: web stale thì restart Herd mới giúp, xem mục đầu file).
 
 ## Account flow (refactor 2026-05-31)
 
@@ -2534,6 +2625,12 @@ cần đọc kỹ trước khi quyết:
   trước → task lớn, không phải 1 PR.
 - **Verdict**: GIỮ. Cần thêm warning docblock "Single source of
   fillable cho 135 model, không xoá."
+- **CẬP NHẬT (2026-08-07)**: verdict GIỮ vẫn đúng, nhưng con số "135/136"
+  và caller `ProductSpecialRepository` ở trên đã STALE (repo đó không còn
+  gọi `getTableColumnAndTypeList()` nữa). Đã áp 2 fix nhỏ + đánh giá thêm
+  `Base::save()` liên quan — xem chi tiết mục **"HasSchemaCache TTL fix,
+  bỏ Base::save() funnel, và đánh giá rủi ro Octane (2026-08-07)"** ở cuối
+  file.
 
 ### `HasAuditColumns` — DEAD infrastructure
 
@@ -3339,3 +3436,193 @@ chặn pattern credentials. Admin ẩn thêm key = tắt cờ, không sửa code
   `IMAGE_DISK`), KHÔNG hardcode 'public' — multi-server thì file gốc phải lên
   storage chung ngay lúc upload.
 
+## Xoá bảng legacy `orders_voucher` (2026-08-03)
+
+**Bảng làm gì (di sản OpenCart `oc_order_voucher`)**: lưu dòng "khách MUA gift
+certificate trong đơn" — `from_name/from_email`, `to_name/to_email`, `message`,
+`voucher_theme_id`, `amount`. Nó là **đầu PHÁT HÀNH** của vòng đời voucher.
+
+**Đừng nhầm với `voucher_history`** = đầu **TIÊU DÙNG**: mỗi lần voucher được áp
+vào đơn ghi 1 row (`voucher_id`, `order_id` của đơn *tiêu*, `user_id`, `amount`
+trừ, `status` 1=applied / 2=confirmed / 3=refunded). Nên `orders_voucher.order_id`
+= đơn **mua** voucher, còn `voucher_history.order_id` = đơn **dùng** voucher;
+cardinality cũng khác (1:1 vs 1:N).
+
+**Vì sao xoá được**: bảng rỗng trong `infun_xampp.sql`; mọi cột là tập con của
+bảng `voucher` (trừ `description` không ai đọc); quan hệ "voucher sinh từ đơn
+nào" đã do `voucher.order_id` gánh (voucher tặng thì
+`voucher_reward_grant.order_id`).
+
+**Đã làm**:
+
+- `VoucherRepository::resolveVoucher` — bỏ block `$linkOk` query `orders_voucher`.
+  Thừa 100%: đã có `voucher.order_id` + check đơn nguồn complete. Hành vi không
+  đổi với dữ liệu thật (bảng rỗng ⇒ trước đây `$linkOk` LUÔN false ⇒ mọi voucher
+  có `order_id` đều bị từ chối; giờ chỉ còn ràng buộc đơn complete — đây là
+  **nới**, không phải siết).
+- Xoá model orphan `App\Models\Entities\OrdersVoucher` (trỏ nhầm vào
+  `order_voucher` thiếu `s` ⇒ chưa bao giờ chạy được).
+- Migration `2026_08_03_000002_drop_orders_voucher_table.php` — `down()` tái tạo
+  đúng DDL gốc.
+
+## HasSchemaCache TTL fix, bỏ Base::save() funnel, và đánh giá rủi ro Octane (2026-08-07)
+
+Bắt nguồn từ bug `ProductWriteService::bulkUpdate()` không lưu field nào
+(root cause: `$request->validate()` chỉ trả về key có rule khai báo, sibling
+key không có rule bị Laravel âm thầm loại — đã fix bằng cách khai đủ rule
+trong `ProductController::bulkUpdate()`). Trong lúc test, phát hiện thêm 1
+chuỗi vấn đề liên quan `$fillable` → dẫn tới audit + 2 quyết định dưới đây.
+
+### 1. Audit toàn bộ entity thiếu `deleted_at` trong `$fillable` — ĐÃ FIX
+
+Phát hiện: `User` entity cần khai `deleted_at` (và `remember_token`) trong
+`$fillable` thì `SoftDeletes::restore()` mới ghi được xuống DB — vì
+`Base::fill()`/`Base::save()` (lúc đó còn override, xem mục 2) funnel dữ
+liệu dirty qua `fill()`, và `fill()` tôn trọng mass-assignment protection.
+Model nào rơi vào path **có khai `$fillable` tường minh nhưng thiếu
+`deleted_at`** thì restore-sau-soft-delete sẽ silently no-op field đó.
+
+Đã thêm `'deleted_at'` vào `$fillable` cho 16 entity: `MenuValue`,
+`BlogCategory`, `Banner`, `Warehouse`, `Menu`, `Blog`, `ProductOption`,
+`ProductVariantSpecial`, `BlogTag`, `ProductVariant`, `ProductImage`,
+`ProductVariantDiscount`, `OrdersStatus`, `ProductOptionValue`, `Product`,
+`Orders`. Verify sống qua Chrome: delete + restore product 500001, đọc log
+SQL xác nhận `update product set deleted_at = NULL ... where id = 500001`
+chạy đúng.
+
+**Lưu ý cho model tương lai**: nếu entity khai `$fillable` tường minh (không
+dựa fallback của `HasSchemaCache`) và có `SoftDeletes`, PHẢI thêm
+`deleted_at` vào `$fillable`, nếu không restore sẽ câm lặng không hoạt động.
+
+### 2. `HasSchemaCache` — giữ trait, fix 2 điểm nhỏ
+
+Verdict cuối: **GIỮ trait** (quá nhiều entity vẫn dựa fallback
+`getFillable()` → `array_keys(schema)` khi model không khai `$fillable`
+tường minh; xoá trait = vỡ mass-assignment hàng loạt, phải migrate từng
+model trước — việc lớn, không làm trong turn này). Đã áp 2 fix rẻ tiền, an
+toàn, không đổi hành vi:
+
+- `cache()->forever($key, $columns)` → `cache()->put($key, $columns,
+  now()->addHours(6))`. Trước đây cache schema vĩnh viễn — nếu có migration
+  đổi cột mà quên flush cache theo tay (đúng như incident `BannerValue` đã
+  ghi ở `docs/SCHEMA-CACHE-FILLABLE.md`) thì fillable bị stale vô thời hạn.
+  TTL 6h giới hạn "vùng nổ" của lỗi quên-flush xuống còn vài giờ thay vì vĩnh
+  viễn, không cần đổi thêm gì ở deploy script.
+- Xoá nhánh chết `updated_at_column.field` trong `getFillable()` (đọc
+  `config('system.updated_at_column.field')` — key này **không tồn tại**
+  trong `config/system.php`, xem finding cũ ở mục "Lỗi config" phía trên —
+  nên nhánh này chưa từng chạy được, chỉ là dead code).
+
+Verify sống qua Chrome: sửa `Category` (id=50, entity KHÔNG khai `$fillable`
+tường minh → đi qua đúng fallback path) field `sort_order` 3→7, save OK, log
+xác nhận SQL đúng field.
+
+**Rủi ro static memo `$schemaCacheMemo` dưới Octane** (điểm quan trọng cho
+phần 4 bên dưới): `protected static array $schemaCacheMemo` sống suốt vòng
+đời **process**. Dưới PHP-FPM thường (deploy hiện tại), mỗi request PHP-FPM
+reset toàn bộ state script/static — `pm.max_requests` (`docker/php/www.pool.conf`
+= 1000, `www.admin.conf` = 300) chỉ kiểm soát tái sử dụng **process** ở tầng
+OS để tránh leak bộ nhớ dần, KHÔNG có nghĩa static property sống sót qua
+request. Vì vậy static memo này **vô hại dưới FPM**. Nó chỉ trở thành rủi ro
+thật nếu app chạy dưới Octane/RoadRunner hoặc Swoole (application instance
+persistent qua nhiều request) — xem mục 4.
+
+### 3. `Base::save()` override — ĐÃ GỠ funnel dirty-qua-fill
+
+Trước đây `Base::save()` tính `$dirty = $this->getDirty()`, bỏ key primary
+key, rồi gọi lại `$this->fill($dirty)` trước khi gọi `parent::save()`. Tác
+dụng phụ: mọi save đều bị áp lại mass-assignment protection của `fill()`
+ngay cả khi attribute đã được set trực tiếp qua `$model->x = 1` (vốn theo
+convention Eloquent chuẩn thì set trực tiếp KHÔNG bị `$fillable` chặn). Đây
+chính là cơ chế khiến bug `deleted_at`/`remember_token` ở mục 1 xảy ra: code
+gọi `restore()` set `deleted_at` trực tiếp, nhưng `save()` override lại
+funnel field đó qua `fill()` lần nữa → bị mass-assignment chặn câm lặng nếu
+thiếu trong `$fillable`.
+
+**Bằng chứng cụ thể duy nhất tìm được** cho việc funnel này từng "có ích":
+incident double-JSON-encode ghi ở `docs/AFFILIATE-PLAN.md`. Nhưng đó là lỗi
+ở tầng `setAttribute()` (đã có override riêng xử lý JSON string), không phải
+lý do để giữ funnel `fill()` trong `save()`.
+
+**Quyết định**: gỡ đoạn funnel, giữ nguyên phần `allowBlankField` (logic
+khác, không liên quan). `save()` giờ chỉ còn:
+
+```php
+public function save(array $options = [])
+{
+    if ($this->allowBlankField) {
+        foreach ($this->getFillable() as $field) {
+            if (isset($this->attributes[$field]) || in_array($field, $this->getExceptAllowBlankField())) {
+                continue;
+            }
+            $this->attributes[$field] = '';
+        }
+    }
+    return parent::save($options);
+}
+```
+
+Verify sống qua Chrome: bulk-update field sản phẩm 500001 qua form CMS +
+full cycle delete/restore — cả 2 chạy sạch, log xác nhận không có
+`MassAssignmentException`, không entry lỗi mới trong `storage/logs`.
+
+### 4. Octane/RoadRunner — CHƯA bật, quyết định giao việc bật cho session Claude Code riêng
+
+**Trạng thái xác nhận (audit qua subagent, không chỉ check dependency)**:
+Octane **KHÔNG chạy** ở bất kỳ đâu trong deploy hiện tại.
+
+- `laravel/octane` có trong `composer.json` (`require`, không phải
+  `require-dev`) + `.rr.yaml` + `config/octane.php` tồn tại — nhưng đây là
+  scaffolding chưa dùng.
+- `docker/php/Dockerfile` và `Dockerfile.staging` đều `CMD ["php-fpm"]`.
+  Không có entrypoint/compose/deploy script nào gọi `octane:start` hay
+  binary `rr`. Env `OCTANE_SERVER` không được set ở đâu.
+- Kết luận: server hiện tại chạy **PHP-FPM thuần**, mỗi request là 1
+  script execution độc lập (process có thể tái dùng nhờ `pm.max_requests`,
+  nhưng state PHP userland — bao gồm static property — reset mỗi request).
+
+**Diễn biến quyết định**: user hỏi có đang dùng Octane không → xác nhận
+KHÔNG → user yêu cầu bật luôn → tôi nêu quan ngại rủi ro (bật Octane đổi
+model thực thi từ "mỗi request 1 process sạch" sang "1 process sống lâu,
+tái dùng app instance qua nhiều request" — bất kỳ state không được thiết kế
+để reset thủ công đều có thể rò rỉ chéo request) và định hỏi user chọn 1
+trong 3 hướng scope công việc (chuẩn bị hạ tầng only / audit toàn bộ trước /
+bật thẳng ngay) nhưng tool hỏi bị lỗi trước khi nhận được câu trả lời. User
+sau đó quyết định: **giao việc bật Octane cho 1 session "Claude Code" riêng
+thực thi**, và yêu cầu note lại context ở đây — chính là section này.
+
+**Các điểm rủi ro cụ thể đã xác định, cần audit trước khi bật Octane**
+(không đầy đủ, nhưng là điểm khởi đầu tốt cho session tiếp theo):
+
+- `HasSchemaCache::$schemaCacheMemo` (mục 2 ở trên) — static memo per-class,
+  vô hại dưới FPM, nhưng dưới Octane sẽ sống xuyên nhiều request. Vì đã có
+  TTL ở cache layer (`cache()->put(..., 6h)`) nên dữ liệu vẫn tự làm mới
+  đúng hạn kể cả khi memo static không bao giờ bị clear giữa các request —
+  rủi ro thực tế thấp, nhưng vẫn nên audit lại toàn bộ trait dùng `protected
+  static` trong `app/Models/Traits/*` và `app/Models/Base/Base.php` một lượt
+  có hệ thống trước khi bật, không chỉ riêng trait này.
+- `RoleRepository::listForCms()` gọi `Auth::shouldUse(...)` — mutate global
+  `config('auth.defaults.guard')`. Dưới FPM hiện tại "tự lành" mỗi request
+  (config reset). Dưới Octane đây là mutation toàn cục có thể leak guard
+  giữa các request của user khác nhau — cần sửa thành scoped
+  (`Auth::guard('...')` thay vì đổi default) trước khi bật Octane.
+- `docs/THEME-SYSTEM.md` đã ghi nhận 1 bug class state-leak dưới Octane cho
+  theme state — tiền lệ cho thấy codebase CHƯA từng được vet cho
+  Octane-safety một cách hệ thống, khả năng cao còn nhiều chỗ tương tự chưa
+  phát hiện (singleton/service có state, static property khác, cache
+  request-scoped nhầm thành app-scoped, v.v).
+
+**Việc CHƯA làm, để session Claude Code tiếp theo tự quyết scope**: 3 hướng
+đã định đề xuất cho user (chưa chốt hướng nào vì tool hỏi bị lỗi):
+
+1. Chuẩn bị hạ tầng trước (viết `.rr.yaml`/`config/octane.php` đúng cho môi
+   trường thật, chưa deploy) — rủi ro thấp nhất, chưa có tác dụng thật.
+2. Audit toàn bộ codebase tìm state không request-scoped (static property,
+   singleton service, global mutation như `Auth::shouldUse`, v.v.) TRƯỚC khi
+   bật ở bất kỳ môi trường nào — an toàn hơn nhưng tốn effort đáng kể.
+3. Bật thẳng ở staging trước, quan sát qua theo dõi lỗi/log thực tế — nhanh
+   nhất nhưng rủi ro cao nhất nếu có state-leak chưa phát hiện.
+
+Session tiếp theo nên bắt đầu bằng việc xác nhận lại với user hướng nào
+trước khi động vào `docker/php/Dockerfile`, `.rr.yaml`, hay bất kỳ deploy
+script nào.

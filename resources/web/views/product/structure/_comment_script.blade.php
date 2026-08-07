@@ -1,16 +1,3 @@
-{{--
-    Toàn bộ tương tác review = AJAX. KHÔNG append query string vào URL product.
-    Endpoint/CSRF/productId đọc từ data-* trên #review-section.
-
-    Behavior:
-      - Filter chips (rating/has_media/has_text/tag) → toggle state local + reload list
-      - Sort dropdown → reload list
-      - Pagination link trong #review-list-container → AJAX (intercept click)
-      - Save form submit → AJAX POST FormData (giữ file upload)
-      - Report form submit → AJAX POST
-      - Helpful/Unhelpful vote → AJAX POST (đã có pattern cũ)
-      - Star hint + textarea counter + media preview client-side
---}}
 <script>
 (function () {
     'use strict';
@@ -27,7 +14,6 @@
     const HINT       = ['', 'Tệ', 'Không hài lòng', 'Bình thường', 'Hài lòng', 'Tuyệt vời'];
 
     // ============================ Filter state ==========================
-    // Local in-memory state, KHÔNG ghi xuống URL/history.
     const state = {
         filter: { rating: null, has_media: 0, has_text: 0, tag: [] },
         sort:   '-review.helpful_count',
@@ -46,7 +32,6 @@
     }
 
     function syncChipState() {
-        // Toggle .is-active cho từng chip dựa trên state hiện tại.
         const noFilter = ! state.filter.rating && ! state.filter.has_media
             && ! state.filter.has_text && state.filter.tag.length === 0;
 
@@ -96,7 +81,6 @@
     }
 
     // =========================== Event handlers =========================
-    // Delegated click on section — chip + pagination + vote + report-trigger.
     section.addEventListener('click', function (e) {
         const clearBtn = e.target.closest('[data-review-clear]');
         if (clearBtn) {
@@ -137,14 +121,10 @@
             const p = url.searchParams.get('page');
             state.page = p ? +p : 1;
             reload();
-            // Scroll mềm về top section
             section.scrollIntoView({ behavior: 'smooth', block: 'start' });
             return;
         }
 
-        // Report button — dispatch event để Alpine modal mở (thay
-        // Bootstrap data-toggle="modal"). Alpine listener tự set
-        // #reportReviewId value từ detail.reviewId.
         const reportBtn = e.target.closest('.ri-btn--report');
         if (reportBtn) {
             window.dispatchEvent(new CustomEvent('open-report-modal', {
@@ -152,8 +132,6 @@
             }));
             return;
         }
-
-        // Helpful / Unhelpful vote
         const voteBtn = e.target.closest('.ri-btn--helpful, .ri-btn--unhelpful');
         if (voteBtn) {
             e.preventDefault();
@@ -162,7 +140,6 @@
         }
     });
 
-    // Sort dropdown
     document.addEventListener('change', function (e) {
         if (e.target && e.target.id === 'reviewSortSelect') {
             state.sort = e.target.value;
@@ -269,7 +246,6 @@
                 alert((data && data.message) ? data.message : 'OK');
                 if (data && data.success) {
                     reportForm.reset();
-                    // Đóng modal Alpine — thay $(...).modal('hide') Bootstrap cũ.
                     window.dispatchEvent(new CustomEvent('close-report-modal'));
                 }
             })
@@ -319,9 +295,6 @@
         });
     }
 
-    // ====== INITIAL LAZY LOAD (tối ưu A 2026-06-10) ======
-    // Defer reload() tới khi user scroll gần tới #review-section (IntersectionObserver)
-    // hoặc 1.5s sau page load nếu user không scroll. Tránh chặn LCP của trang detail.
     let didInitialLoad = false;
     function initialLoad() {
         if (didInitialLoad) return;
@@ -338,11 +311,9 @@
                     break;
                 }
             }
-        }, { rootMargin: '300px 0px' });   // pre-fetch 300px trước khi section vào viewport
+        }, { rootMargin: '300px 0px' });
         io.observe(section);
     }
-    // Fallback cho browser cũ + đảm bảo load nếu section nằm dưới fold mà user
-    // không scroll (vd mở qua tab khác). 1.5s đủ để trang detail render xong LCP.
     setTimeout(initialLoad, 1500);
 })();
 </script>

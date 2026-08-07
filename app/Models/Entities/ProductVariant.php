@@ -15,6 +15,11 @@ class ProductVariant extends Base
     protected $table = 'product_variant';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'product_id', 'sku', 'attribute_signature', 'price', 'regular_price',
+        'points', 'weight', 'image', 'is_default', 'sort_order', 'minimum',
+        'deleted_at',
+    ];
 
     protected $casts = [
         'price'         => 'float',
@@ -126,5 +131,17 @@ class ProductVariant extends Base
             fn ($q) => $q->dateStartToEnd()
                 ->where('user_group_id', getUserGroupId())
         );
+    }
+
+    /**
+     * Chiết khấu theo số lượng (quantity-tier), theo variant. KHÔNG dùng
+     * ->ofMany() như productVariantSpecial vì "tier phù hợp nhất" phụ thuộc
+     * số lượng mua tại thời điểm runtime (không cố định như priority MAX) —
+     * eager-load toàn bộ tier đang active (date range + user_group), chọn
+     * tier khớp trong PHP (CartService::bestDiscountTier) để tránh N+1.
+     */
+    public function productVariantDiscounts()
+    {
+        return $this->hasMany(ProductVariantDiscount::class, 'product_variant_id', 'id');
     }
 }

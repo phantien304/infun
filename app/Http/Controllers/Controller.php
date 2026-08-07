@@ -20,6 +20,7 @@ use App\Repositories\Interfaces\StockStatusRepositoryInterface;
 use App\Repositories\Interfaces\TaxClassRepositoryInterface;
 use App\Repositories\Interfaces\UserGroupRepositoryInterface;
 use App\Repositories\Interfaces\WardRepositoryInterface;
+use App\Repositories\Interfaces\WarehouseRepositoryInterface;
 use App\Repositories\Interfaces\WeightClassRepositoryInterface;
 use App\Repositories\Interfaces\ZoneRepositoryInterface;
 use App\Services\Currency\CurrencyService;
@@ -55,6 +56,7 @@ abstract class Controller
             'userGroupRepo'    => UserGroupRepositoryInterface::class,
             'lengthClassRepo'  => LengthClassRepositoryInterface::class,
             'weightClassRepo'  => WeightClassRepositoryInterface::class,
+            'warehouseRepo'    => WarehouseRepositoryInterface::class,
         ];
     }
 
@@ -140,6 +142,7 @@ abstract class Controller
             'breadcrumbs' => $breadcrumbs,
             'breadcrumbSchema' => $breadcrumbSchema,
             'menus' => $this->getMenus(),
+            'menuTree' => $this->getMenuTree(),
             'currencies' => $this->currencyService->allCurrency(),
             'currentCurrency' => $currentCurrency,
             'currencySymbol' => $currencySymbol,
@@ -148,6 +151,9 @@ abstract class Controller
         ]);
         $this->buildDataCommon();
         $data = array_merge($data, $this->getViewData());
+
+        \App\Helpers\ThemeManager::applyForView(is_string($view) ? $view : null);
+
         return view($view, $data, $mergeData);
     }
 

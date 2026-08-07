@@ -11,6 +11,18 @@ class UserAddress extends Base
     protected $table = 'user_address';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'user_id',
+        'full_name',
+        'telephone',
+        'country_id',
+        'zone_id',
+        'district_id',
+        'ward_id',
+        'address',
+        'is_default',
+        'deleted_at',
+    ];
 
     public function country()
     {

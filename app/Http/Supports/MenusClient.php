@@ -3,6 +3,7 @@
 namespace App\Http\Supports;
 
 use App\Helpers\CacheGate;
+use App\Helpers\ThemeManager;
 use Illuminate\Support\Str;
 
 trait MenusClient
@@ -21,21 +22,78 @@ trait MenusClient
 
     public function getMenus()
     {
-        $cacheKey = getCoreConfig('cache.menu') . app()->getLocale();
+        $theme    = ThemeManager::current();
+        $cacheKey = getCoreConfig('cache.menu') . app()->getLocale() . '_' . ($theme ?? 'default');
         $store = CacheGate::systemStore();
 
         if (! $store->has($cacheKey)) {
-            $menus = $this->buildMenus();
+            $menus = $this->buildMenus($theme);
             $store->add($cacheKey, $menus);
             return $menus;
         }
         return $store->get($cacheKey);
     }
 
-    protected function buildMenus(): array
+    public function getMenuTree(): array
+    {
+        $theme    = ThemeManager::current();
+        $cacheKey = getCoreConfig('cache.menu') . 'tree_' . app()->getLocale() . '_' . ($theme ?? 'default');
+        $store = CacheGate::systemStore();
+
+        if (! $store->has($cacheKey)) {
+            $tree = $this->buildMenuTree($theme);
+            $store->add($cacheKey, $tree);
+
+            return $tree;
+        }
+
+        return $store->get($cacheKey);
+    }
+
+    protected function buildMenuTree(?string $theme = null): array
+    {
+        $tree = [];
+
+        foreach ($this->menuRepo->getMenuByPosition('top', $theme) as $menu) {
+            $this->children = [];
+
+            try {
+                foreach ($this->menuValueRepo->getListMenuValueByMenuId($menu['id']) as $child) {
+                    $this->children[$child->parent_id . '_' . $menu['id']][] = $child;
+                }
+                $tree = array_merge($tree, $this->menuNodesToArray(1, $menu['id']));
+            } catch (\Throwable $e) {
+                logError($e->getMessage());
+            }
+        }
+        return $tree;
+    }
+
+    protected function menuNodesToArray($parent, $menuId): array
+    {
+        if (! $this->hasChild($parent, $menuId)) {
+            return [];
+        }
+        $items = [];
+        foreach ($this->getNodes($parent, $menuId) as $item) {
+            $items[] = [
+                'id'          => (int) $item['id'],
+                'title'       => (string) $item['title'],
+                'url'         => '/' . $this->getLink($item),
+                'css'         => (string) ($item['css'] ?? ''),
+                'html_custom' => (string) ($item['html_custom'] ?? ''),
+                'children'    => ((int) $item['id'] > 1)
+                    ? $this->menuNodesToArray($item['id'], $menuId)
+                    : [],
+            ];
+        }
+        return $items;
+    }
+
+    protected function buildMenus(?string $theme = null): array
     {
         $menus = [];
-        $menuData = $this->menuRepo->getMenuByPosition('top');
+        $menuData = $this->menuRepo->getMenuByPosition('top', $theme);
         foreach ($menuData as $i => $item) {
             list($pc, $mobile) = $this->genTree($item);
             $menus[$i] = ['pc' => $pc, 'mobile' => $mobile];

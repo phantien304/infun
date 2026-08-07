@@ -16,11 +16,9 @@
         </div>
         <div class="lg:col-span-3 lg:order-1 order-2">
             <div class="shop-product-fillter flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                {{--
                 <div class="totall-product">
                     <p>Có <strong class="text-brand">{{ $entities->total() }}</strong> {{ $totalLabel }}!</p>
                 </div>
-                --}}
                 @include('web::product.structure._sort_by')
             </div>
             <div class="product-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-5">

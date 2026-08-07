@@ -1,11 +1,14 @@
 name: Quality
 
 # Cổng chất lượng chạy trên MỌI PR + push vào economer.
-# Hiện chỉ gác 1 thứ: ranh giới module CMS / Storefront / Domain (deptrac).
+# Gác 2 thứ:
+#  1. Ranh giới module CMS / Storefront / Domain (deptrac).
+#  2. Registry quyền CMS (App\Enums\CmsPermissionEntity) không lệch code —
+#     xem docs/ROLE-PERMISSION-PLAN.md Phase 1.
 #
 # Vì sao tách khỏi deploy-staging.yml: deploy chỉ chạy khi push economer, mà
-# ranh giới cần được gác ở PR — lúc còn sửa được rẻ. Job này KHÔNG build image,
-# chạy ~1 phút, không chặn pipeline deploy.
+# 2 việc này cần được gác ở PR — lúc còn sửa được rẻ. Job KHÔNG build image,
+# mỗi job ~1 phút, không chặn pipeline deploy.
 #
 # Thêm pint / larastan / phpunit vào đây khi muốn siết tiếp.
 
@@ -39,3 +42,44 @@ jobs:
 
       - name: Kiểm tra ranh giới
         run: composer boundary
+
+  permission-registry:
+    name: Registry quyền CMS (permission:sync --check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      # Job RIÊNG với boundary — permission:sync --check là artisan command
+      # thật (cần boot framework), khác deptrac (thuần static analysis).
+      # .env phải có TRƯỚC composer install vì post-autoload-dump chạy
+      # `artisan package:discover` (cần .env tồn tại, xem comment job
+      # boundary phía trên).
+      - name: Chuẩn bị .env tối thiểu
+        run: cp .env.example .env
+
+      - name: Cài dependency
+        run: composer install --no-interaction --no-progress
+
+      - name: Sinh APP_KEY
+        run: php artisan key:generate --ansi
+
+      # permission:sync --check CHỈ file-scan (app/Http/Controllers/Api/Cms)
+      # + so sánh string với App\Enums\CmsPermissionEntity — không query DB
+      # (đã audit app/Providers/AppServiceProvider.php::boot(): không có
+      # eager DB query nào trong boot chain của bất kỳ artisan command nào).
+      # Vẫn khai DB_CONNECTION=sqlite :memory: + cache/session=array làm
+      # lưới an toàn: nếu sau này ai đó lỡ thêm eager DB query vào boot(),
+      # job fail RÕ RÀNG (lỗi kết nối/no such table) thay vì fail mù mờ.
+      - name: Kiểm tra registry quyền CMS đồng bộ với code
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+        run: php artisan permission:sync --check

@@ -1,24 +1,7 @@
-{{--
-    Sidebar facet — giao diện dựng lại theo public/prototype/category-v1.html
-    (thẻ rounded-2xl nền trắng, viền hairline, chữ 13.5-14px).
-
-    KHÔNG đổi hợp đồng dữ liệu: mọi input giữ nguyên tên cũ
-    (filter[keyword], filter[price_min], filter[price_max], filter[in_stock][],
-    filter[manufacturer_id][], filter[filter_value_id][]) nên
-    ProductRepository và script hydrate trong _side_bar.blade.php chạy y như cũ.
-
-    MỚI: filter[rating_min] — xem ProductRepository::normalizeRating (chỉ nhận
-    3/4/5) và hai chỗ áp lọc: beforeBuildForList (DB) + searchViaMeilisearch.
-
-    LƯU Ý VẬN HÀNH: fragment này được cache qua FragmentCache::facets(). Sau
-    khi deploy PHẢI xoá cache, nếu không vẫn thấy giao diện cũ:
-        php artisan tinker --execute="App\View\FragmentCache::forgetFacets();"
---}}
 <div class="space-y-4">
 
     <h5 class="text-[15px] font-bold tracking-tight">Bộ lọc tìm kiếm</h5>
 
-    {{-- Tìm trong danh mục --}}
     <div class="relative">
         <input type="search" id="filter-keyword" name="filter[keyword]" value="" autocomplete="off"
             placeholder="Tên sản phẩm, SKU, model…"
@@ -30,9 +13,6 @@
             <path d="m20 20-3.5-3.5" />
         </svg>
     </div>
-
-    {{-- Khoảng giá — giữ nguyên slider jQuery UI sẵn có (#slider-range, biến
-         priceGteq/priceLteq set ở _side_bar.blade.php), chỉ thay lớp vỏ. --}}
     <div class="rounded-2xl bg-white border border-gray-200 p-4">
         <label class="block text-[13.5px] font-semibold mb-3">Khoảng giá</label>
         <div class="price-filter">
@@ -53,11 +33,6 @@
         </div>
     </div>
 
-    {{-- Đánh giá — facet MỚI.
-         Radio chứ không checkbox: "4 sao trở lên" đã bao hàm 5 sao, cho chọn
-         nhiều mức cùng lúc là vô nghĩa và sinh nhiều URL cùng một ý nghĩa.
-         Mục "Tất cả đánh giá" (value rỗng) để bỏ chọn — radio thuần HTML
-         không tự bỏ được, thiếu nó người dùng lọc rồi thì kẹt luôn. --}}
     <div class="rounded-2xl bg-white border border-gray-200 p-4">
         <label class="block text-[13.5px] font-semibold mb-3">Đánh giá</label>
         <div class="space-y-1">
@@ -79,7 +54,6 @@
         </div>
     </div>
 
-    {{-- Tình trạng kho --}}
     <div class="rounded-2xl bg-white border border-gray-200 p-4">
         <label class="block text-[13.5px] font-semibold mb-3">Kho hàng</label>
         <div class="space-y-1">
@@ -96,7 +70,6 @@
         </div>
     </div>
 
-    {{-- Hãng sản xuất --}}
     @if (count($manufacturers) && !$hideManufacturer)
         <div class="rounded-2xl bg-white border border-gray-200 p-4">
             <label class="block text-[13.5px] font-semibold mb-3">Hãng sản xuất</label>
@@ -114,7 +87,6 @@
         </div>
     @endif
 
-    {{-- Facet động từ bảng filter / filter_value --}}
     @foreach ($filters as $filter)
         <div class="rounded-2xl bg-white border border-gray-200 p-4">
             <label class="block text-[13.5px] font-semibold mb-3">{{ $filter->name }}</label>

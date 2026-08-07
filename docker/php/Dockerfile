@@ -7,12 +7,12 @@ FROM php:8.4-fpm-alpine
 # System deps + build deps cho các extension cần biên dịch (gd, intl, zip, redis).
 # Tách phần build deps để xoá sau khi `pecl install` xong, image nhẹ hơn.
 RUN apk add --no-cache \
-        bash git curl icu-libs libpng libjpeg-turbo freetype libzip oniguruma \
+        bash git curl icu-libs libpng libjpeg-turbo freetype libwebp libzip oniguruma \
         mariadb-client \
     && apk add --no-cache --virtual .build-deps \
         autoconf g++ make linux-headers \
-        icu-dev libpng-dev libjpeg-turbo-dev freetype-dev libzip-dev oniguruma-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+        icu-dev libpng-dev libjpeg-turbo-dev freetype-dev libwebp-dev libzip-dev oniguruma-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j$(nproc) \
         pdo_mysql mysqli mbstring bcmath intl zip gd exif pcntl \
     && pecl install redis \

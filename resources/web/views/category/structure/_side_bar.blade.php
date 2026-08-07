@@ -72,10 +72,6 @@
                 });
             });
 
-            // Đánh giá: radio, không phải checkbox — không nằm chung vòng lặp
-            // trên được vì cần tick ĐÚNG MỘT ô và ô rỗng ("Tất cả đánh giá")
-            // là mặc định. Thiếu đoạn này thì reload xong bộ lọc vẫn áp
-            // nhưng sidebar hiện "Tất cả" — người dùng tưởng đã bỏ lọc.
             var rating = p.get('filter[rating_min]');
             if (rating !== null) {
                 document.querySelectorAll('input[name="filter[rating_min]"]').forEach(function(rb) {
@@ -83,7 +79,6 @@
                 });
             }
         }
-        // --- Cây danh mục (item 3b): toggle + active + bung nhánh tổ tiên ---
         function openNode(li) {
             var ul = li.querySelector(':scope > .cat-tree-children');
             if (ul) ul.style.display = 'block';
@@ -108,7 +103,6 @@
             var tree = document.querySelector('[data-cat-tree]');
             if (!tree) return;
 
-            // Toggle mở/đóng (thay Alpine cũ) — delegate 1 listener.
             tree.addEventListener('click', function(e) {
                 var btn = e.target.closest('.cat-tree-toggle');
                 if (!btn || !tree.contains(btn)) return;
@@ -116,7 +110,6 @@
                 toggleNode(btn.closest('[data-cat-node]'));
             });
 
-            // Node đang active: khớp filter.category_id hoặc pathname với data-cat-url.
             var catId = new URLSearchParams(location.search).get('filter[category_id]');
             var here = location.pathname.replace(/\/+$/, '');
             var active = null;
@@ -146,7 +139,6 @@
                     link.classList.add('text-white', 'font-semibold', 'hover:text-white');
                 }
             }
-            // Bung mọi nhánh tổ tiên để node active hiện ra.
             var parent = active.parentElement ? active.parentElement.closest('[data-cat-node]') : null;
             while (parent) {
                 openNode(parent);

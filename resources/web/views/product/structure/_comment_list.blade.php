@@ -1,14 +1,3 @@
-{{--
-    Loop review item — mỗi review:
-      - Avatar + name (or anonymous) + verified badge
-      - Star rating + criteria breakdown chi tiết (collapsed)
-      - Date + variant SKU + source
-      - Title (optional) + text
-      - Media gallery (image + video, lightbox)
-      - Tags
-      - Shop reply (nested)
-      - Helpful/Unhelpful + Report buttons
---}}
 <div class="review-list">
     @forelse ($reviews ?? [] as $r)
         <article class="review-item" data-review-id="{{ $r->id }}">
@@ -150,10 +139,6 @@
         </div>
     @endforelse
 </div>
-
-{{-- Paging gắn liền partial này để AJAX swap không mất phân trang.
-     URL trong link paging sẽ là tương đối với endpoint review.list — JS intercept
-     click, lấy ?page=N, gọi reload(). --}}
 @if ($reviews && method_exists($reviews, 'hasPages') && $reviews->hasPages())
     <div class="review-paging">
         @includeIf('web::share.structure._paging', ['paginator' => $reviews])

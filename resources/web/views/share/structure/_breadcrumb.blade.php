@@ -1,8 +1,3 @@
-{{--
-    Breadcrumb dạng "header" — có title + đường dẫn navigation.
-    Class theme `.page-header`, `.archive-header`, `.breadcrumb` styled
-    main.css (separator `<span>` vẽ qua CSS).
---}}
 @if(isset($breadcrumbs) && count($breadcrumbs))
     <div class="page-header mt-30 mb-50">
         <div class="container mx-auto max-w-7xl px-4">

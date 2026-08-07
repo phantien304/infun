@@ -97,12 +97,14 @@ class OrderRepository extends QueryableRepository implements OrderRepositoryInte
         return $order;
     }
 
-    public function appendHistory(int $orderId, int $statusId, ?int $userId = null): OrdersHistory
+    public function appendHistory(int $orderId, int $statusId, ?int $userId = null, ?string $comment = null, bool $notify = false): OrdersHistory
     {
         return OrdersHistory::create([
             'order_id'        => $orderId,
             'order_status_id' => $statusId,
             'user_id'         => $userId,
+            'comment'         => $comment,
+            'notify'          => $notify,
         ]);
     }
 

@@ -1,8 +1,3 @@
-{{--
-    Blog mới nhất — grid 4-cột trên xl, 3 trên lg, 2 trên md, 1 mobile.
-    Class theme `.entry-content-2`, `.post-thumb`, `.post-title`, `.hover-up`,
-    `.has-dot`, `.border-radius-15` styled main.css/custom.css → giữ nguyên.
---}}
 <section class="section-padding pb-30 blog-latest">
     <div class="container mx-auto max-w-7xl px-4">
         <h3 class="text-center mb-30 text-9">Chia sẻ</h3>

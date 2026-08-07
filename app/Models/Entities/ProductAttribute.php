@@ -10,4 +10,5 @@ class ProductAttribute extends Base
     public $primaryKey = ['product_id', 'attribute_id', 'language_code'];
     public $incrementing = false;
     public $timestamps = true;
+    protected $fillable = ['product_id', 'attribute_id', 'language_code', 'text'];
 }

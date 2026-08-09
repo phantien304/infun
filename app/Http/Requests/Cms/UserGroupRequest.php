@@ -4,15 +4,10 @@ namespace App\Http\Requests\Cms;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Validate cho store + update UserGroup (REST). Mirror CategoryRequest —
- * name bắt buộc cho ngôn ngữ mặc định, các ngôn ngữ khác optional.
- */
 class UserGroupRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (auth:sanctum + cms.permission).
         return true;
     }
 

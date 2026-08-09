@@ -48,7 +48,7 @@ class OrderController extends BaseCmsController
         $order = $this->repo->getForCms((int) $id);
         abort_if($order === null, 404);
 
-        return response()->json(['data' => OrderData::from($order)]);
+        return respondSuccess(OrderData::from($order), 'order_shown');
     }
 
     public function store(OrderRequest $request)
@@ -83,7 +83,7 @@ class OrderController extends BaseCmsController
         $order = $this->repo->restoreById((int) $id);
         abort_if($order === null, 404);
 
-        return response()->json(['data' => OrderData::from($this->repo->getForCms($order->id))]);
+        return respondSuccess(OrderData::from($this->repo->getForCms($order->id)), 'order_restored');
     }
 
     public function bulk(Request $request)
@@ -98,14 +98,9 @@ class OrderController extends BaseCmsController
             ? $this->repo->deleteByIds($data['ids'])
             : $this->repo->restoreByIds($data['ids']);
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected]);
     }
 
-    /**
-     * POST /order/preview-total — tab Confirm của wizard gọi mỗi khi đổi hãng
-     * vận chuyển/sản phẩm, để hiện bảng tạm tính TRƯỚC khi bấm Save thật.
-     * KHÔNG ghi DB.
-     */
     public function previewTotal(Request $request)
     {
         $data = $request->validate([
@@ -133,12 +128,9 @@ class OrderController extends BaseCmsController
             abort(422, $e->getMessage());
         }
 
-        return response()->json(['data' => $result]);
+        return respondSuccess($result);
     }
 
-    /**
-     * @return array{0: Orders, 1: bool}
-     */
     private function persist(?Orders $existing, array $data): array
     {
         try {

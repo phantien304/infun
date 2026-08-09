@@ -4,16 +4,10 @@ namespace App\Http\Requests\Cms;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Validate cho store + update Blog (REST).
- * Title bắt buộc cho ngôn ngữ mặc định, các ngôn ngữ khác không bắt buộc.
- * FormRequest tự trả 422 + { message, errors:{ field:[...] } } (chuẩn Laravel).
- */
 class BlogRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (auth:sanctum + cms.permission). Cho qua ở tầng request.
         return true;
     }
 

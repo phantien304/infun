@@ -39,12 +39,6 @@ class CacheFlushObserver
                 logError('CacheFlushObserver flush ' . $iface . ': ' . $e->getMessage());
             }
         }
-
-        // Full-page cache (CachePage) giờ cache cả trang danh mục/list/phân trang
-        // → phải flush khi data nguồn đổi, nếu không stale tới hết TTL 24h. Tag
-        // flush trên redis rẻ (bump version), no-op trên file driver. Chỉ chạy
-        // cho model có trong $cacheMap nên tần suất = nhịp CMS mutate, chấp nhận
-        // trade-off "1 write xoá toàn page cache" đổi lấy list luôn tươi.
         CacheGate::flushPages();
     }
 }

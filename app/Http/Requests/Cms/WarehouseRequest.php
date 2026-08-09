@@ -5,22 +5,15 @@ namespace App\Http\Requests\Cms;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Validate cho store + update Warehouse (REST). Warehouse KHÔNG có bảng
- * dịch (chỉ code/name/address/... phẳng — giống Menu, khác Category/Blog).
- */
 class WarehouseRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (auth:sanctum + cms.permission). Cho qua ở tầng request.
         return true;
     }
 
     public function rules(): array
     {
-        // Route param 'warehouse' (Route::apiResource('warehouse', ...)) —
-        // model binding, null lúc store.
         $warehouse = $this->route('warehouse');
 
         return [

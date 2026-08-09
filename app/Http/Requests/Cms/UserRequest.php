@@ -5,16 +5,10 @@ namespace App\Http\Requests\Cms;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Validate cho store + update User CMS (chỉ admin, type=1 — Phase 6.1).
- * password required lúc tạo, optional lúc sửa (rỗng = giữ nguyên mật khẩu
- * cũ) — mirror UserValidator._buildCreateRules/_buildUpdateRules ở mt219.
- */
 class UserRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (auth:sanctum + cms.permission).
         return true;
     }
 

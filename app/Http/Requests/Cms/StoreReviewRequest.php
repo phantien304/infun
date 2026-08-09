@@ -4,15 +4,10 @@ namespace App\Http\Requests\Cms;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Validate cho store + update StoreReview (REST) — mirror CategoryRequest.
- * Title bắt buộc cho ngôn ngữ mặc định, các ngôn ngữ khác không bắt buộc.
- */
 class StoreReviewRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (cms.permission, xem routes/rcms.php).
         return true;
     }
 

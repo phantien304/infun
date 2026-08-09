@@ -5,10 +5,6 @@ namespace App\Http\Requests\Cms;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Validate cho store + update 1 node menu_value (cây menu con của Menu).
- * Title bắt buộc cho ngôn ngữ mặc định trong menu_value_descriptions.
- */
 class MenuValueRequest extends FormRequest
 {
     public function authorize(): bool

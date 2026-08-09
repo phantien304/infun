@@ -5,18 +5,10 @@ namespace App\Http\Requests\Cms;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Validate cho store + update Customer CMS (chỉ member, type=2 — theo yêu
- * cầu user "Đầy đủ CRUD như màn User admin"). Mirror UserRequest (Phase 2.3)
- * nhưng KHÔNG có username/role_ids, THÊM phone/address/sex/newsletter/
- * user_group_id (field riêng của Customer, xem CustomerRepositoryInterface).
- * password required lúc tạo, optional lúc sửa (rỗng = giữ nguyên).
- */
 class CustomerRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (auth:sanctum + cms.permission).
         return true;
     }
 

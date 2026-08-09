@@ -4,12 +4,6 @@ namespace App\Http\Controllers\Api\Cms;
 
 use App\Repositories\Interfaces\OrdersStatusRepositoryInterface;
 
-/**
- * OrdersStatus — CHỈ read (dropdown "Tình trạng đơn hàng" ở order/form.jsx,
- * order/view.jsx, order/index.jsx bộ lọc). CRUD đầy đủ là màn hình riêng,
- * chưa convert (router 'order-status' phía infuncms đang placeholder).
- * Permission slug 'order-status' khớp sp_permissions có sẵn (list-order-status).
- */
 class OrderStatusController extends BaseCmsController
 {
     protected string $permission = 'order-status';

@@ -5,16 +5,6 @@ namespace App\Observers;
 use App\Models\Entities\Orders;
 use App\Repositories\Interfaces\AffiliateConversionRepositoryInterface;
 
-/**
- * Vòng đời hoa hồng affiliate theo trạng thái đơn — mirror OrderRewardObserver
- * (mọi flow đổi status đều qua orderRepo->upsertOrder = Eloquent save):
- *  - status ∈ `order_complete_status_all` (giao thành công) → conversion
- *    Pending → APPROVED + approved_at (hold_days tính từ đây, áp ở Phase 5
- *    khi chốt kỳ payout).
- *  - status = `order_cancel_status_id` → Pending/Approved (chưa Paid)
- *    → REJECTED.
- * Idempotent: repo chỉ update đúng status nguồn nên gọi lặp vô hại.
- */
 class OrderAffiliateObserver
 {
     public function updated(Orders $order): void

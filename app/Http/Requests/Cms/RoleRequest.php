@@ -5,17 +5,10 @@ namespace App\Http\Requests\Cms;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Validate cho store + update Role (spatie). `permission_ids` chỉ validate
- * SHAPE (mảng số nguyên) ở đây — lọc theo quyền thực có của user hiện tại
- * (chống leo thang) nằm ở App\Services\Cms\RoleWriteService, KHÔNG phải
- * việc của FormRequest.
- */
 class RoleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (auth:sanctum + cms.permission).
         return true;
     }
 

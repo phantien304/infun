@@ -4,12 +4,6 @@ namespace App\Http\Controllers\Api\Cms;
 
 use App\Repositories\Interfaces\InformationRepositoryInterface;
 
-/**
- * Information — CHỈ read (dropdown target cho menu-value type=information).
- * CRUD đầy đủ cho information là 1 màn hình riêng, chưa convert (router
- * CRUD_ENTITIES phía infuncms — page 'information' đang placeholder).
- * Permission slug 'information' khớp sp_permissions có sẵn (list-information).
- */
 class InformationController extends BaseCmsController
 {
     protected string $permission = 'information';

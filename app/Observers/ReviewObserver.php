@@ -91,7 +91,6 @@ class ReviewObserver
         try {
             app(ReviewRepositoryInterface::class)->forgetProductCache($productId);
         } catch (\Throwable $e) {
-            // Cache invalidate fail không được phá save flow.
             logError('ReviewObserver invalidate: ' . $e->getMessage());
         }
     }

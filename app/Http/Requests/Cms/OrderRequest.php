@@ -4,24 +4,11 @@ namespace App\Http\Requests\Cms;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Validate store/update Order (CMS). Dùng CHUNG cho 2 trang FE khác nhau:
- *   - order/form.jsx (wizard 3 tab: tạo mới / sửa đầy đủ) → LUÔN gửi kèm
- *     `products` (thay toàn bộ dòng sản phẩm) + payment_code/carrier_code.
- *   - order/view.jsx (đổi trạng thái + sửa thông tin khách, KHÔNG đụng sản
- *     phẩm/vận chuyển/thanh toán) → KHÔNG gửi `products`/payment_code/carrier_code.
- * `required_with:products` là cách phân biệt 2 luồng đó ở tầng validate.
- *
- * QUAN TRỌNG (đã học từ ProductRequest — xem comment ở đó): FormRequest::validated()
- * chỉ giữ field có khai rule (kể cả 'nullable'); field mảng con thiếu rule sẽ
- * bị lặng lẽ xoá dù request gửi đúng dữ liệu. Vì vậy khai đủ rule cho MỌI
- * field, kể cả field không bắt buộc.
- */
 class OrderRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; // quyền đã chặn ở middleware cms.permission
+        return true;
     }
 
     public function rules(): array
@@ -45,9 +32,6 @@ class OrderRequest extends FormRequest
 
             'products'                                  => 'sometimes|array|min:1',
             'products.*.product_id'                     => 'required_with:products|integer',
-            // Chỉ FE gửi kèm cho dòng ĐÃ tồn tại (nạp từ GET /order/{id}) —
-            // lưới an toàn khi option_value_ids rỗng, xem
-            // OrderAdminWriteService::resolveLine() + form.jsx productsFromDetail().
             'products.*.product_variant_id'             => 'nullable|integer',
             'products.*.quantity'                       => 'required_with:products|integer|min:1',
             'products.*.option_value_ids'                => 'nullable|array',

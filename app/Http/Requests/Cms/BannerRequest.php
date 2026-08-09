@@ -5,17 +5,10 @@ namespace App\Http\Requests\Cms;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Validate cho store + update Banner (REST). Mirror CategoryRequest — title
- * bắt buộc cho ngôn ngữ mặc định, nested banner_values[] mỗi dòng là 1 ảnh
- * hoặc 1 video (media_type), kèm banner_value_descriptions[] theo ngôn ngữ.
- * `theme` mirror MenuRequest — allowlist theo config/theme.php, KHÔNG FK.
- */
 class BannerRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Quyền đã chặn ở middleware (auth:sanctum + cms.permission).
         return true;
     }
 

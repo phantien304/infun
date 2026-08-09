@@ -4,12 +4,6 @@ namespace App\Http\Controllers\Api\Cms;
 
 use App\Repositories\Interfaces\PaymentRepositoryInterface;
 
-/**
- * Payment — CHỈ read (dropdown "Phương thức thanh toán" ở order/form.jsx tab
- * Confirm). CRUD payment đầy đủ là màn hình riêng, chưa convert (router
- * 'payment' phía infuncms đang placeholder). Permission slug 'payment' khớp
- * sp_permissions có sẵn (list-payment).
- */
 class PaymentController extends BaseCmsController
 {
     protected string $permission = 'payment';

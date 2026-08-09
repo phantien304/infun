@@ -98,7 +98,6 @@ class AppServiceProvider extends ServiceProvider
     protected function registerViewNamespaces(): void
     {
         View::addNamespace('web', resource_path('web/views'));
-        View::addNamespace('cms', resource_path('cms/views'));
 
         if ($this->app->runningInConsole()) {
             \App\Helpers\ThemeManager::apply(config('theme.active'));

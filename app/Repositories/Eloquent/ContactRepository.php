@@ -6,12 +6,6 @@ use App\Models\Entities\Contact;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\ContactRepositoryInterface;
 
-/**
- * Write-only repo cho form liên hệ. Validate input nằm ở
- * `App\Http\Requests\Web\ContactSendRequest` (FormRequest) — KHÔNG dùng
- * validator legacy. Mass assignment dựa trên fillable suy từ schema
- * (trait HasSchemaCache ở Base).
- */
 class ContactRepository extends QueryableRepository implements ContactRepositoryInterface
 {
     public function model(): string

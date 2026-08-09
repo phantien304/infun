@@ -10,9 +10,6 @@ class ResourceController extends Controller
 {
     public function index(Request $request)
     {
-        // Dropdown cho setting/detail.jsx (mirror mt219 getListResource({list_for_setting:true})).
-        // user_group/weight_class/length_class/category KHÔNG có CRUD route riêng ở
-        // rcms (đợi đợt convert sau) — giống cách product form đã lấy qua đây.
         if ($request->boolean('list_for_setting')) {
             return respondSuccess([
                 'user_group'   => $this->userGroupRepo->listWithDescription()

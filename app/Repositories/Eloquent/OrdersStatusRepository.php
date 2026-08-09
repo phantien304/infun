@@ -7,10 +7,6 @@ use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Interfaces\OrdersStatusRepositoryInterface;
 use Illuminate\Support\Collection;
 
-/**
- * Bảng tham chiếu nhỏ (~20 dòng), chỉ Cms đọc để đổ dropdown — KHÔNG cache
- * (khác Zone/Carrier/Payment vốn còn được storefront đọc ở traffic cao).
- */
 class OrdersStatusRepository extends QueryableRepository implements OrdersStatusRepositoryInterface
 {
     public function model(): string

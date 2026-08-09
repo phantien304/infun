@@ -8,15 +8,6 @@ use App\Models\Entities\MenuValue;
 use App\Repositories\Interfaces\MenuValueRepositoryInterface;
 use Illuminate\Http\Request;
 
-/**
- * MenuValue API (REST + action riêng) cho CMS — cây menu con của 1 Menu.
- * KHÔNG dùng Route::cmsApiResource (không có restore/bulk — menu_value
- * không soft-delete) + có 3 action ngoài REST chuẩn (reorder/import/xoá
- * category) khai riêng ở routes/rcms.php.
- *
- * Permission slug 'menu-value' (sp_permissions có sẵn list/detail/create/
- * edit/del-menu-value — TÁCH RIÊNG với 'menu' của MenuController).
- */
 class MenuValueController extends BaseCmsController
 {
     protected string $permission = 'menu-value';
@@ -26,7 +17,6 @@ class MenuValueController extends BaseCmsController
     ) {
     }
 
-    /** GET /menu-value?menu_id=X — cây phẳng (FE tự dựng theo parent_id). */
     public function index(Request $request)
     {
         $menuId = (int) $request->input('menu_id');
@@ -34,9 +24,7 @@ class MenuValueController extends BaseCmsController
 
         $list = $this->repo->getTreeForCms($menuId);
 
-        return response()->json([
-            'data' => $list->map(fn ($mv) => MenuValueData::fromModel($mv))->values(),
-        ]);
+        return respondSuccess($list->map(fn ($mv) => MenuValueData::fromModel($mv))->values());
     }
 
     public function show(MenuValue $menuValue)
@@ -47,7 +35,7 @@ class MenuValueController extends BaseCmsController
         $itemName   = $this->repo->resolveItemName($type, $itemId);
         $itemExists = $this->repo->resolveItemExists($type, $itemId);
 
-        return response()->json(['data' => MenuValueData::fromModel($menuValue, $itemName, $itemExists)]);
+        return respondSuccess(MenuValueData::fromModel($menuValue, $itemName, $itemExists), 'menu_value_show');
     }
 
     public function store(MenuValueRequest $request)
@@ -55,7 +43,7 @@ class MenuValueController extends BaseCmsController
         $mv = $this->repo->saveFromCms(null, $request->validated());
         $itemExists = $this->repo->resolveItemExists((string) $mv->type, $mv->item_id !== null ? (int) $mv->item_id : null);
 
-        return response()->json(['data' => MenuValueData::fromModel($mv, null, $itemExists)], 201);
+        return respondCreated(MenuValueData::fromModel($mv, null, $itemExists), 'menu_value_created');
     }
 
     public function update(MenuValueRequest $request, MenuValue $menuValue)
@@ -63,15 +51,9 @@ class MenuValueController extends BaseCmsController
         $mv = $this->repo->saveFromCms($menuValue, $request->validated());
         $itemExists = $this->repo->resolveItemExists((string) $mv->type, $mv->item_id !== null ? (int) $mv->item_id : null);
 
-        return response()->json(['data' => MenuValueData::fromModel($mv, null, $itemExists)]);
+        return respondSuccess(MenuValueData::fromModel($mv, null, $itemExists), 'menu_value_updated');
     }
 
-    /**
-     * PATCH /menu-value/{id}/rename — "sửa tên tại chỗ" ngay trên cây, không
-     * mở form đầy đủ. Chỉ 1 field title (locale admin đang xem — xem docblock
-     * repo), KHÔNG dùng MenuValueRequest (field đó require cả type/descriptions
-     * cho store/update đầy đủ, quá nặng cho 1 lần đổi tên nhanh).
-     */
     public function rename(Request $request, MenuValue $menuValue)
     {
         $data = $request->validate([
@@ -80,15 +62,14 @@ class MenuValueController extends BaseCmsController
 
         $title = $this->repo->renameTitle($menuValue->id, $data['title']);
 
-        return response()->json(['title' => $title]);
+        return respondSuccess(['title' => $title], 'menu_value_renamed');
     }
 
-    /** Xoá 1 node + toàn bộ node con cháu (tránh mồ côi parent_id). */
     public function destroy(MenuValue $menuValue)
     {
         $deleted = $this->repo->deleteWithDescendants($menuValue->id);
 
-        return response()->json(['deleted' => $deleted]);
+        return respondSuccess(['deleted' => $deleted], 'menu_value_deleted');
     }
 
     /** POST /menu/{menuId}/values/reorder — sau khi kéo-thả cây bên FE. */
@@ -103,15 +84,14 @@ class MenuValueController extends BaseCmsController
 
         $this->repo->reorder((int) $menuId, $data['items']);
 
-        return response()->json(['success' => true]);
+        return respondSuccess(['success' => true], 'menu_value_reordered');
     }
 
-    /** POST /menu/{menuId}/values/import-category — sinh cây menu từ Category. */
     public function importCategory($menuId)
     {
         $created = $this->repo->importCategoryTree((int) $menuId);
 
-        return response()->json(['created' => $created]);
+        return respondSuccess(['created' => $created], 'menu_value_imported');
     }
 
     /** DELETE /menu/{menuId}/values/categories — xoá mọi node type=category (+ con cháu). */
@@ -119,6 +99,6 @@ class MenuValueController extends BaseCmsController
     {
         $deleted = $this->repo->deleteCategoryTree((int) $menuId);
 
-        return response()->json(['deleted' => $deleted]);
+        return respondSuccess(['deleted' => $deleted], 'menu_value_categories_deleted');
     }
 }

@@ -29,6 +29,6 @@ class WardController extends BaseCmsController
             ->map(fn ($w) => ['id' => $w->id, 'name' => $w->description?->name ?? ''])
             ->values();
 
-        return response()->json(['data' => $data]);
+        return respondSuccess($data);
     }
 }

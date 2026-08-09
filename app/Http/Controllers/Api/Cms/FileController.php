@@ -7,18 +7,6 @@ use App\Jobs\ProcessImageUpload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 
-/**
- * Upload ảnh cho CMS (product/category/...). Trước đây Photo.jsx (infuncms)
- * gọi thẳng '/vcms/file/save' — route KHÔNG tồn tại (backend chỉ có
- * POST /file/upload ở web.php, dùng session+CSRF, còn infuncms là SPA
- * Bearer-token thuần, không có CSRF token) ⇒ mọi lần upload ảnh đều fail.
- * Bổ sung endpoint tương đương dưới /rcms (auth:sanctum, cùng cơ chế session
- * cookie httpOnly với toàn bộ CMS còn lại), tái dùng đúng logic lưu file +
- * ProcessImageUpload của App\Http\Controllers\Web\FileController.
- *
- * uploadVideo(): thêm cho banner dạng video/provider=r2 (VideoUpload.jsx) —
- * cùng disk R2, path riêng 'infun/video/', không sinh thumbnail.
- */
 class FileController extends Controller
 {
     public function upload(): JsonResponse
@@ -51,9 +39,6 @@ class FileController extends Controller
         return $validator->fails() ? $validator->errors()->first() : null;
     }
 
-    // Upload video (banner_value dạng video, provider r2) — cùng disk R2 với
-    // ảnh nhưng KHÔNG dispatch ProcessImageUpload (job đó chỉ sinh thumbnail
-    // ảnh, không áp dụng cho video).
     public function uploadVideo(): JsonResponse
     {
         if ($error = $this->validationVideoError()) {

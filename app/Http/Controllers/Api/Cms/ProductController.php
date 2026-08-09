@@ -97,6 +97,6 @@ class ProductController extends BaseCmsController
 
     public function approve($id)
     {
-        return response()->json(['message' => 'Chưa hỗ trợ duyệt product (draft)'], 501);
+        return respondError('Chưa hỗ trợ duyệt product (draft)', 501);
     }
 }

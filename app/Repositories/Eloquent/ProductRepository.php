@@ -21,7 +21,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
 {
     use CacheableRepository;
 
-    /** TTL (giây) cache COUNT phân trang list — nới/tắt qua setting config_list_count_ttl (0 = tắt). */
     protected const LIST_COUNT_TTL = 600;
 
     public function model(): string

@@ -7,16 +7,6 @@ use App\Repositories\Interfaces\UserAddressRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cookie;
 
-/**
- * CRUD địa chỉ + đồng bộ cookie cho checkout.
- *
- * Quy ước cookie:
- *  - `cookie.user.address` chứa danh sách địa chỉ (json) cho user đã login,
- *    dùng để checkout pre-fill nhanh + cho phép visitor (chưa login) lưu
- *    1 địa chỉ vãng lai.
- *  - Cookie sync sau MỌI mutate (create/update/delete) để cookie không
- *    drift so với DB.
- */
 class AddressService
 {
     public function __construct(
@@ -38,10 +28,6 @@ class AddressService
         return $this->addressRepo->findForUser($userId, (int) $addressId);
     }
 
-    /**
-     * Tạo hoặc update địa chỉ. Repo lo invariant "1 default" và soft-fill
-     * record cũ qua firstOrNew(id). Sau khi save → re-sync cookie.
-     */
     public function save(int $userId, array $data): UserAddress
     {
         $isDefault = ! empty($data['is_default']) ? 1 : 0;
@@ -49,7 +35,7 @@ class AddressService
             'id'           => $data['id']           ?? null,
             'full_name'    => $data['full_name']    ?? '',
             'telephone'    => $data['telephone']    ?? '',
-            'country_id'   => 230,
+            'country_id'   => getCoreConfig('zones.country_id_default'),
             'zone_id'      => $data['zone_id']      ?? null,
             'district_id'  => $data['district_id']  ?? null,
             'ward_id'      => $data['ward_id']      ?? null,
@@ -72,15 +58,6 @@ class AddressService
         return $ok;
     }
 
-    /**
-     * Visitor / login user pick 1 address từ form `add-address` (popup nhanh).
-     * Logic:
-     *  - Login: tìm trong cookie hiện tại, set address.id = data.id thành
-     *    default. Nếu cookie rỗng thì rebuild từ DB.
-     *  - Visitor: tạo 1 entry duy nhất với full_address ghép từ params.
-     *
-     * KHÔNG động tới DB ở nhánh visitor (visitor chưa có user_id để gắn).
-     */
     public function applyQuickAddress(?int $userId, array $data): void
     {
         $fullAddress = implode(', ', array_filter([
@@ -112,9 +89,6 @@ class AddressService
         $this->writeCookie($current);
     }
 
-    /**
-     * Logout: clear cookie address visitor để session sau không bị bám.
-     */
     public function clearVisitorCookie(): void
     {
         $key = (string) getCoreConfig('cookie.user.address');

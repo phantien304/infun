@@ -9,16 +9,6 @@ use App\Repositories\Interfaces\BannerRepositoryInterface;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\PaginatedDataCollection;
 
-/**
- * Banner API (REST) cho CMS — mirror CategoryController.
- * Controller chỉ điều phối: request → repository → DTO, không chứa code
- * tương tác DB (nằm ở BannerRepository — house style).
- *
- * Khác Category: banner có thêm 1 tầng con banner_values[] (mỗi dòng là 1
- * ảnh HOẶC 1 video — field media_type/video_provider/video_url), mỗi value
- * lại có banner_value_descriptions[] theo ngôn ngữ. saveFromCms xử lý cả
- * 2 tầng trong 1 transaction.
- */
 class BannerController extends BaseCmsController
 {
     protected string $permission = 'banner';
@@ -37,21 +27,21 @@ class BannerController extends BaseCmsController
     {
         $banner = $this->repo->saveFromCms(null, $request->validated());
 
-        return response()->json(['data' => BannerData::fromModel($banner)], 201);
+        return respondCreated(BannerData::fromModel($banner), 'banner_created');
     }
 
     public function show(Banner $banner)
     {
         $banner->load(['descriptions', 'bannerValues.descriptions']);
 
-        return response()->json(['data' => BannerData::fromModel($banner)]);
+        return respondSuccess(BannerData::fromModel($banner));
     }
 
     public function update(BannerRequest $request, Banner $banner)
     {
         $banner = $this->repo->saveFromCms($banner, $request->validated());
 
-        return response()->json(['data' => BannerData::fromModel($banner)]);
+        return respondSuccess(BannerData::fromModel($banner), 'banner_updated');
     }
 
     public function destroy(Banner $banner)
@@ -66,7 +56,7 @@ class BannerController extends BaseCmsController
         $banner = $this->repo->restoreById((int) $id);
         abort_if($banner === null, 404);
 
-        return response()->json(['data' => BannerData::fromModel($banner)]);
+        return respondSuccess(BannerData::fromModel($banner), 'banner_restored');
     }
 
     public function bulk(Request $request)
@@ -81,6 +71,6 @@ class BannerController extends BaseCmsController
             ? $this->repo->deleteByIds($data['ids'])
             : $this->repo->restoreByIds($data['ids']);
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected]);
     }
 }

@@ -5,12 +5,6 @@ namespace App\Services\Account;
 use App\Repositories\Interfaces\UserWishlistRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 
-/**
- * Wishlist CRUD + đồng bộ session counter cho header.
- *
- * `session.total_wishlist` ở header menu phụ thuộc count → mỗi mutate
- * (toggle/remove) phải gọi `syncSessionCounter()` để badge không drift.
- */
 class WishlistService
 {
     public function __construct(
@@ -26,11 +20,6 @@ class WishlistService
         return $items;
     }
 
-    /**
-     * Toggle: nếu đã có → xoá, chưa có → thêm. Trả `true` nếu state mới là
-     * "đã thêm", `false` nếu state mới là "đã xoá" (semantic ngược với
-     * 'delete' của response legacy, tiện cho controller).
-     */
     public function toggle(int $userId, int $productId): bool
     {
         $existing = $this->wishlistRepo->findForUser($userId, $productId);
@@ -59,10 +48,6 @@ class WishlistService
         return $this->wishlistRepo->countForUser($userId);
     }
 
-    /**
-     * Đồng bộ lại badge wishlist trên header — gọi sau khi user vừa login
-     * (AuthService) để counter phản ánh đúng số wishlist của user mới.
-     */
     public function refreshSessionCounter(): void
     {
         $this->syncSessionCounter();

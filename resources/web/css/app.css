@@ -193,3 +193,32 @@
  * trong thứ tự nạp file → thắng bằng cả hai tiêu chí (layer priority lẫn
  * thứ tự nạp), không phụ thuộc suy đoán về !important nữa.
  */
+
+/*
+ * Cùng loại bug cascade layer ở trên, phát hiện ở sidebar "Danh mục" /
+ * "Bộ lọc tìm kiếm" (category/structure/_side_bar_facets_static.blade.php):
+ * main.css có rule KHÔNG scope theo type, áp cho MỌI thẻ <input> (dòng
+ * ~871): `input { width:100%; height:64px; padding-left:20px;
+ * border-radius:10px; }` — viết cho input text/search, nhưng vì chọn theo
+ * element selector trần nên dính luôn input[type=checkbox|radio]. Facet
+ * checkbox/radio dùng utility Tailwind `w-4 h-4 rounded accent-gray-900`
+ * (app.css @layer utilities) để thu nhỏ về 16x16px, nhưng thua rule trần
+ * ở main.css theo cascade layers spec → checkbox/radio hiện to bè (thấy rõ
+ * ở "Đánh giá", "Kho hàng", "Hãng sản xuất") thay vì ô vuông/tròn nhỏ như
+ * thiết kế.
+ *
+ * Set lại đúng 3 thuộc tính bị input{} ở main.css ghi đè (width, height,
+ * padding-left), viết THƯỜNG + đặt sau main.css — cùng chiến thuật với
+ * rule phía trên.
+ */
+input[type="checkbox"],
+input[type="radio"] {
+    width: 1rem;
+    height: 1rem;
+    padding-left: 0;
+    border-radius: 0.25rem;
+}
+
+input[type="radio"] {
+    border-radius: 9999px;
+}

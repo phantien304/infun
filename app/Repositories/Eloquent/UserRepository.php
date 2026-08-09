@@ -56,10 +56,6 @@ class UserRepository extends QueryableRepository implements UserRepositoryInterf
         return $user;
     }
 
-    /**
-     * Đặt lại password theo email (luồng reset qua token). Lock row chống
-     * race khi user mở nhiều tab. Trả null nếu không tìm thấy user.
-     */
     public function updatePasswordByEmail(string $email, string $plainPassword): ?User
     {
         $user = $this->resetModel()->where('email', $email)->lockForUpdate()->first();
@@ -119,11 +115,6 @@ class UserRepository extends QueryableRepository implements UserRepositoryInterf
 
         return $query->orderBy('full_name')->limit(max(1, $limit))->get();
     }
-
-    // ===================== CMS admin (Phase 2.3) =====================
-    // CHỈ type=1 (admin) — quyết định Phase 6.1 "chỉ Admin", KHÔNG đụng
-    // Member (type=2 — màn riêng CustomerRepository, xem
-    // docs/ROLE-PERMISSION-PLAN.md phần mở rộng sau Phase 4).
 
     private const TYPE_ADMIN = UserType::Admin->value;
 

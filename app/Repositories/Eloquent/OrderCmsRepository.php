@@ -8,11 +8,6 @@ use App\Repositories\Interfaces\OrderCmsRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 
-/**
- * listForCms/getForCms hand-roll (không dùng QueryableRepository::list() —
- * Spatie QueryBuilder) — giống hệt convention ProductCmsRepository, để khớp
- * đúng field cũ bên Vue (id_eq, invoice_no_cons, full_name_cons, ...).
- */
 class OrderCmsRepository extends QueryableRepository implements OrderCmsRepositoryInterface
 {
     public function model(): string
@@ -60,26 +55,23 @@ class OrderCmsRepository extends QueryableRepository implements OrderCmsReposito
             $query->withTrashed();
         }
 
-        if ($request->filled('id_eq')) {
-            $query->where('orders.id', (int) $request->input('id_eq'));
+        if ($request->filled('id')) {
+            $query->where('orders.id', (int) $request->input('id'));
         }
-        // invoice_no là chuỗi hex (vd "6A3211C5DD244"), KHÔNG phải số — mt219
-        // gốc dùng parseInt() cho field này (bug: luôn NaN/rỗng với hầu hết
-        // invoice_no thật). Sửa đúng: like chuỗi con.
-        if ($request->filled('invoice_no_cons')) {
-            $query->where('orders.invoice_no', 'like', '%' . trim((string) $request->input('invoice_no_cons')) . '%');
+        if ($request->filled('invoice_no')) {
+            $query->where('orders.invoice_no', 'like', '%' . trim((string) $request->input('invoice_no')) . '%');
         }
-        if ($request->filled('full_name_cons')) {
-            $query->where('orders.full_name', 'like', '%' . trim((string) $request->input('full_name_cons')) . '%');
+        if ($request->filled('full_name')) {
+            $query->where('orders.full_name', 'like', '%' . trim((string) $request->input('full_name')) . '%');
         }
-        if ($request->filled('order_status_id_eq')) {
-            $query->where('orders.order_status_id', (int) $request->input('order_status_id_eq'));
+        if ($request->filled('order_status_id')) {
+            $query->where('orders.order_status_id', (int) $request->input('order_status_id'));
         }
-        if ($request->filled('total_eq')) {
-            $query->where('orders.total', (float) $request->input('total_eq'));
+        if ($request->filled('total')) {
+            $query->where('orders.total', (float) $request->input('total'));
         }
-        if ($request->filled('created_at_cons')) {
-            $query->whereDate('orders.created_at', (string) $request->input('created_at_cons'));
+        if ($request->filled('created_at')) {
+            $query->whereDate('orders.created_at', (string) $request->input('created_at'));
         }
 
         $query->orderBy($sortColumn, $order);

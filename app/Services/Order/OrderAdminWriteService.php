@@ -69,10 +69,6 @@ class OrderAdminWriteService
     ) {
     }
 
-    /**
-     * @param  array<string,mixed>  $data  đã qua OrderRequest::validated()
-     * @return array{order: Orders, shipping_fee_ok: bool}
-     */
     public function save(?Orders $existing, array $data, ?int $actorUserId): array
     {
         $isNew = $existing === null;
@@ -329,10 +325,6 @@ class OrderAdminWriteService
         ];
     }
 
-    /**
-     * Giá cuối = MIN(giá variant, special đang active, tier chiết khấu theo
-     * số lượng đạt ngưỡng) — mirror CartService::resolvePrice()/bestDiscountTier().
-     */
     protected function resolvePrice(ProductVariant $variant, int $quantity): int
     {
         $candidates = [(float) $variant->price];
@@ -367,15 +359,6 @@ class OrderAdminWriteService
         return $best;
     }
 
-    /**
-     * Dòng option để ghi orders_product_option — 2 nguồn:
-     *   - role=variant: đọc thẳng từ variant vừa resolve (KHÔNG tin lại
-     *     option_value_ids FE gửi, tránh lệch tên/giá trị hiển thị).
-     *   - role=custom_field: text staff nhập (Option.jsx MỚI chỉ có 1 input
-     *     text + required, không còn nhiều "type" như mt219 cũ).
-     *
-     * @return array<int,array<string,mixed>> đã đúng shape cột orders_product_option
-     */
     protected function buildOptionRows(Product $product, ProductVariant $variant, array $customOptionsRaw): array
     {
         $rows = [];
@@ -472,9 +455,6 @@ class OrderAdminWriteService
             'district_id'     => (int) ($data['district_id'] ?? 0),
             'ward'            => $this->geoName($this->wardRepo->nameById(...), $data['ward_id'] ?? null),
             'ward_id'         => (int) ($data['ward_id'] ?? 0),
-            // order/view.jsx (đổi trạng thái, KHÔNG cho sửa vận chuyển/thanh
-            // toán) không gửi 2 field này — giữ nguyên giá trị cũ, tránh bị
-            // ghi đè rỗng. order/form.jsx (wizard, tab Confirm) luôn gửi.
             'payment_code'    => (string) ($data['payment_code'] ?? $existing?->payment_code ?? ''),
             'carrier_code'    => (string) ($data['carrier_code'] ?? $existing?->carrier_code ?? ''),
             'comment'         => (string) ($data['comment'] ?? ''),

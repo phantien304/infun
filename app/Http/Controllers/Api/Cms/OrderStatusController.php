@@ -25,6 +25,6 @@ class OrderStatusController extends BaseCmsController
             ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])
             ->values();
 
-        return response()->json(['data' => $data]);
+        return respondSuccess($data);
     }
 }

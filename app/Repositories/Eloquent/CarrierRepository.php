@@ -17,11 +17,6 @@ class CarrierRepository extends QueryableRepository implements CarrierRepository
         return Carrier::class;
     }
 
-    /**
-     * Danh sách carrier active sắp theo sort_order DESC — dùng ở trang checkout
-     * để render radio chọn nhà vận chuyển. Cache thường, per-locale (carrier
-     * không có description i18n hiện tại; per-locale chỉ để đồng nhất key).
-     */
     public function listAllCached(): Collection
     {
         return $this->rememberCache(

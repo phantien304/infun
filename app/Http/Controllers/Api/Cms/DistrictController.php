@@ -29,6 +29,6 @@ class DistrictController extends BaseCmsController
             ->map(fn ($d) => ['id' => $d->id, 'name' => $d->description?->name ?? ''])
             ->values();
 
-        return response()->json(['data' => $data]);
+        return respondSuccess($data);
     }
 }

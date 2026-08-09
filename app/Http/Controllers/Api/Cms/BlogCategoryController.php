@@ -28,6 +28,6 @@ class BlogCategoryController extends BaseCmsController
             ])
             ->values();
 
-        return response()->json(['data' => $data]);
+        return respondSuccess($data);
     }
 }

@@ -13,30 +13,10 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
-/**
- * CMS Customer (user `type=2`, UserType::Member) — mirror
- * UserRepository::listForCms/getAdminForCms/createAdmin/updateAdmin
- * (Phase 2.3) nhưng khác entity/quyền ('customer' thay 'user') + thêm field
- * phone (qua UserPhoneRepositoryInterface, cùng transaction) + address/sex/
- * newsletter/user_group_id (cột trực tiếp trên `user`, giống
- * AccountService::updateProfile).
- */
 class CustomerRepository extends QueryableRepository implements CustomerRepositoryInterface
 {
     private const TYPE_CUSTOMER = UserType::Member->value;
 
-    /**
-     * PHẢI gọi parent::__construct($app) — BaseRepository::__construct()
-     * set $this->app (typed property Application) rồi tự gọi makeModel().
-     * Bug thật (2026-08-05): bản đầu KHÔNG gọi parent::__construct(), khiến
-     * $this->app không bao giờ khởi tạo → resetModel()/makeModel() ném
-     * "Typed property BaseRepository::$app must not be accessed before
-     * initialization" ngay khi gọi (list/create/update/delete đều dính).
-     * Phát hiện qua Chrome click-through thật (nút Add), không phải chỉ đọc
-     * code — UserRepository/UserGroupRepository không có constructor riêng
-     * nên không dính bug này, chỉ CustomerRepository (constructor đầu tiên
-     * trong nhóm Role/Permission có thêm dependency ngoài $app).
-     */
     public function __construct(
         Application $app,
         private readonly UserPhoneRepositoryInterface $phoneRepo,
@@ -53,7 +33,7 @@ class CustomerRepository extends QueryableRepository implements CustomerReposito
     {
         $sort    = in_array($request->input('sort'), ['full_name', 'email'], true) ? $request->input('sort') : 'id';
         $order   = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
-        $deleted = (int) $request->input('deleted_at', -1); // -1 tất cả, 1 hiển thị, 0 đã xoá
+        $deleted = (int) $request->input('deleted_at', -1);
         $keyword = trim((string) $request->input('keyword', ''));
         $perPage = max(1, (int) $request->input('per_page', 50));
 
@@ -137,7 +117,6 @@ class CustomerRepository extends QueryableRepository implements CustomerReposito
 
                 $this->phoneRepo->upsertForUser($user->id, [
                     'phone'     => (string) $data['phone'],
-                    // Đổi sang số khác = reset is_verify (khớp AccountService::updateProfile).
                     'is_verify' => ($sameNumber && $verified) ? 1 : 0,
                 ]);
             }

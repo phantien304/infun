@@ -9,11 +9,6 @@ use App\Repositories\Interfaces\WarehouseRepositoryInterface;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\PaginatedDataCollection;
 
-/**
- * Warehouse API (REST) cho CMS — quản lý danh sách kho (đa kho). Mirror
- * MenuController: bảng `warehouse` KHÔNG đa ngôn ngữ, không vòng đồng bộ
- * *_descriptions.
- */
 class WarehouseController extends BaseCmsController
 {
     protected string $permission = 'warehouse';
@@ -32,19 +27,19 @@ class WarehouseController extends BaseCmsController
     {
         $warehouse = $this->repo->saveFromCms(null, $request->validated());
 
-        return response()->json(['data' => WarehouseData::from($warehouse)], 201);
+        return respondCreated(WarehouseData::from($warehouse), 'warehouse_created');
     }
 
     public function show(Warehouse $warehouse)
     {
-        return response()->json(['data' => WarehouseData::from($warehouse)]);
+        return respondSuccess(WarehouseData::from($warehouse));
     }
 
     public function update(WarehouseRequest $request, Warehouse $warehouse)
     {
         $warehouse = $this->repo->saveFromCms($warehouse, $request->validated());
 
-        return response()->json(['data' => WarehouseData::from($warehouse)]);
+        return respondSuccess(WarehouseData::from($warehouse), 'warehouse_updated');
     }
 
     public function destroy(Warehouse $warehouse)
@@ -59,7 +54,7 @@ class WarehouseController extends BaseCmsController
         $warehouse = $this->repo->restoreById((int) $id);
         abort_if($warehouse === null, 404);
 
-        return response()->json(['data' => WarehouseData::from($warehouse)]);
+        return respondSuccess(WarehouseData::from($warehouse), 'warehouse_restored');
     }
 
     public function bulk(Request $request)
@@ -74,6 +69,6 @@ class WarehouseController extends BaseCmsController
             ? $this->repo->deleteByIds($data['ids'])
             : $this->repo->restoreByIds($data['ids']);
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected], 'warehouse_bulk_action_completed');
     }
 }

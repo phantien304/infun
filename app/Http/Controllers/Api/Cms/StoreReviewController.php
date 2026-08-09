@@ -9,15 +9,6 @@ use App\Repositories\Interfaces\StoreReviewRepositoryInterface;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\PaginatedDataCollection;
 
-/**
- * StoreReview API (REST) cho CMS — mirror CategoryController.
- *
- * Convert từ mt219 app/Http/Controllers/Cms/StoreReviewController.php (Blade
- * + Presenter, action `save`/`updateSelected` riêng cho bulk update
- * name+featured từ list) sang REST chuẩn của infun: `updateSelected` không
- * còn cần thiết — bulk ở đây chỉ còn delete/restore (giống mọi module
- * khác qua `bulk()`), còn sửa nhanh 1 dòng thì gọi PUT như bình thường.
- */
 class StoreReviewController extends BaseCmsController
 {
     protected string $permission = 'store-review';

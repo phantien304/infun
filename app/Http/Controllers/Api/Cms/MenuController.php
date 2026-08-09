@@ -9,12 +9,6 @@ use App\Repositories\Interfaces\MenuRepositoryInterface;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\PaginatedDataCollection;
 
-/**
- * Menu API (REST) cho CMS — menu cha (title/position/theme), KHÔNG kèm
- * menu_value (xem MenuValueController riêng cho cây menu con).
- * Mirror CategoryController, nhưng KHÔNG có vòng đồng bộ *_descriptions vì
- * bảng `menu` không đa ngôn ngữ.
- */
 class MenuController extends BaseCmsController
 {
     protected string $permission = 'menu';
@@ -26,10 +20,6 @@ class MenuController extends BaseCmsController
 
     public function index(Request $request)
     {
-        // $into = PaginatedDataCollection bắt buộc — xem comment cùng chỗ ở
-        // ProductController::index(), collect() không có $into trả về THẲNG
-        // LengthAwarePaginator (shape phẳng của Laravel) chứ không phải
-        // {data, meta:{total}} mà frontend cần.
         return MenuData::collect($this->repo->listForCms($request), PaginatedDataCollection::class);
     }
 
@@ -37,19 +27,19 @@ class MenuController extends BaseCmsController
     {
         $menu = $this->repo->saveFromCms(null, $request->validated());
 
-        return response()->json(['data' => MenuData::from($menu)], 201);
+        return respondCreated(MenuData::from($menu), 'menu_created');
     }
 
     public function show(Menu $menu)
     {
-        return response()->json(['data' => MenuData::from($menu)]);
+        return respondSuccess(MenuData::from($menu));
     }
 
     public function update(MenuRequest $request, Menu $menu)
     {
         $menu = $this->repo->saveFromCms($menu, $request->validated());
 
-        return response()->json(['data' => MenuData::from($menu)]);
+        return respondSuccess(MenuData::from($menu), 'menu_updated');
     }
 
     public function destroy(Menu $menu)
@@ -64,7 +54,7 @@ class MenuController extends BaseCmsController
         $menu = $this->repo->restoreById((int) $id);
         abort_if($menu === null, 404);
 
-        return response()->json(['data' => MenuData::from($menu)]);
+        return respondSuccess(MenuData::from($menu), 'menu_restored');
     }
 
     public function bulk(Request $request)
@@ -79,6 +69,6 @@ class MenuController extends BaseCmsController
             ? $this->repo->deleteByIds($data['ids'])
             : $this->repo->restoreByIds($data['ids']);
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected]);
     }
 }

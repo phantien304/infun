@@ -27,6 +27,6 @@ class ZoneController extends BaseCmsController
             ->map(fn ($z) => ['id' => $z->id, 'name' => $z->description?->name ?? ''])
             ->values();
 
-        return response()->json(['data' => $data]);
+        return respondSuccess($data);
     }
 }

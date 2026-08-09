@@ -24,20 +24,6 @@ class RoleRepository extends QueryableRepository implements RoleRepositoryInterf
         $keyword = trim((string) $request->input('keyword', ''));
         $perPage = max(1, (int) $request->input('per_page', 50));
 
-        // KHÔNG dùng Role::query() trần — Role::query() dựng model qua
-        // `new Role()` (attributes rỗng), constructor của spatie Role tự suy
-        // guard_name qua Guard::getDefaultName() khi thiếu. Sau khi qua
-        // middleware auth:sanctum, Sanctum gọi Auth::shouldUse('sanctum') →
-        // ghi đè config('auth.defaults.guard') thành 'sanctum' cho HẾT
-        // request — Guard::getDefaultName() đọc đúng giá trị đã bị ghi đè đó
-        // (không map được guard 'sanctum' -> provider nào) → guard_name của
-        // model rỗng suy ra 'sanctum'. withCount('users') gọi
-        // Role::users() -> getModelForGuard('sanctum') trả null ->
-        // morphedByMany(null, ...) -> "Class name must be a valid object or
-        // a string" (chỉ lộ khi đi qua route thật có auth:sanctum, KHÔNG lộ
-        // khi test qua tinker/CLI hay gọi controller trực tiếp — CLI không
-        // có middleware này nên config('auth.defaults.guard') vẫn là 'web').
-        // Truyền thẳng guard_name để bỏ qua suy đoán của constructor.
         $query = (new Role(['guard_name' => self::GUARD]))
             ->newQuery()
             ->where('guard_name', self::GUARD)

@@ -17,11 +17,6 @@ class PaymentRepository extends QueryableRepository implements PaymentRepository
         return Payment::class;
     }
 
-    /**
-     * Danh sách phương thức thanh toán + description theo locale hiện tại.
-     * Eager-load `description` (locale-scoped relation) để blade đọc tên
-     * không N+1. Cache per-locale (key tự đính locale).
-     */
     public function listAllCached(): Collection
     {
         return $this->rememberCache(
@@ -45,12 +40,6 @@ class PaymentRepository extends QueryableRepository implements PaymentRepository
         );
     }
 
-    /**
-     * Xoá cache listAll. Per-code cache (`findByCode`) KHÔNG xoá được nếu
-     * không enum codes — chấp nhận stale tới TTL. Để fine-grained hơn, gọi
-     * `forgetCache(setting('cache.payments') . $code)` trước khi save model
-     * payment cụ thể.
-     */
     public function flushCache(): void
     {
         $this->forgetCache(setting('cache.payments'));

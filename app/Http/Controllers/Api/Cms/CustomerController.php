@@ -10,18 +10,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Spatie\LaravelData\PaginatedDataCollection;
 
-/**
- * Customer API cho CMS — permission slug 'customer'. Mirror UserController
- * (Phase 2.3, admin type=1) nhưng cho member (type=2 —
- * App\Enums\UserType::Member), theo yêu cầu user "Đầy đủ CRUD như màn User
- * admin" (docs/ROLE-PERMISSION-PLAN.md phần mở rộng sau Phase 4).
- *
- * Route param {customer} type-hint vẫn là App\Models\Entities\User (CÙNG
- * bảng `user`, khác entity CMS/permission) — Laravel implicit binding khớp
- * theo TÊN tham số route, không phải theo class, nên hoạt động bình thường
- * dù model không tên "Customer". abort_if(type !== 2, 404) chặn Admin lọt
- * qua route Customer (và ngược lại UserController đã chặn type !== 1).
- */
 class CustomerController extends BaseCmsController
 {
     protected string $permission = 'customer';
@@ -40,7 +28,7 @@ class CustomerController extends BaseCmsController
     {
         $customer = $this->repo->createCustomer($request->validated());
 
-        return response()->json(['data' => CustomerData::fromModel($customer)], 201);
+        return respondCreated(CustomerData::fromModel($customer), 'customer_created');
     }
 
     public function show(User $customer)
@@ -48,7 +36,7 @@ class CustomerController extends BaseCmsController
         abort_if((int) $customer->type !== 2, 404);
         $customer->load(['userPhone', 'userGroup']);
 
-        return response()->json(['data' => CustomerData::fromModel($customer)]);
+        return respondSuccess(CustomerData::fromModel($customer));
     }
 
     public function update(CustomerRequest $request, User $customer)
@@ -56,16 +44,15 @@ class CustomerController extends BaseCmsController
         abort_if((int) $customer->type !== 2, 404);
         $customer = $this->repo->updateCustomer($customer, $request->validated());
 
-        return response()->json(['data' => CustomerData::fromModel($customer)]);
+        return respondSuccess(CustomerData::fromModel($customer), 'customer_updated');
     }
 
-    /** Xoá mềm (SoftDeletes) — khôi phục qua restore(). Chặn tự xoá chính mình, mirror UserController. */
     public function destroy(User $customer)
     {
         abort_if((int) $customer->type !== 2, 404);
 
         if ((int) $customer->id === (int) Auth::id()) {
-            return response()->json(['message' => 'Không thể tự xoá tài khoản đang đăng nhập.'], 422);
+            return respondUnprocessable('Không thể tự xoá tài khoản đang đăng nhập.');
         }
 
         $this->repo->deleteByIds([$customer->id]);
@@ -78,7 +65,7 @@ class CustomerController extends BaseCmsController
         $customer = $this->repo->restoreById((int) $id);
         abort_if($customer === null, 404);
 
-        return response()->json(['data' => CustomerData::fromModel($customer)]);
+        return respondSuccess(CustomerData::fromModel($customer), 'customer_restored');
     }
 
     public function bulk(Request $request)
@@ -97,6 +84,6 @@ class CustomerController extends BaseCmsController
             $affected = $this->repo->restoreByIds($ids);
         }
 
-        return response()->json(['affected' => $affected]);
+        return respondSuccess(['affected' => $affected]);
     }
 }

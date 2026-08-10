@@ -14,6 +14,11 @@ class Review extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
+    protected $fillable = [
+        'product_id', 'product_variant_id', 'order_id', 'user_id',
+        'ip', 'author', 'email', 'title', 'text', 'rating', 'status',
+        'is_publish', 'is_anonymous', 'language_code', 'source', 'user_agent',
+    ];
 
     protected $casts = [
         'is_anonymous'    => 'boolean',

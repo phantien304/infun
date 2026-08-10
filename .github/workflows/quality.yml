@@ -37,8 +37,12 @@ jobs:
 
       # Chỉ cần autoloader + deptrac để phân tích tĩnh — không cần .env, DB,
       # Redis hay artisan. `--no-scripts` chặn package:discover (cần .env).
+      # --ignore-platform-req=ext-sockets: spiral/roadrunner-* (Octane) đòi
+      # ext-sockets trong composer.lock, nhưng job này không chạy Octane —
+      # runner mặc định của shivammathur/setup-php không chắc có sẵn extension
+      # đó, không tự cài nó cho một thứ không cần.
       - name: Cài dependency
-        run: composer install --no-interaction --no-progress --no-scripts
+        run: composer install --no-interaction --no-progress --no-scripts --ignore-platform-req=ext-sockets
 
       - name: Kiểm tra ranh giới
         run: composer boundary
@@ -63,8 +67,10 @@ jobs:
       - name: Chuẩn bị .env tối thiểu
         run: cp .env.example .env
 
+      # --ignore-platform-req=ext-sockets: xem comment cùng dòng ở job
+      # boundary phía trên — job này cũng không cần Octane/RoadRunner.
       - name: Cài dependency
-        run: composer install --no-interaction --no-progress
+        run: composer install --no-interaction --no-progress --ignore-platform-req=ext-sockets
 
       - name: Sinh APP_KEY
         run: php artisan key:generate --ansi

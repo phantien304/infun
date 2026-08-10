@@ -106,6 +106,12 @@ x-app-env: &app-env
   # staging) — cổng 8200 khớp STAGING_CMS_WEB_PORT của infuncms.
   CORS_ALLOWED_ORIGINS: "${STAGING_CORS_ALLOWED_ORIGINS:-http://100.99.170.2:8200,http://localhost:8200}"
 
+  # config/theme.php đã ghi rõ "BẬT ở staging để khách bấm thử qua lại giữa
+  # các mẫu mà không cần DNS" — nhưng file này thiếu biến nên vẫn rơi về
+  # default false của env(). Bật sẵn ở đây, tắt khẩn cấp qua .env không cần
+  # sửa file/redeploy.
+  THEME_ALLOW_QUERY: "${STAGING_THEME_ALLOW_QUERY:-true}"
+
 services:
   # ── App PHP-FPM (image bất biến, scale được) ─────────────────────────────
   infun-php:

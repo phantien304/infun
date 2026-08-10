@@ -98,6 +98,14 @@ x-app-env: &app-env
   MAIL_PORT: "1025"
   LOG_CHANNEL: stderr
 
+  # CORS cho infuncms (SPA riêng, gọi /rcms) — config/cors.php mặc định chỉ
+  # cho cms.infun.test/cms.infun.co (dev), staging KHÔNG có domain thật nên
+  # infuncms-web-staging phải gọi qua Tailscale IP/localhost, phải khai origin
+  # đó ở đây thì trình duyệt mới không bị chặn CORS. Default gồm cả Tailscale
+  # IP (ai cũng vào được, không cần cùng LAN) và localhost (test ngay trên máy
+  # staging) — cổng 8200 khớp STAGING_CMS_WEB_PORT của infuncms.
+  CORS_ALLOWED_ORIGINS: "${STAGING_CORS_ALLOWED_ORIGINS:-http://100.99.170.2:8200,http://localhost:8200}"
+
 services:
   # ── App PHP-FPM (image bất biến, scale được) ─────────────────────────────
   infun-php:

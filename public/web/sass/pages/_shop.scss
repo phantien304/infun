@@ -720,7 +720,7 @@
         }
 
         .content {
-            padding-left: 95px;
+            // padding-left: 95px;
         }
 
         i {
@@ -1266,14 +1266,15 @@
     }
 
     .detail-qty {
-        margin: 0 6px 6px 0;
+        margin: 0;
         background: #fff;
         border: 2px solid $color-grey-4 !important;
         font-size: 16px;
         font-weight: 700;
         color: $color-grey-4;
         border-radius: 5px;
-        padding: 8px 20px 11px 20px;
+        padding: 0 20px;
+        height: 42px;
         max-width: 90px;
     }
 }

@@ -6,6 +6,7 @@ use App\Data\Output\CategoryDTO;
 use App\Data\Output\FilterDTO;
 use App\Data\Output\ManufacturerDTO;
 use App\Helpers\CacheGate;
+use App\Helpers\ThemeManager;
 use App\Repositories\Interfaces\CategoryRepositoryInterface;
 use App\Repositories\Interfaces\FilterRepositoryInterface;
 use App\Repositories\Interfaces\ManufacturerRepositoryInterface;
@@ -102,6 +103,8 @@ class FragmentCache
 
     protected static function facetsKey(string $locale, bool $hideManufacturer): string
     {
-        return self::FACETS_PREFIX . strtolower($locale) . ':' . ($hideManufacturer ? '1' : '0');
+        $theme = ThemeManager::current() ?? 'base';
+
+        return self::FACETS_PREFIX . strtolower($locale) . ':' . ($hideManufacturer ? '1' : '0') . ':' . $theme;
     }
 }

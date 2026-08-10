@@ -18,48 +18,7 @@
                         </div>
                         <div class="header-action-right">
                             <div class="header-action-2 flex items-center gap-4">
-                                @include('web::share._locale_switcher')
-                                @if (\App\Helpers\ThemeManager::shouldShowSwitcher())
-                                    <div class="header-action-icon-2 relative" x-data="{ open: false }"
-                                        @mouseenter="open = true" @mouseleave="open = false">
-                                        <a href="#" class="block" title="Xem thử giao diện khác"
-                                            @click.prevent="open = !open">
-                                            <svg class="inline-block align-middle" width="20" height="20"
-                                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                stroke-width="1.7" aria-hidden="true">
-                                                <circle cx="12" cy="12" r="9" />
-                                                <path
-                                                    d="M12 3a9 9 0 0 0 0 18 4.5 4.5 0 0 0 0-9 2.25 2.25 0 0 1 0-4.5A4.5 4.5 0 0 0 12 3Z" />
-                                            </svg>
-                                            <span class="lable ml-0">Giao diện</span>
-                                        </a>
-                                        <div class="absolute right-0 top-full z-50 rounded-lg border border-gray-100 bg-white pb-2 pt-3 shadow-lg"
-                                            x-show="open" x-cloak style="display:none;width:16rem"
-                                            x-transition:enter="transition ease-out duration-150"
-                                            x-transition:enter-start="opacity-0 -translate-y-1"
-                                            x-transition:enter-end="opacity-100 translate-y-0">
-                                            <p class="mb-1 border-b border-gray-100 px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                                Xem thử giao diện
-                                            </p>
-                                            <ul class="m-0 list-none p-0">
-                                                @foreach (\App\Helpers\ThemeManager::options() as $option)
-                                                    <li>
-                                                        <a href="{{ \App\Helpers\ThemeManager::urlWithTheme($option['slug']) }}"
-                                                            class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 {{ $option['active'] ? 'font-semibold text-brand' : '' }}">
-                                                            <span class="inline-block h-3 w-3 flex-shrink-0 rounded-full"
-                                                                style="background:{{ $option['swatch'] }}"></span>
-                                                            <span class="flex-1">{{ $option['label'] }}</span>
-                                                            @if ($option['active'])
-                                                                <span class="text-[11px] text-gray-400">Đang xem</span>
-                                                            @endif
-                                                        </a>
-                                                    </li>
-                                                @endforeach
-                                            </ul>
-                                        </div>
-                                    </div>
-                                @endif
-                                {{-- <div class="header-action-icon-2 relative">
+                                <div class="header-action-icon-2 relative">
                                     <a href="{!! route('account.wishlist') !!}" title="Yêu thích" class="block">
                                         <img class="svgInject" alt="Sản phẩm yêu thích"
                                             src="/web/images/theme/icons/icon-heart.svg">
@@ -78,7 +37,7 @@
                                     <a class="mini-cart-icon" href="{{ route('checkout.cart') }}" title="Giỏ hàng">
                                         <span class="lable">Giỏ hàng</span>
                                     </a>
-                                </div> --}}
+                                </div>
                                 <div class="header-action-icon-2 relative"
                                     @if (auth()->check()) x-data="{ open: false }"
                                                        @mouseenter="open = true"
@@ -91,10 +50,6 @@
                                         <span class="lable ml-0">Tài khoản</span>
                                     </a>
                                     @if (auth()->check())
-                                        {{-- Bỏ class cart-dropdown-wrap/account-dropdown — cùng bug width:200px
-                                             + xung đột hover CSS thuần với x-show của Alpine, xem giải thích
-                                             đầy đủ ở share/_theme_switcher.blade.php. Áp sát trigger
-                                             (top-full, không margin), đệm khoảng cách bằng padding trong panel. --}}
                                         <div class="absolute right-0 top-full z-50 w-56 rounded-lg border border-gray-100 bg-white pb-2 pt-3 shadow-lg"
                                             x-show="open" x-cloak style="display:none"
                                             x-transition:enter="transition ease-out duration-150"
@@ -114,7 +69,8 @@
                                                     </a>
                                                 </li>
                                                 <li>
-                                                    <a href="{{ route('account.wishlist') }}" title="Sản phẩm yêu thích"
+                                                    <a href="{{ route('account.wishlist') }}"
+                                                        title="Sản phẩm yêu thích"
                                                         class="flex items-center gap-2 whitespace-nowrap px-4 py-2 hover:bg-gray-50">
                                                         <i class="fi fi-rs-heart"></i> Sản phẩm yêu thích
                                                     </a>
@@ -187,7 +143,8 @@
                                 </a>
                             </div>
                             <div class="header-action-icon-2 relative">
-                                <a class="mini-cart-icon block" href="{{ route('checkout.cart') }}" title="Giỏ hàng">
+                                <a class="mini-cart-icon block" href="{{ route('checkout.cart') }}"
+                                    title="Giỏ hàng">
                                     <img alt="Giỏ hàng" src="/web/images/theme/icons/icon-cart.svg">
                                     <span class="pro-count white" id="cart-total" data-cart-badge>0</span>
                                 </a>
@@ -198,6 +155,47 @@
             </div>
         </div>
     </header>
+
+    @if (\App\Helpers\ThemeManager::shouldShowSwitcher())
+        {{-- Công cụ xem thử theme — chỉ dùng cho demo/staging (?theme=...), không phải
+             tính năng khách hàng, nên tách hẳn khỏi hàng icon chính của header: đặt
+             thành tab nổi cố định bên phải, canh giữa theo chiều dọc màn hình. --}}
+        <div class="fixed right-0 top-1/2 z-50 -translate-y-1/2" x-data="{ open: false }"
+            @mouseleave="open = false">
+            <button type="button" @click="open = !open" title="Xem thử giao diện khác"
+                class="flex items-center gap-2 rounded-l-xl border border-r-0 border-gray-200 bg-white px-3 py-3 shadow-lg hover:bg-gray-50 transition">
+                <svg class="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" stroke-width="1.7"
+                    viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path
+                        d="M12 3a9 9 0 0 0 0 18 4.5 4.5 0 0 0 0-9 2.25 2.25 0 0 1 0-4.5A4.5 4.5 0 0 0 12 3Z" />
+                </svg>
+            </button>
+            <div class="absolute right-full top-1/2 z-50 mr-1 w-64 -translate-y-1/2 rounded-lg border border-gray-100 bg-white pb-2 pt-3 shadow-lg"
+                x-show="open" x-cloak style="display:none" x-transition:enter="transition ease-out duration-150"
+                x-transition:enter-start="opacity-0 translate-x-1" x-transition:enter-end="opacity-100 translate-x-0">
+                <p class="mb-1 border-b border-gray-100 px-4 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Xem thử giao diện
+                </p>
+                <ul class="m-0 list-none p-0">
+                    @foreach (\App\Helpers\ThemeManager::options() as $option)
+                        <li>
+                            <a href="{{ \App\Helpers\ThemeManager::urlWithTheme($option['slug']) }}"
+                                class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 {{ $option['active'] ? 'font-semibold text-brand' : '' }}">
+                                <span class="inline-block h-3 w-3 flex-shrink-0 rounded-full"
+                                    style="background:{{ $option['swatch'] }}"></span>
+                                <span class="flex-1">{{ $option['label'] }}</span>
+                                @if ($option['active'])
+                                    <span class="text-[11px] text-gray-400">Đang xem</span>
+                                @endif
+                            </a>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
+    @endif
+
     <div class="mobile-header-active mobile-header-wrapper-style" :class="{ 'sidebar-visible': mobileOpen }"
         x-show="mobileOpen" x-cloak x-transition:enter="transition transform ease-out duration-300"
         x-transition:enter-start="-translate-x-full" x-transition:enter-end="translate-x-0"

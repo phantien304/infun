@@ -20,7 +20,12 @@ export default defineConfig({
                 'resources/web/css/app.css',
                 ...themeEntries,
             ],
-            refresh: true,
+            refresh: [
+                'resources/web/views/**',
+                'resources/themes/**/views/**',
+                'app/View/Components/**',
+                'routes/**',
+            ],
         }),
         tailwindcss(),
         react(),

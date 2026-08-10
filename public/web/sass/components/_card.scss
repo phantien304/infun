@@ -54,9 +54,11 @@
             background: $color-grey-2;
 
             img {
-                max-width: 350px;
+                width: 100%;
+                max-width: none;
+                height: 340px;
+                object-fit: cover;
                 display: block;
-                margin: 0 auto;
                 //opacity: 0.7;
             }
 

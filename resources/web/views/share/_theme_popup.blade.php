@@ -51,6 +51,7 @@
             <div class="space-y-1">
                 @foreach (\App\Helpers\ThemeManager::options() as $option)
                     <a href="{{ \App\Helpers\ThemeManager::urlWithTheme($option['slug'], route('home')) }}"
+                        data-theme-link
                         title="{{ $option['description'] }}"
                         class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition {{ $option['active'] ? 'bg-gray-50 ring-1 ring-inset ring-gray-200' : 'hover:bg-gray-50' }}">
                         <span class="h-2.5 w-2.5 flex-shrink-0 rounded-full" style="background:{{ $option['swatch'] }}"></span>

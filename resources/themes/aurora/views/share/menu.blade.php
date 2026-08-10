@@ -1,62 +1,118 @@
 @php
     $demoMenu = [
-        ['title' => 'Điện tử', 'url' => route('product.getList'), 'children' => [
-            ['title' => 'Điện thoại', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Điện thoại phổ thông', 'url' => route('product.getList')],
-                ['title' => 'Điện thoại cao cấp', 'url' => route('product.getList')],
-                ['title' => 'Phụ kiện điện thoại', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Laptop & máy tính', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Laptop văn phòng', 'url' => route('product.getList')],
-                ['title' => 'Laptop gaming', 'url' => route('product.getList')],
-                ['title' => 'Màn hình', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Tai nghe & loa', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Tai nghe không dây', 'url' => route('product.getList')],
-                ['title' => 'Loa bluetooth', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Phụ kiện', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Sạc & cáp', 'url' => route('product.getList')],
-                ['title' => 'Chuột & bàn phím', 'url' => route('product.getList')],
-            ]],
-        ]],
-        ['title' => 'Thời trang', 'url' => route('product.getList'), 'children' => [
-            ['title' => 'Thời trang nữ', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Áo', 'url' => route('product.getList')],
-                ['title' => 'Váy đầm', 'url' => route('product.getList')],
-                ['title' => 'Quần', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Thời trang nam', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Áo sơ mi', 'url' => route('product.getList')],
-                ['title' => 'Quần âu', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Giày dép', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Giày thể thao', 'url' => route('product.getList')],
-                ['title' => 'Giày cao gót', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Túi ví & đồng hồ', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Túi xách', 'url' => route('product.getList')],
-                ['title' => 'Đồng hồ', 'url' => route('product.getList')],
-            ]],
-        ]],
-        ['title' => 'Nhà cửa & đời sống', 'url' => route('product.getList'), 'children' => [
-            ['title' => 'Đồ gia dụng', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Nồi chiên không dầu', 'url' => route('product.getList')],
-                ['title' => 'Máy hút bụi', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Nội thất', 'url' => route('product.getList'), 'children' => [
-                ['title' => 'Bàn ghế', 'url' => route('product.getList')],
-                ['title' => 'Kệ tủ', 'url' => route('product.getList')],
-            ]],
-            ['title' => 'Bếp', 'url' => route('product.getList')],
-            ['title' => 'Trang trí', 'url' => route('product.getList')],
-        ]],
-        ['title' => 'Làm đẹp', 'url' => route('product.getList'), 'children' => [
-            ['title' => 'Chăm sóc da', 'url' => route('product.getList')],
-            ['title' => 'Trang điểm', 'url' => route('product.getList')],
-            ['title' => 'Chăm sóc tóc', 'url' => route('product.getList')],
-            ['title' => 'Nước hoa', 'url' => route('product.getList')],
-        ]],
+        [
+            'title' => 'Điện tử',
+            'url' => route('product.getList'),
+            'children' => [
+                [
+                    'title' => 'Điện thoại',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Điện thoại phổ thông', 'url' => route('product.getList')],
+                        ['title' => 'Điện thoại cao cấp', 'url' => route('product.getList')],
+                        ['title' => 'Phụ kiện điện thoại', 'url' => route('product.getList')],
+                    ],
+                ],
+                [
+                    'title' => 'Laptop & máy tính',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Laptop văn phòng', 'url' => route('product.getList')],
+                        ['title' => 'Laptop gaming', 'url' => route('product.getList')],
+                        ['title' => 'Màn hình', 'url' => route('product.getList')],
+                    ],
+                ],
+                [
+                    'title' => 'Tai nghe & loa',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Tai nghe không dây', 'url' => route('product.getList')],
+                        ['title' => 'Loa bluetooth', 'url' => route('product.getList')],
+                    ],
+                ],
+                [
+                    'title' => 'Phụ kiện',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Sạc & cáp', 'url' => route('product.getList')],
+                        ['title' => 'Chuột & bàn phím', 'url' => route('product.getList')],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'title' => 'Thời trang',
+            'url' => route('product.getList'),
+            'children' => [
+                [
+                    'title' => 'Thời trang nữ',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Áo', 'url' => route('product.getList')],
+                        ['title' => 'Váy đầm', 'url' => route('product.getList')],
+                        ['title' => 'Quần', 'url' => route('product.getList')],
+                    ],
+                ],
+                [
+                    'title' => 'Thời trang nam',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Áo sơ mi', 'url' => route('product.getList')],
+                        ['title' => 'Quần âu', 'url' => route('product.getList')],
+                    ],
+                ],
+                [
+                    'title' => 'Giày dép',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Giày thể thao', 'url' => route('product.getList')],
+                        ['title' => 'Giày cao gót', 'url' => route('product.getList')],
+                    ],
+                ],
+                [
+                    'title' => 'Túi ví & đồng hồ',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Túi xách', 'url' => route('product.getList')],
+                        ['title' => 'Đồng hồ', 'url' => route('product.getList')],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'title' => 'Nhà cửa & đời sống',
+            'url' => route('product.getList'),
+            'children' => [
+                [
+                    'title' => 'Đồ gia dụng',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Nồi chiên không dầu', 'url' => route('product.getList')],
+                        ['title' => 'Máy hút bụi', 'url' => route('product.getList')],
+                    ],
+                ],
+                [
+                    'title' => 'Nội thất',
+                    'url' => route('product.getList'),
+                    'children' => [
+                        ['title' => 'Bàn ghế', 'url' => route('product.getList')],
+                        ['title' => 'Kệ tủ', 'url' => route('product.getList')],
+                    ],
+                ],
+                ['title' => 'Bếp', 'url' => route('product.getList')],
+                ['title' => 'Trang trí', 'url' => route('product.getList')],
+            ],
+        ],
+        [
+            'title' => 'Làm đẹp',
+            'url' => route('product.getList'),
+            'children' => [
+                ['title' => 'Chăm sóc da', 'url' => route('product.getList')],
+                ['title' => 'Trang điểm', 'url' => route('product.getList')],
+                ['title' => 'Chăm sóc tóc', 'url' => route('product.getList')],
+                ['title' => 'Nước hoa', 'url' => route('product.getList')],
+            ],
+        ],
         ['title' => 'Mẹ & bé', 'url' => route('product.getList')],
         ['title' => 'Thể thao', 'url' => route('product.getList')],
         ['title' => 'Bách hoá', 'url' => route('product.getList')],
@@ -134,17 +190,20 @@
                             <svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" stroke-width="1.7"
                                 viewBox="0 0 24 24">
                                 <circle cx="12" cy="12" r="9" />
-                                <path d="M12 3a9 9 0 0 0 0 18 4.5 4.5 0 0 0 0-9 2.25 2.25 0 0 1 0-4.5A4.5 4.5 0 0 0 12 3Z" />
+                                <path
+                                    d="M12 3a9 9 0 0 0 0 18 4.5 4.5 0 0 0 0-9 2.25 2.25 0 0 1 0-4.5A4.5 4.5 0 0 0 12 3Z" />
                             </svg>
                             <span>Giao diện</span>
                         </button>
                         <div x-show="open" x-cloak x-transition.opacity.duration.120ms
                             class="absolute right-0 top-full mt-1.5 w-64 bg-white text-ink rounded-xl border border-line shadow-lg py-1.5 z-[60]">
-                            <p class="px-3.5 pb-1.5 mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3 border-b border-line">
+                            <p
+                                class="px-3.5 pb-1.5 mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3 border-b border-line">
                                 Xem thử giao diện
                             </p>
                             @foreach (\App\Helpers\ThemeManager::options() as $option)
                                 <a href="{{ \App\Helpers\ThemeManager::urlWithTheme($option['slug']) }}"
+                                    data-theme-link
                                     class="px-3.5 py-2 flex items-center gap-2.5 text-[14px] hover:bg-canvas transition {{ $option['active'] ? 'font-semibold text-brand' : '' }}">
                                     <span class="w-2.5 h-2.5 rounded-full shrink-0"
                                         style="background:{{ $option['swatch'] }}"></span>
@@ -244,12 +303,14 @@
                             {{ $node['title'] }}
                         </a>
                     @else
-                        <button type="button" @mouseenter="open = {{ $i }}" @click="open = open === {{ $i }} ? null : {{ $i }}"
+                        <button type="button" @mouseenter="open = {{ $i }}"
+                            @click="open = open === {{ $i }} ? null : {{ $i }}"
                             class="shrink-0 h-8 px-3 rounded-lg hover:bg-canvas font-medium flex items-center gap-1.5 transition"
                             :class="open === {{ $i }} && 'bg-canvas text-brand'">
                             {{ $node['title'] }}
-                            <svg class="w-3.5 h-3.5 transition-transform" :class="open === {{ $i }} && 'rotate-180'"
-                                fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <svg class="w-3.5 h-3.5 transition-transform"
+                                :class="open === {{ $i }} && 'rotate-180'" fill="none"
+                                stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                                 <path d="m6 9 6 6 6-6" />
                             </svg>
                         </button>
@@ -275,7 +336,8 @@
                                         <ul class="space-y-2 text-[14px] text-ink-2 list-none p-0 m-0">
                                             @foreach ($child['children'] as $leaf)
                                                 <li>
-                                                    <a href="{{ $leaf['url'] }}" class="hover:text-brand transition">
+                                                    <a href="{{ $leaf['url'] }}"
+                                                        class="hover:text-brand transition">
                                                         {{ $leaf['title'] }}
                                                     </a>
                                                 </li>
@@ -318,13 +380,16 @@
             @foreach ($nav as $i => $node)
                 <div class="border-b border-line">
                     @if (empty($node['children']))
-                        <a href="{{ $node['url'] }}" class="block py-2.5 text-[15px] font-medium">{{ $node['title'] }}</a>
+                        <a href="{{ $node['url'] }}"
+                            class="block py-2.5 text-[15px] font-medium">{{ $node['title'] }}</a>
                     @else
-                        <button type="button" @click="sub = sub === {{ $i }} ? null : {{ $i }}"
+                        <button type="button"
+                            @click="sub = sub === {{ $i }} ? null : {{ $i }}"
                             class="w-full py-2.5 text-[15px] font-medium flex items-center justify-between">
                             <span>{{ $node['title'] }}</span>
-                            <svg class="w-4 h-4 transition-transform" :class="sub === {{ $i }} && 'rotate-180'"
-                                fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <svg class="w-4 h-4 transition-transform"
+                                :class="sub === {{ $i }} && 'rotate-180'" fill="none"
+                                stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                                 <path d="m6 9 6 6 6-6" />
                             </svg>
                         </button>

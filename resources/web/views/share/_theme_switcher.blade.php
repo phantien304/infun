@@ -48,6 +48,7 @@
                 @foreach (\App\Helpers\ThemeManager::options() as $option)
                     <li>
                         <a href="{{ \App\Helpers\ThemeManager::urlWithTheme($option['slug']) }}"
+                            data-theme-link
                             class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 {{ $option['active'] ? 'font-semibold text-brand' : '' }}">
                             <span class="inline-block h-3 w-3 flex-shrink-0 rounded-full"
                                 style="background:{{ $option['swatch'] }}"></span>

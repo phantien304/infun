@@ -16,6 +16,14 @@
 
         Chỉ đụng link CÙNG ORIGIN. Bỏ qua mailto:, tel:, #neo, target=_blank
         và link đã có sẵn ?theme=.
+
+        KHÔNG đụng link tự bản thân ThemeManager::urlWithTheme() sinh ra
+        (đánh dấu bằng [data-theme-link]) — đó là link ĐỔI/THOÁT theme (kể cả
+        "Mặc định" cố tình bỏ tham số theme để rời preview). Script này coi
+        "thiếu theme" = "cần vá thêm vào", nên nếu vá luôn link đó thì click
+        "Mặc định" từ Aurora bị ghi đè lại thành ?theme=aurora — không bao
+        giờ thoát preview được (xem sự cố 2026-08-10, mất nhiều giờ vì
+        View Source đúng, DOM sau khi script này chạy lại sai).
     --}}
     <script>
         (function() {
@@ -36,6 +44,7 @@
 
             function patchLinks(root) {
                 (root || document).querySelectorAll('a[href]').forEach(function(a) {
+                    if (a.hasAttribute('data-theme-link')) return;
                     var raw = a.getAttribute('href');
                     if (!raw || raw.charAt(0) === '#') return;
                     if (/^(mailto:|tel:|javascript:|data:)/i.test(raw)) return;

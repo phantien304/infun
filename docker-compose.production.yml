@@ -22,6 +22,14 @@ x-app-env: &app-env
   APP_LOCALES: vi
   APP_FALLBACK_LOCALE: vi
 
+  # Cho phép xem thử theme khác qua ?theme=... (config/theme.php). Đã audit
+  # CachePage.php: `theme` nằm trong neverCacheParams nên request này KHÔNG
+  # BAO GIỜ ghi/đọc page cache (bypass), không sinh vô hạn cache key như lo
+  # ngại ban đầu — các tầng cache DATA khác (CacheGate/FragmentCache/Meilisearch)
+  # không bị ảnh hưởng. Muốn tắt khẩn cấp: set PROD_THEME_ALLOW_QUERY=false
+  # trong .env rồi recreate, không cần sửa file này.
+  THEME_ALLOW_QUERY: "${PROD_THEME_ALLOW_QUERY:-true}"
+
   # ── RDS MySQL ──────────────────────────────────────────────────────────────
   # DB_READ_HOST1/DB_WRITE_HOST KHÔNG set → config/database.php tự fallback về
   # DB_HOST (= RDS). Khi thêm RDS Read Replica, set DB_READ_HOST1 = endpoint replica.

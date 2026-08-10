@@ -133,11 +133,62 @@ services:
       meilisearch: { condition: service_healthy }
     networks: [infun-net]
 
+  # ── Admin PHP-FPM (pool riêng cho /vcms + /rcms — CMS) ────────────────────
+  # THIẾU service này thì nginx (docker/nginx/default.lb.conf dòng
+  # `server infun-admin-php:9000 resolve ...`) không resolve được hostname →
+  # mọi request /rcms/* (kể cả từ infuncms) trả 502 ngay lập tức, KHÔNG phải
+  # lỗi CORS dù trình duyệt hiển thị y hệt CORS (response 502 không có header
+  # CORS nên browser báo nhầm). Mirror docker-compose.production.yml — 1
+  # replica là đủ cho staging (so với 4 của infun-php storefront).
+  infun-admin-php:
+    image: ghcr.io/phantien304/infun-app:staging
+    restart: unless-stopped
+    deploy:
+      replicas: ${STAGING_ADMIN_PHP_REPLICAS:-1}
+    environment:
+      <<: *app-env
+      # Nạp docker/php/www.admin.conf: worker terminate 300s (thay vì 15s của
+      # storefront) — export/import CMS chạy vài phút là bình thường, timeout
+      # 15s của pool storefront (xem log "execution timed out (15s)") không
+      # đủ cho các thao tác này.
+      FPM_POOL_PROFILE: admin
+    volumes:
+      - staging_logs:/var/www/html/storage/logs
+    depends_on:
+      mysql: { condition: service_healthy }
+      proxysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+    networks: [infun-net]
+
   # ── Queue worker (cùng image) ────────────────────────────────────────────
+  # --queue=default tường minh (vốn đã ngầm định) — để ranh giới với
+  # infun-queue-admin (queue=admin) bên dưới nhìn là thấy, khớp convention
+  # docker-compose.production.yml.
   infun-queue:
     image: infun-app:staging
     restart: unless-stopped
-    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=90 --max-time=3600
+    command: php artisan queue:work redis --queue=default --sleep=1 --tries=3 --timeout=90 --max-time=3600
+    environment:
+      <<: *app-env
+    depends_on:
+      infun-php: { condition: service_started }
+      mysql: { condition: service_healthy }
+      proxysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [infun-net]
+
+  # ── Queue worker ADMIN (bulkhead — job CMS không chặn job của khách) ─────
+  # Mirror docker-compose.production.yml, nhưng BẬT SẴN (replicas=1) thay vì
+  # tắt như bên production — staging đang cần test job CMS (export/import/
+  # re-gen ảnh) ngay, không phải chờ "job đầu tiên" như quy trình production.
+  # timeout 600s: job CMS nặng/dài hơn hẳn queue default (90s) của khách.
+  infun-queue-admin:
+    image: infun-app:staging
+    restart: unless-stopped
+    deploy:
+      replicas: ${STAGING_QUEUE_ADMIN_REPLICAS:-1}
+    command: php artisan queue:work redis --queue=admin --sleep=3 --tries=3 --timeout=600 --max-time=3600
     environment:
       <<: *app-env
     depends_on:

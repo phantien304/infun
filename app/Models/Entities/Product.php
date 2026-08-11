@@ -3,7 +3,6 @@
 namespace App\Models\Entities;
 
 use App\Models\Base\Base;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Scout\Searchable;
@@ -230,90 +229,40 @@ class Product extends Base implements Auditable
         });
     }
 
+    // Dùng thẳng min_variant_price/max_variant_price — cột denormalized đã
+    // được ProductVariantAggregateObserver tính đúng "giá hiệu lực" (ưu tiên
+    // product_variant_special theo priority, fallback giá gốc), có index
+    // composite (has_variants, min_variant_price). TRƯỚC ĐÂY 2 scope này tự
+    // build lại đúng phép tính đó bằng subquery tương quan lồng 2 tầng CHO
+    // MỖI DÒNG — với 500k sản phẩm là thảm hoạ (đo trực tiếp: ORDER BY treo
+    // >60s, PHP-FPM timeout 15s → 502 hàng loạt, sự cố 2026-08-11).
+    //
+    // Đánh đổi duy nhất: 2 cột denormalized tính theo user group MẶC ĐỊNH
+    // (ProductVariantAggregateObserver dùng getCoreConfig('user.default_group_id')),
+    // không phải user group của người đang request. Chấp nhận được cho
+    // sort/filter theo giá (khách vãng lai — đa số traffic — vẫn đúng
+    // group mặc định); giá HIỂN THỊ trên từng thẻ sản phẩm vẫn tính đúng
+    // riêng theo user group thật ở chỗ khác, không bị ảnh hưởng.
     public function scopeEffectivePriceBetween(Builder $query, ?int $min, ?int $max): Builder
     {
         if ($min === null && $max === null) {
             return $query;
         }
-
-        [$lowSql, $lowBindings]   = self::effectivePriceExpression('low');
-        [$highSql, $highBindings] = self::effectivePriceExpression('high');
-
         if ($min !== null && $max !== null) {
-            return $query->whereRaw(
-                "({$lowSql}) <= ? AND ({$highSql}) >= ?",
-                [...$lowBindings, $max, ...$highBindings, $min]
-            );
+            return $query->where('product.min_variant_price', '<=', $max)
+                ->where('product.max_variant_price', '>=', $min);
         }
         if ($min !== null) {
-            return $query->whereRaw("({$highSql}) >= ?", [...$highBindings, $min]);
+            return $query->where('product.max_variant_price', '>=', $min);
         }
-        return $query->whereRaw("({$lowSql}) <= ?", [...$lowBindings, $max]);
+        return $query->where('product.min_variant_price', '<=', $max);
     }
 
     public function scopeOrderByEffectivePrice(Builder $query, string $dir = 'asc'): Builder
     {
         $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
+        $column = $dir === 'desc' ? 'max_variant_price' : 'min_variant_price';
 
-        [$sql, $bindings] = self::effectivePriceExpression($dir === 'desc' ? 'high' : 'low');
-
-        return $query->orderByRaw("{$sql} $dir", $bindings);
-    }
-
-    protected static function effectivePriceExpression(string $which = 'low'): array
-    {
-        $agg = $which === 'high' ? 'MAX' : 'MIN';
-
-        $variantSpecialSql = '(
-            SELECT pvs.price FROM product_variant_special pvs
-            WHERE pvs.product_variant_id = pv.id
-              AND pvs.user_group_id      = ?
-              AND (pvs.date_start IS NULL OR pvs.date_start <= ?)
-              AND (pvs.date_end IS NULL OR pvs.date_end >= ?)
-              AND pvs.deleted_at IS NULL
-            ORDER BY pvs.priority DESC
-            LIMIT 1
-        )';
-
-        $variantAggSql = "(
-            SELECT {$agg}(COALESCE({$variantSpecialSql}, pv.price))
-            FROM product_variant pv
-            WHERE pv.product_id = product.id
-              AND pv.deleted_at IS NULL
-        )";
-
-        $defaultVariantSpecialSql = '(
-            SELECT pvs.price FROM product_variant_special pvs
-            JOIN product_variant dpv ON dpv.id = pvs.product_variant_id
-            WHERE dpv.product_id    = product.id
-              AND dpv.is_default    = 1
-              AND dpv.deleted_at IS NULL
-              AND pvs.user_group_id = ?
-              AND (pvs.date_start IS NULL OR pvs.date_start <= ?)
-              AND (pvs.date_end IS NULL OR pvs.date_end >= ?)
-              AND pvs.deleted_at IS NULL
-            ORDER BY pvs.priority DESC
-            LIMIT 1
-        )';
-
-        $defaultVariantPriceSql = '(
-            SELECT pv.price FROM product_variant pv
-            WHERE pv.product_id = product.id
-              AND pv.is_default = 1
-              AND pv.deleted_at IS NULL
-            LIMIT 1
-        )';
-
-        $simpleSql = "COALESCE({$defaultVariantSpecialSql}, {$defaultVariantPriceSql})";
-
-        $sql = "CASE
-            WHEN product.has_variants = 1 AND product.min_variant_price IS NOT NULL
-                THEN {$variantAggSql}
-            ELSE {$simpleSql}
-        END";
-
-        $now = Carbon::now();
-
-        return [$sql, [getUserGroupId(), $now, $now, getUserGroupId(), $now, $now]];
+        return $query->orderBy("product.{$column}", $dir);
     }
 }

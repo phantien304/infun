@@ -151,10 +151,10 @@
                                 @foreach ($storeReviews as $item)
                                     <div class="card-1">
                                         <figure class="img-hover-scale overflow-hidden">
-                                            <a href="{!! $item->getUrlClient() !!}" title="{!! $item->name !!}">
-                                                <img src="{!! $item->getImageClient(312, 340) !!}" alt="{!! $item->name !!}">
+                                            <a href="{!! $item->url !!}" title="{!! $item->name !!}">
+                                                <img src="{!! $item->thumbnail(312, 340) !!}" alt="{!! $item->name !!}">
                                                 <div class="author-review">
-                                                    <i class="fab fa-{{ $item->social_icon }}"></i>
+                                                    <i class="fab fa-{{ $item->socialIcon }}"></i>
                                                     <span>by {!! $item->name !!}</span>
                                                 </div>
                                             </a>

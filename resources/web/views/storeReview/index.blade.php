@@ -154,7 +154,7 @@
                                             <a href="{!! $item->url !!}" title="{!! $item->name !!}">
                                                 <img src="{!! $item->thumbnail(312, 340) !!}" alt="{!! $item->name !!}">
                                                 <div class="author-review">
-                                                    <i class="fab fa-{{ $item->social_icon }}"></i>
+                                                    <i class="fab fa-{{ $item->socialIcon }}"></i>
                                                     <span>by {!! $item->name !!}</span>
                                                 </div>
                                             </a>

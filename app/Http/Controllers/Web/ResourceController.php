@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cookie;
 
 class ResourceController extends Controller
 {
@@ -63,7 +62,9 @@ class ResourceController extends Controller
     public function zoneShipping(Request $request)
     {
         $zoneId = (int) $request->get('zone_id', 0);
-        Cookie::queue(
+        // Host-only bất kể session.domain (CMS/Sanctum) — xem
+        // queueHostOnlyCookie() trong app/Common/Common.php.
+        queueHostOnlyCookie(
             (string) setting('cookie.shipping_zone'),
             (string) $zoneId,
             (int) getCoreConfig('cookie.time'),

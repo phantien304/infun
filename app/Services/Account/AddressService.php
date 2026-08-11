@@ -5,7 +5,6 @@ namespace App\Services\Account;
 use App\Models\Entities\UserAddress;
 use App\Repositories\Interfaces\UserAddressRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Cookie;
 
 class AddressService
 {
@@ -120,8 +119,7 @@ class AddressService
 
     public function clearVisitorCookie(): void
     {
-        $key = (string) getCoreConfig('cookie.user.address');
-        Cookie::queue(Cookie::forget($key));
+        forgetHostOnlyCookie((string) getCoreConfig('cookie.user.address'));
     }
 
     protected function syncCookieFor(int $userId): void
@@ -131,7 +129,9 @@ class AddressService
 
     protected function writeCookie(mixed $data): void
     {
-        Cookie::queue(
+        // Host-only bất kể session.domain (CMS/Sanctum) — xem
+        // queueHostOnlyCookie() trong app/Common/Common.php.
+        queueHostOnlyCookie(
             (string) getCoreConfig('cookie.user.address'),
             json_encode($data),
             (int) getCoreConfig('cookie.time'),

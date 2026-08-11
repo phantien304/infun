@@ -20,7 +20,10 @@ class LocaleController extends Controller
         $currency = $this->currencyService->findCurrency($code);
         if ($currency) {
             $cookie = (string) getCoreConfig('currency.cookie', 'currency');
-            cookie()->queue(cookie()->forever($cookie, strtoupper($code)));
+            // Host-only bất kể session.domain (CMS/Sanctum), 400 ngày như
+            // cookie()->forever() gốc — xem queueHostOnlyCookie() trong
+            // app/Common/Common.php.
+            queueHostOnlyCookie($cookie, strtoupper($code), 576000);
         }
 
         return back();
@@ -30,7 +33,7 @@ class LocaleController extends Controller
     {
         if ($this->isAllowedLanguage($code)) {
             $cookie = (string) getCoreConfig('language.cookie', 'language');
-            cookie()->queue(cookie()->forever($cookie, strtolower($code)));
+            queueHostOnlyCookie($cookie, strtolower($code), 576000);
         }
 
         return back();

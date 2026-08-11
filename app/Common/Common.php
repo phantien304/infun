@@ -2,7 +2,9 @@
 
 use App\Helpers\Facades\ChannelLog;
 use App\Helpers\Facades\CustomStorage;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 
 function respondSuccess($data = null, string $message = '', int $status = 200, array $meta = []): \Illuminate\Http\JsonResponse
 {
@@ -75,6 +77,47 @@ function getCookie($cookieName = '', $default = null)
     }
 
     return request()->cookie($cookieName) ? request()->cookie($cookieName) : $default;
+}
+
+/**
+ * Ghi cookie HOST-ONLY (không có Domain attribute), bất kể session.domain
+ * hiện đang set gì (VD .tienpv.shop, bật riêng cho Sanctum/CMS chia sẻ
+ * session giữa tienpv.shop và cms.tienpv.shop).
+ *
+ * Cookie::queue()/cookie()->forever() mặc định LUÔN kế thừa session.domain
+ * khi không truyền domain — nghĩa là mọi cookie app tự ghi (địa chỉ,
+ * currency, language, shipping_zone, affiliate ref...) cũng bị đổi domain
+ * theo, dù các cookie này không liên quan gì tới CMS/Sanctum. Hệ quả: cookie
+ * cũ (ghi từ trước khi đổi session.domain) không còn khớp scope, đọc ra rỗng
+ * — gây bug khó lường rải rác nhiều chỗ (sự cố 2026-08-11, phát hiện qua
+ * popup "chưa có địa chỉ" hiện sai ở checkout dù DB có đủ dữ liệu).
+ *
+ * Dùng hàm này cho MỌI cookie app-specific không cần chia sẻ cross-subdomain
+ * — domain luôn null (host-only) nên không phụ thuộc/không bị ảnh hưởng bởi
+ * session.domain thay đổi trong tương lai nữa.
+ */
+function queueHostOnlyCookie(string $name, ?string $value, int $minutes = 0): void
+{
+    // 0 = cookie phiên (hết khi đóng trình duyệt). Khác 0 (kể cả âm, dùng để
+    // forget) → mốc thời gian tuyệt đối, giống Laravel InteractsWithTime::availableAt().
+    $expire = $minutes === 0 ? 0 : time() + ($minutes * 60);
+
+    Cookie::queue(new SymfonyCookie(
+        $name,
+        $value,
+        $expire,
+        '/',
+        null,
+        null,
+        true,
+        false,
+        'lax',
+    ));
+}
+
+function forgetHostOnlyCookie(string $name): void
+{
+    queueHostOnlyCookie($name, null, -2628000);
 }
 
 function getDeletedByColumn($key = 'field')

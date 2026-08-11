@@ -102,9 +102,13 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 'menu'  => true,
             ],
             'price' => [
+                // Fast() dùng cột denormalized — xem docblock ở
+                // Product::scopeOrderByEffectivePriceFast() để biết lý do và
+                // cách đổi lại bản chính xác 100% theo user group sau khi
+                // nâng cấp cấu hình server (sự cố production 2026-08-11).
                 'db'    => AllowedSort::callback(
                     'price',
-                    fn (Builder $q, bool $descending) => $q->orderByEffectivePrice($descending ? 'desc' : 'asc')
+                    fn (Builder $q, bool $descending) => $q->orderByEffectivePriceFast($descending ? 'desc' : 'asc')
                 ),
                 'meili' => 'min_variant_price',
                 'menu'  => true,
@@ -174,7 +178,8 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         $min = self::normalizePrice(request()->input('filter.price_min'));
         $max = self::normalizePrice(request()->input('filter.price_max'));
         if ($min !== null || $max !== null) {
-            $query->effectivePriceBetween($min, $max);
+            // Fast() — xem Product::scopeEffectivePriceBetweenFast() docblock.
+            $query->effectivePriceBetweenFast($min, $max);
         }
 
         // Lọc theo đánh giá — nhánh DB. `product.rating_avg` là cột tổng hợp

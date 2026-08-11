@@ -38,7 +38,7 @@
     </script>
     @foreach ($entities as $item)
         <script type="application/ld+json">
-        {"@@context":"http://schema.org","@@type":"NewsArticle","mainEntityOfPage":{"@@type":"WebPage","@@id":"{!! $item->url !!}"},"headline":"{!! $item->metaTitle !!}","description":"{!! $item->metaDescription !!}","image":{"@@type":"ImageObject","url":"{!! $item->thumbnail(900, 540) !!}","width":900,"height":540},"datePublished":"{!! $item->publishedDate !!}","dateModified":"{!! $item->modifiedDate !!}","author":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}"},"publisher":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}","logo":{"@@type":"ImageObject","url":"{!! asset(getConfigDb('config_logo')) !!}","width":180,"height":55 }},"about": "{!! $titleSeo !!}"}
+        {"@@context":"http://schema.org","@@type":"NewsArticle","mainEntityOfPage":{"@@type":"WebPage","@@id":"{!! $item->url !!}"},"headline":"{!! $item->metaTitle !!}","description":"{!! $item->metaDescription !!}","image":{"@@type":"ImageObject","url":"{!! $item->thumbnail(900, 540) !!}","width":900,"height":540},"datePublished":"{!! $item->publishedDate !!}","dateModified":"{!! $item->modifiedDate !!}","author":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}"},"publisher":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}","logo":{"@@type":"ImageObject","url":"{!! thumbnail(getConfigDb('config_logo')) !!}","width":180,"height":55 }},"about": "{!! $titleSeo !!}"}
     </script>
     @endforeach
     <script type="application/ld+json">

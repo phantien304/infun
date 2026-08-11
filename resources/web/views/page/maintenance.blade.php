@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="{{ asset(getConfigDb('config_icon')) }}" rel="icon"/>
+    <link href="{{ thumbnail(getConfigDb('config_icon')) }}" rel="icon"/>
     <title>{{ getConfigDb('config_name') }} đang bảo trì</title>
     <link href="https://fonts.googleapis.com/css?family=Nunito:200,600" rel="stylesheet">
     <style>

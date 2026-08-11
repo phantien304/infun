@@ -30,6 +30,15 @@ x-app-env: &app-env
   # trong .env rồi recreate, không cần sửa file này.
   THEME_ALLOW_QUERY: "${PROD_THEME_ALLOW_QUERY:-true}"
 
+  # Full-page cache (Redis, TTL 24h — app/Http/Middleware/CachePage.php).
+  # Kill-switch riêng biến này (không đọc setting DB) — tắt khẩn cấp không
+  # cần vào CMS. Invalidation qua CacheFlushObserver (saved/deleted/restored)
+  # đã gắn cho Product/Category/Manufacturer/Filter/Blog... nên sửa nội dung
+  # trong CMS tự flush đúng trang liên quan, không cần đợi hết 24h TTL. DB
+  # setting config_redis_cache đã =1 sẵn — chỉ thiếu biến này để middleware
+  # thật sự bật (mặc định false).
+  PAGE_CACHE: "${PROD_PAGE_CACHE:-true}"
+
   # CORS + Sanctum stateful cho infuncms (SPA riêng, cms.tienpv.shop, gọi
   # thẳng tuyệt đối tới tienpv.shop/rcms — KHÔNG qua same-origin proxy như
   # staging, vì ở đây có domain thật nên SESSION_DOMAIN=.tienpv.shop share

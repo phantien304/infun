@@ -206,7 +206,7 @@
             <div class="mobile-header-top flex items-center justify-between p-4 border-b">
                 <div class="mobile-header-logo">
                     <a href="{{ route('home') }}" title="{!! getConfigDb('config_name') !!}">
-                        <img src="{{ asset(getConfigDb('config_logo')) }}" alt="{!! getConfigDb('config_name') !!}">
+                        <img src="{{ thumbnail(getConfigDb('config_logo')) }}" alt="{!! getConfigDb('config_name') !!}">
                     </a>
                 </div>
                 <button type="button" class="close-style search-close" @click="mobileOpen = false"

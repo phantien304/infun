@@ -3,7 +3,7 @@
 
         <div class="col-span-2 lg:col-span-1">
             <a href="{{ route('home') }}" title="{{ getConfigDb('config_name') }}" class="inline-block mb-4">
-                <img src="{{ asset(getConfigDb('config_logo')) }}" alt="{{ getConfigDb('config_name') }}"
+                <img src="{{ thumbnail(getConfigDb('config_logo')) }}" alt="{{ getConfigDb('config_name') }}"
                     class="h-10 w-auto object-contain">
             </a>
             @if (getConfigDb('config_telephone'))

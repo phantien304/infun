@@ -232,7 +232,7 @@
 
             <a href="{{ route('home') }}" title="{{ getConfigDb('config_name') }}"
                 class="shrink-0 block w-[120px] lg:w-[140px]">
-                <img src="{{ asset(getConfigDb('config_logo')) }}" alt="{{ getConfigDb('config_name') }}"
+                <img src="{{ thumbnail(getConfigDb('config_logo')) }}" alt="{{ getConfigDb('config_name') }}"
                     class="h-10 w-full object-contain object-left">
             </a>
 
@@ -362,7 +362,7 @@
         class="fixed inset-y-0 left-0 w-[300px] bg-white z-[80] p-5 overflow-y-auto">
         <div class="flex items-center justify-between mb-5">
             <a href="{{ route('home') }}" class="block w-[110px]">
-                <img src="{{ asset(getConfigDb('config_logo')) }}" alt="{{ getConfigDb('config_name') }}"
+                <img src="{{ thumbnail(getConfigDb('config_logo')) }}" alt="{{ getConfigDb('config_name') }}"
                     class="h-8 w-full object-contain object-left">
             </a>
             <button type="button" @click="mobileOpen = false" aria-label="Đóng"

@@ -147,7 +147,7 @@
                 <div class="content-company-infunstudio list-menu-ft">
                     <div class="logo">
                         <a class="mb-4 block" href="/">
-                            <img src="{!! getConfigDb('config_logo') !!}" alt="{!! getConfigDb('seo_title_home') !!}">
+                            <img src="{!! thumbnail(getConfigDb('config_logo')) !!}" alt="{!! getConfigDb('seo_title_home') !!}">
                         </a>
                     </div>
                     {!! getConfigDb('config_footer1') !!}

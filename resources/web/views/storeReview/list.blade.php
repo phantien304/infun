@@ -71,7 +71,7 @@
                             "name": {!! json_encode(getConfigDb('config_name'), JSON_UNESCAPED_UNICODE) !!},
                             "logo": {
                                 "@@type": "ImageObject",
-                                "url": "{{ asset(getConfigDb('config_logo')) }}",
+                                "url": "{{ thumbnail(getConfigDb('config_logo')) }}",
                                 "width": 180,
                                 "height": 55
                             }

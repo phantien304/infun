@@ -19,35 +19,6 @@ class AddressService
         return $this->addressRepo->listForUser($userId);
     }
 
-    /**
-     * Cùng field shape mà cookie.user.address / _choose_address.blade.php kỳ vọng
-     * (full_address, zone_name, district_name, ward_name) — listForUser() trả về
-     * Eloquent model thô, không có các field phẳng này.
-     */
-    public function listForUserFormatted(int $userId): array
-    {
-        return $this->listForUser($userId)->map(function (UserAddress $item) {
-            $zoneName = (string) ($item->zone?->description?->name ?? '');
-            $districtName = (string) ($item->district?->description?->name ?? '');
-            $wardName = (string) ($item->ward?->description?->name ?? '');
-
-            return [
-                'id'            => $item->id,
-                'full_name'     => $item->full_name,
-                'telephone'     => $item->telephone,
-                'zone_id'       => $item->zone_id,
-                'zone_name'     => $zoneName,
-                'district_id'   => $item->district_id,
-                'district_name' => $districtName,
-                'ward_id'       => $item->ward_id,
-                'ward_name'     => $wardName,
-                'address'       => $item->address,
-                'full_address'  => implode(', ', array_filter([$item->address, $wardName, $districtName, $zoneName])),
-                'is_default'    => (int) $item->is_default,
-            ];
-        })->all();
-    }
-
     public function findForUser(int $userId, ?int $addressId): ?UserAddress
     {
         if (! filled($addressId)) {
@@ -126,7 +97,7 @@ class AddressService
 
     protected function syncCookieFor(int $userId): void
     {
-        $this->writeCookie($this->listForUserFormatted($userId));
+        $this->writeCookie($this->listForUser($userId));
     }
 
     protected function writeCookie(mixed $data): void

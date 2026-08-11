@@ -7,6 +7,7 @@ use App\Enums\AffiliateStatus;
 use App\Http\Controllers\Controller;
 use App\Repositories\Interfaces\AffiliateClickRepositoryInterface;
 use App\Repositories\Interfaces\AffiliateLinkRepositoryInterface;
+use Illuminate\Support\Facades\Cookie;
 
 /**
  * GET /l/{slug} — short link kiểu s.shopee.vn (AFFILIATE-PLAN.md mục 2.4).
@@ -73,9 +74,7 @@ class AffiliateRedirectController extends Controller
         // null = chạm cap click/ngày (anti-fraud Phase 6): vẫn redirect kèm
         // UTM cho analytics, nhưng không cookie / không aff_click token.
         if ($click) {
-            // Host-only bất kể session.domain (CMS/Sanctum) — xem
-            // queueHostOnlyCookie() trong app/Common/Common.php.
-            queueHostOnlyCookie(
+            Cookie::queue(
                 getCoreConfig('affiliate.cookie'),
                 (string) $click->click_token,
                 (int) getConfigDb('config_affiliate_cookie_days', 30) * 24 * 60,

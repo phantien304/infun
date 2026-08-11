@@ -7,6 +7,7 @@ use App\Repositories\Interfaces\AffiliateClickRepositoryInterface;
 use App\Repositories\Interfaces\AffiliateRepositoryInterface;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
 
 /**
  * Bắt attribution affiliate trên mọi GET web (append vào web group):
@@ -91,9 +92,7 @@ class TrackAffiliateRef
 
     protected function queueCookie(string $token): void
     {
-        // Host-only bất kể session.domain (CMS/Sanctum) — xem
-        // queueHostOnlyCookie() trong app/Common/Common.php.
-        queueHostOnlyCookie(
+        Cookie::queue(
             getCoreConfig('affiliate.cookie'),
             $token,
             (int) getConfigDb('config_affiliate_cookie_days', 30) * 24 * 60,

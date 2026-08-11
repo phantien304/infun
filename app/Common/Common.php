@@ -2,7 +2,9 @@
 
 use App\Helpers\Facades\ChannelLog;
 use App\Helpers\Facades\CustomStorage;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 
 function respondSuccess($data = null, string $message = '', int $status = 200, array $meta = []): \Illuminate\Http\JsonResponse
 {
@@ -74,7 +76,30 @@ function getCookie($cookieName = '', $default = null)
         return request()->cookie();
     }
 
-    return request()->cookie($cookieName) ? request()->cookie($cookieName) : $default;
+    return request()->cookie($cookieName) ?? $default;
+}
+
+/**
+ * Cách DUY NHẤT để ghi cookie trong app — mọi nơi cần set cookie PHẢI gọi
+ * qua đây, không gọi thẳng Cookie::queue()/cookie()->forever()/
+ * response()->cookie(). Luôn host-only (domain=null, bypass default-fill
+ * của CookieJar) — KHÔNG kế thừa session.domain (config đó chỉ nên ảnh
+ * hưởng session/XSRF cookie của Laravel, không phải cookie app tự định
+ * nghĩa). Tránh lặp lại sự cố cookie đổi scope ngoài ý muốn khi
+ * session.domain đổi vì lý do khác (VD bật share domain cho CMS/Sanctum,
+ * sự cố 2026-08-11 — popup "chưa có địa chỉ" hiện sai ở checkout dù DB đủ
+ * dữ liệu, vì cookie address_customer ghi từ trước không còn khớp scope).
+ */
+function putCookie(string $name, ?string $value, int $minutes = 0): void
+{
+    $expire = $minutes === 0 ? 0 : time() + ($minutes * 60);
+
+    Cookie::queue(new SymfonyCookie($name, $value, $expire, '/', null, null, true, false, 'lax', ));
+}
+
+function forgetCookie(string $name): void
+{
+    putCookie($name, null, -2628000);
 }
 
 function getDeletedByColumn($key = 'field')

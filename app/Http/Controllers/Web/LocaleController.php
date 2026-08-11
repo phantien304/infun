@@ -20,7 +20,7 @@ class LocaleController extends Controller
         $currency = $this->currencyService->findCurrency($code);
         if ($currency) {
             $cookie = (string) getCoreConfig('currency.cookie', 'currency');
-            cookie()->queue(cookie()->forever($cookie, strtoupper($code)));
+            putCookie($cookie, strtoupper($code), 576000);
         }
 
         return back();
@@ -30,7 +30,7 @@ class LocaleController extends Controller
     {
         if ($this->isAllowedLanguage($code)) {
             $cookie = (string) getCoreConfig('language.cookie', 'language');
-            cookie()->queue(cookie()->forever($cookie, strtolower($code)));
+            putCookie($cookie, strtolower($code), 576000);
         }
 
         return back();

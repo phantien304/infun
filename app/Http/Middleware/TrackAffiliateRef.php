@@ -7,17 +7,7 @@ use App\Repositories\Interfaces\AffiliateClickRepositoryInterface;
 use App\Repositories\Interfaces\AffiliateRepositoryInterface;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cookie;
 
-/**
- * Bắt attribution affiliate trên mọi GET web (append vào web group):
- * 1. `?aff_click=TOKEN` — đến từ redirect /l/{slug}: click ĐÃ log ở đó,
- *    chỉ validate token + refresh cookie (không log lần 2).
- * 2. `?ref=CODE` — link tay không qua shortener: log click mới (throttle
- *    theo session+affiliate) rồi set cookie.
- * Last-click wins: cookie mới ghi đè cookie cũ (business #3 đã chốt).
- * Lỗi tracking không được phá page load — nuốt exception + logError.
- */
 class TrackAffiliateRef
 {
     public function __construct(
@@ -41,7 +31,6 @@ class TrackAffiliateRef
 
     protected function track(Request $request): void
     {
-        // Query param là input hostile: ?aff_click[]=x trả array → chỉ nhận string.
         $token = $this->stringQuery($request, (string) getCoreConfig('affiliate.param_click'));
         if ($token !== '') {
             $click = $this->affiliateClickRepo->findValidByToken(
@@ -77,7 +66,6 @@ class TrackAffiliateRef
             );
         }
 
-        // null = chạm cap click/ngày (anti-fraud) → bỏ track, page vẫn load.
         if ($click) {
             $this->queueCookie((string) $click->click_token);
         }
@@ -92,7 +80,7 @@ class TrackAffiliateRef
 
     protected function queueCookie(string $token): void
     {
-        Cookie::queue(
+        putCookie(
             getCoreConfig('affiliate.cookie'),
             $token,
             (int) getConfigDb('config_affiliate_cookie_days', 30) * 24 * 60,

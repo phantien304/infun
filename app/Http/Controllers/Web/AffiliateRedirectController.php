@@ -7,18 +7,7 @@ use App\Enums\AffiliateStatus;
 use App\Http\Controllers\Controller;
 use App\Repositories\Interfaces\AffiliateClickRepositoryInterface;
 use App\Repositories\Interfaces\AffiliateLinkRepositoryInterface;
-use Illuminate\Support\Facades\Cookie;
 
-/**
- * GET /l/{slug} — short link kiểu s.shopee.vn (AFFILIATE-PLAN.md mục 2.4).
- * Log click SERVER-SIDE tại bước redirect (trước khi landing load, không
- * phụ thuộc JS/cookie phía đích) → set cookie aff_ref = click_token →
- * 302 sang destination kèm auto-UTM:
- *   ?aff=<code>&aff_click=<token>&utm_source=aff_<code>&utm_medium=affiliates
- *   &utm_campaign=link_<slug>&utm_content=<sub_id>
- * Bảo mật: destination validate cùng host lúc redirect (chống open-redirect
- * kể cả khi DB bị sửa tay); slug/link hỏng → về trang chủ, không lộ lỗi.
- */
 class AffiliateRedirectController extends Controller
 {
     public function __construct(
@@ -39,14 +28,14 @@ class AffiliateRedirectController extends Controller
         $affiliate = $link->affiliate;
         $enabled = (int) getConfigDb('config_affiliate_enabled') === 1;
         if (! $enabled || ! $affiliate || (int) $affiliate->status !== AffiliateStatus::Active->value) {
-            return redirect($destination); // link vẫn dùng được, chỉ không track
+            return redirect($destination);
         }
 
         $click = $this->clickRepo->findRecent(
             (int) $affiliate->id,
             (string) session()->getId(),
             (int) getCoreConfig('affiliate.click_throttle_minutes', 30),
-            (int) $link->id, // throttle per-link: link khác của cùng KOL vẫn log riêng
+            (int) $link->id,
         );
 
         if (! $click) {
@@ -71,10 +60,8 @@ class AffiliateRedirectController extends Controller
             $params['utm_content'] = $link->sub_id;
         }
 
-        // null = chạm cap click/ngày (anti-fraud Phase 6): vẫn redirect kèm
-        // UTM cho analytics, nhưng không cookie / không aff_click token.
         if ($click) {
-            Cookie::queue(
+            putCookie(
                 getCoreConfig('affiliate.cookie'),
                 (string) $click->click_token,
                 (int) getConfigDb('config_affiliate_cookie_days', 30) * 24 * 60,
@@ -87,11 +74,8 @@ class AffiliateRedirectController extends Controller
         return redirect($destination.$glue.http_build_query($params));
     }
 
-    /** Chỉ chấp nhận destination cùng host với app (hoặc path tương đối). */
     protected function safeDestination(string $url): string
     {
-        // Bỏ #fragment (data cũ/sửa tay): params gắn sau fragment sẽ bị
-        // browser coi là một phần fragment → mất aff_click/UTM.
         $url = strtok($url, '#') ?: '';
 
         if ($url === '') {

@@ -5,7 +5,6 @@ namespace App\Services\Account;
 use App\Models\Entities\UserAddress;
 use App\Repositories\Interfaces\UserAddressRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Cookie;
 
 class AddressService
 {
@@ -78,7 +77,7 @@ class AddressService
         }
 
         $cookieKey = (string) getCoreConfig('cookie.user.address');
-        $current = json_decode((string) request()->cookie($cookieKey, '[]'));
+        $current = json_decode((string) getCookie($cookieKey, '[]'));
         if (empty($current)) {
             $current = json_decode(json_encode($this->listForUser($userId)));
         }
@@ -91,8 +90,7 @@ class AddressService
 
     public function clearVisitorCookie(): void
     {
-        $key = (string) getCoreConfig('cookie.user.address');
-        Cookie::queue(Cookie::forget($key));
+        forgetCookie((string) getCoreConfig('cookie.user.address'));
     }
 
     protected function syncCookieFor(int $userId): void
@@ -102,7 +100,7 @@ class AddressService
 
     protected function writeCookie(mixed $data): void
     {
-        Cookie::queue(
+        putCookie(
             (string) getCoreConfig('cookie.user.address'),
             json_encode($data),
             (int) getCoreConfig('cookie.time'),

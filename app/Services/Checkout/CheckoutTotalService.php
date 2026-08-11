@@ -4,6 +4,7 @@ namespace App\Services\Checkout;
 
 use App\Enums\CouponType;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
+use App\Services\Account\AddressService;
 
 class CheckoutTotalService
 {
@@ -11,6 +12,7 @@ class CheckoutTotalService
         protected ShippingFeeService $shippingFee,
         protected UserRewardRepositoryInterface $userRewardRepo,
         protected PromotionService $promotionService,
+        protected AddressService $addressService,
     ) {
     }
 
@@ -254,8 +256,8 @@ class CheckoutTotalService
 
     protected function extractAddress(): array
     {
-        $cookie = json_decode((string) request()->cookie('address_customer'), true) ?: [];
-        $default = collect($cookie)->firstWhere('is_default', 1) ?: ($cookie[0] ?? []);
+        $list = $this->addressService->resolveDisplayList();
+        $default = collect($list)->firstWhere('is_default', 1) ?: ($list[0] ?? []);
 
         return (array) $default;
     }

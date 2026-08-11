@@ -71,4 +71,16 @@ class UserAddressRepository extends QueryableRepository implements UserAddressRe
             ->where('id', $addressId)
             ->delete();
     }
+
+    public function setDefault(int $userId, int $addressId): bool
+    {
+        $this->resetModel()
+            ->where('user_id', $userId)
+            ->update(['is_default' => 0]);
+
+        return (bool) $this->resetModel()
+            ->where('user_id', $userId)
+            ->where('id', $addressId)
+            ->update(['is_default' => 1]);
+    }
 }

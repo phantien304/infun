@@ -6,6 +6,7 @@ use App\Models\Entities\Coupon;
 use App\Models\Entities\User;
 use App\Models\Entities\Voucher;
 use App\Repositories\Interfaces\UserRewardRepositoryInterface;
+use App\Services\Account\AddressService;
 use App\Services\Checkout\CheckoutPromotions;
 use App\Services\Checkout\CheckoutTotalService;
 use App\Services\Checkout\PromotionService;
@@ -62,6 +63,7 @@ class CheckoutTotalServiceTest extends TestCase
             Mockery::mock(ShippingFeeService::class),
             $rewardRepo ?? Mockery::mock(UserRewardRepositoryInterface::class),
             $promo,
+            Mockery::mock(AddressService::class),
         );
     }
 
@@ -199,6 +201,59 @@ class CheckoutTotalServiceTest extends TestCase
         $this->assertSame(0, $m->invoke($svc, $entry, 0));
     }
 
+    public function test_extract_address_lay_dung_dia_chi_default_tu_address_service(): void
+    {
+        $addressService = Mockery::mock(AddressService::class);
+        $addressService->shouldReceive('resolveDisplayList')->once()->andReturn([
+            ['id' => 1, 'full_address' => 'A', 'is_default' => 0],
+            ['id' => 2, 'full_address' => 'B', 'is_default' => 1],
+        ]);
+
+        $svc = new CheckoutTotalService(
+            Mockery::mock(ShippingFeeService::class),
+            Mockery::mock(UserRewardRepositoryInterface::class),
+            Mockery::mock(PromotionService::class),
+            $addressService,
+        );
+        $m = new ReflectionMethod($svc, 'extractAddress');
+
+        $this->assertSame('B', $m->invoke($svc)['full_address']);
+    }
+
+    public function test_extract_address_fallback_dia_chi_dau_khi_khong_co_default(): void
+    {
+        $addressService = Mockery::mock(AddressService::class);
+        $addressService->shouldReceive('resolveDisplayList')->andReturn([
+            ['id' => 1, 'full_address' => 'Chỉ có 1 địa chỉ', 'is_default' => 0],
+        ]);
+
+        $svc = new CheckoutTotalService(
+            Mockery::mock(ShippingFeeService::class),
+            Mockery::mock(UserRewardRepositoryInterface::class),
+            Mockery::mock(PromotionService::class),
+            $addressService,
+        );
+        $m = new ReflectionMethod($svc, 'extractAddress');
+
+        $this->assertSame('Chỉ có 1 địa chỉ', $m->invoke($svc)['full_address']);
+    }
+
+    public function test_extract_address_rong_khi_chua_co_dia_chi_nao(): void
+    {
+        $addressService = Mockery::mock(AddressService::class);
+        $addressService->shouldReceive('resolveDisplayList')->andReturn([]);
+
+        $svc = new CheckoutTotalService(
+            Mockery::mock(ShippingFeeService::class),
+            Mockery::mock(UserRewardRepositoryInterface::class),
+            Mockery::mock(PromotionService::class),
+            $addressService,
+        );
+        $m = new ReflectionMethod($svc, 'extractAddress');
+
+        $this->assertSame([], $m->invoke($svc));
+    }
+
     public function test_gift_line_hien_thi_dung_so_luong_qua_tang(): void
     {
         session()->put(getCoreConfig('session.applied_gifts'), [
@@ -311,6 +366,7 @@ class CheckoutTotalServiceTest extends TestCase
             Mockery::mock(ShippingFeeService::class),
             Mockery::mock(UserRewardRepositoryInterface::class),
             $promo,
+            Mockery::mock(AddressService::class),
         );
 
         $promotions = (new CheckoutPromotions())

@@ -92,14 +92,13 @@ class AddressService
 
     public function applyQuickAddress(?int $userId, array $data): void
     {
-        $fullAddress = implode(', ', array_filter([
-            $data['address']       ?? null,
-            $data['ward_name']     ?? null,
-            $data['district_name'] ?? null,
-            $data['zone_name']     ?? null,
-        ]));
-
         if ($userId === null) {
+            $fullAddress = implode(', ', array_filter([
+                $data['address']       ?? null,
+                $data['ward_name']     ?? null,
+                $data['district_name'] ?? null,
+                $data['zone_name']     ?? null,
+            ]));
             $payload = [array_merge($data, [
                 'full_address' => $fullAddress,
                 'is_default'   => 1,
@@ -109,16 +108,11 @@ class AddressService
             return;
         }
 
-        $cookieKey = (string) getCoreConfig('cookie.user.address');
-        $current = json_decode((string) getCookie($cookieKey, '[]'));
-        if (empty($current)) {
-            $current = json_decode(json_encode($this->listForUser($userId)));
-        }
         $pickedId = (int) ($data['id'] ?? 0);
-        foreach ((array) $current as $item) {
-            $item->is_default = ((int) ($item->id ?? 0) === $pickedId) ? 1 : 0;
+        if ($pickedId > 0) {
+            $this->addressRepo->setDefault($userId, $pickedId);
+            $this->syncCookieFor($userId);
         }
-        $this->writeCookie($current);
     }
 
     public function clearVisitorCookie(): void

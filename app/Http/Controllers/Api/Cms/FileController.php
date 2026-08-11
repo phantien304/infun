@@ -32,8 +32,20 @@ class FileController extends Controller
 
     protected function validationError(): ?string
     {
+        // 'image' rule (implicit) TỪ CHỐI svg mặc định từ Laravel 10 (SVG có thể
+        // nhúng <script> — không phải ảnh raster để getimagesize() kiểm dimension
+        // được). Bỏ rule 'image', dựa hẳn vào mimes/mimetypes để cho svg qua —
+        // CHỈ làm ở đây (CMS, sau auth:sanctum, xem routes/rcms.php) vì đây là
+        // upload logo/favicon do staff đã đăng nhập thực hiện. KHÔNG áp dụng
+        // cho Web\FileController — route đó public không cần đăng nhập (khách
+        // upload ảnh review), cho svg qua ở đó là mở cửa XSS lưu trữ.
         $validator = Validator::make(request()->all(), [
-            'file' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'mimetypes:image/jpeg,image/png,image/webp', 'max:2048'],
+            'file' => [
+                'required', 'file',
+                'mimes:jpeg,jpg,png,webp,svg',
+                'mimetypes:image/jpeg,image/png,image/webp,image/svg+xml',
+                'max:2048',
+            ],
         ]);
 
         return $validator->fails() ? $validator->errors()->first() : null;

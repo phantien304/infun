@@ -143,10 +143,15 @@ function buildUrl(?string $slug, ?string $moduleKey, ?int $id, ?string $prefix =
     $url = '/' . $slug . '-' . $moduleKey . $id;
     return filled($prefix) ? url('/' . $prefix . '/' . $url) : url($url);
 }
-function thumbnail(string $image, int $width = 400, int $height = 400, string $module = 'web'): string
+function thumbnail(string $image, ?int $width = null, ?int $height = null, string $module = 'web'): string
 {
-    return CustomStorage::getStorage(config('media.image_disk', 'image'))
-        ->resizeImage($image, $width, $height, $module);
+    $storage = CustomStorage::getStorage(config('media.image_disk', 'image'));
+
+    if ($width === null || $height === null) {
+        return $storage->url($image);
+    }
+
+    return $storage->resizeImage($image, $width, $height, $module);
 }
 function setting($key, $default = null)
 {

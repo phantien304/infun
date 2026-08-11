@@ -106,6 +106,16 @@ x-app-env: &app-env
   # staging) — cổng 8200 khớp STAGING_CMS_WEB_PORT của infuncms.
   CORS_ALLOWED_ORIGINS: "${STAGING_CORS_ALLOWED_ORIGINS:-http://100.99.170.2:8200,http://localhost:8200}"
 
+  # CORS chỉ cho phép trình duyệt ĐỌC response — cookie session của login CMS
+  # (Auth::guard('web') + $request->session()) lại do một danh sách RIÊNG
+  # quyết định: config/sanctum.php 'stateful' (EnsureFrontendRequestsAreStateful,
+  # bootstrap/app.php prepend vào group 'api' — routes/rcms.php dùng group này).
+  # Middleware đó CHỈ start StartSession khi Origin/Referer khớp danh sách này;
+  # không khớp thì $request->session() ném RuntimeException ngay trong
+  # AuthController::login() → 500 (sự cố 2026-08-10, login CMS qua Tailscale
+  # IP). Format: host:port, KHÔNG có scheme (khác CORS_ALLOWED_ORIGINS ở trên).
+  SANCTUM_STATEFUL_DOMAINS: "${STAGING_SANCTUM_STATEFUL_DOMAINS:-100.99.170.2:8200,localhost:8200}"
+
   # config/theme.php đã ghi rõ "BẬT ở staging để khách bấm thử qua lại giữa
   # các mẫu mà không cần DNS" — nhưng file này thiếu biến nên vẫn rơi về
   # default false của env(). Bật sẵn ở đây, tắt khẩn cấp qua .env không cần

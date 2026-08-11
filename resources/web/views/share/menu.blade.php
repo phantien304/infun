@@ -5,7 +5,7 @@
                 <div class="header-wrap flex items-center justify-between gap-6">
                     <div class="logo logo-width-1 flex-shrink-0">
                         <a href="{{ route('home') }}" title="{!! getConfigDb('config_name') !!}">
-                            <img src="{{ asset(getConfigDb('config_logo')) }}" alt="{!! getConfigDb('config_name') !!}">
+                            <img src="{{ thumbnail(getConfigDb('config_logo')) }}" alt="{!! getConfigDb('config_name') !!}">
                         </a>
                     </div>
                     <div class="header-right flex items-center gap-6 flex-1 justify-end">
@@ -97,7 +97,7 @@
                 <div class="header-wrap flex items-center justify-between relative py-3">
                     <div class="logo logo-width-1 block lg:hidden">
                         <a href="{{ route('home') }}" title="{!! getConfigDb('config_name') !!}">
-                            <img src="{{ asset(getConfigDb('config_logo')) }}" alt="{!! getConfigDb('config_name') !!}">
+                            <img src="{{ thumbnail(getConfigDb('config_logo')) }}" alt="{!! getConfigDb('config_name') !!}">
                         </a>
                     </div>
                     <div class="header-nav hidden lg:flex">

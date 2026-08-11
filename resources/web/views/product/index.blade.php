@@ -9,7 +9,15 @@
         var variantMatrix = {!! json_encode($variantMatrix ?? []) !!};
         var defaultVariant = {!! json_encode($defaultVariant) !!};
         var variantGallery = {!! json_encode($variantGallery ?? []) !!};
-        var productGallery = {!! json_encode(collect($productImages)->map(fn ($im) => ['full' => thumbnail($im['image'], 1000, 1000), 'thumb' => thumbnail($im['image'], 147, 147), 'alt' => $im['alt'] ?? ''])->values()) !!};
+        var productGallery = {!! json_encode(
+            collect($productImages)->map(
+                    fn($im) => [
+                        'full' => thumbnail($im['image'], 1000, 1000),
+                        'thumb' => thumbnail($im['image'], 147, 147),
+                        'alt' => $im['alt'] ?? '',
+                    ],
+                )->values(),
+        ) !!};
         var urlUserWishlist = '{{ route('account.userWishlist') }}';
         var priceProduct = {{ $priceFinal }};
         var productBasePrice = {{ $basePriceForDiscount }};
@@ -328,7 +336,7 @@
                                 <article class="text-center wow fadeIn animated hover-up mb-30">
                                     <div class="post-thumb">
                                         <a href="{!! $blog->url !!}" title="{!! $blog->title !!}">
-                                            <img src="{!! $blog->thumbnail(400, 250) !!}" alt="{!! $blog->title !!}"
+                                            <img src="{!! $blog->thumbnail(635, 420) !!}" alt="{!! $blog->title !!}"
                                                 class="border-radius-15">
                                         </a>
                                     </div>

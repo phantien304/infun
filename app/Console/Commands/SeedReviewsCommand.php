@@ -145,7 +145,6 @@ class SeedReviewsCommand extends Command
             ? DB::table('review_tag')->where('is_active', 1)->pluck('id')->all()
             : [];
 
-        // Pool user_id thực để hash voted bằng IP — fallback 0 cho guest review.
         $userIds = DB::table('user')->limit(5000)->pluck('id')->all();
         if (empty($userIds)) {
             $userIds = [0];
@@ -184,7 +183,6 @@ class SeedReviewsCommand extends Command
 
                 for ($i = 0; $i < $batch; $i++) {
                     $productId    = $productIds[array_rand($productIds)];
-                    $userId       = $userIds[array_rand($userIds)];
                     $rating       = $this->randomRating();
                     $author       = $this->randomName();
                     [$title, $text] = $this->randomTextByRating($rating);
@@ -217,7 +215,8 @@ class SeedReviewsCommand extends Command
                         'product_id'         => $productId,
                         'product_variant_id' => null,
                         'order_id'           => null,
-                        'user_id'            => $userId,
+                        // null, không gán user thật — xem comment ở khai báo $userIds.
+                        'user_id'            => null,
                         'ip'                 => $this->randomIp(),
                         'author'             => $author,
                         // email tạm null — patch sau insert nếu cần (KHÔNG dùng id

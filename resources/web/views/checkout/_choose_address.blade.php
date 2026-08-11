@@ -1,11 +1,11 @@
 @php
-    $address = json_decode(getCookie(setting('cookie.user.address'), '[]'), true);
+    $address = app(\App\Services\Account\AddressService::class)->resolveDisplayList();
     $addressVisitor = [];
     if (filled($address)) {
         $addressVisitor = array_filter($address, function ($k) {
             return data_get($k, 'is_default') == 1;
         });
-        $addressVisitor = array_values($addressVisitor)[0];
+        $addressVisitor = array_values($addressVisitor)[0] ?? [];
     }
     $userAddressId = old('id', data_get($addressVisitor, 'id', 0));
     $zoneIdCookie = getCookie(setting('cookie.shipping_zone'), '');

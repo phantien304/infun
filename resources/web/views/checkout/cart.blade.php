@@ -164,14 +164,11 @@
                                 <div class="divider-2 mb-10"></div>
                                 <div class="list-group">
                                     @php
-                                        $addressCustomer = setting('cookie.user.address');
-                                        if (getCookie($addressCustomer)) {
-                                            $address = json_decode(getCookie($addressCustomer), true) ?: [];
-                                            foreach ($address as $item) {
-                                                if (!empty($item['is_default'])) {
-                                                    echo $item['full_address'] ?? '';
-                                                    break;
-                                                }
+                                        $sidebarAddress = app(\App\Services\Account\AddressService::class)->resolveDisplayList();
+                                        foreach ($sidebarAddress as $item) {
+                                            if (!empty($item['is_default'])) {
+                                                echo $item['full_address'] ?? '';
+                                                break;
                                             }
                                         }
                                     @endphp

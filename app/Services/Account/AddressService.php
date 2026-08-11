@@ -18,6 +18,39 @@ class AddressService
         return $this->addressRepo->listForUser($userId);
     }
 
+    public function resolveDisplayList(): array
+    {
+        if (auth()->check()) {
+            return $this->listForUserFormatted((int) auth()->id());
+        }
+
+        return json_decode(getCookie((string) getCoreConfig('cookie.user.address'), '[]'), true) ?: [];
+    }
+
+    public function listForUserFormatted(int $userId): array
+    {
+        return $this->listForUser($userId)->map(function (UserAddress $item) {
+            $zoneName = (string) ($item->zone?->description?->name ?? '');
+            $districtName = (string) ($item->district?->description?->name ?? '');
+            $wardName = (string) ($item->ward?->description?->name ?? '');
+
+            return [
+                'id'            => $item->id,
+                'full_name'     => $item->full_name,
+                'telephone'     => $item->telephone,
+                'zone_id'       => $item->zone_id,
+                'zone_name'     => $zoneName,
+                'district_id'   => $item->district_id,
+                'district_name' => $districtName,
+                'ward_id'       => $item->ward_id,
+                'ward_name'     => $wardName,
+                'address'       => $item->address,
+                'full_address'  => implode(', ', array_filter([$item->address, $wardName, $districtName, $zoneName])),
+                'is_default'    => (int) $item->is_default,
+            ];
+        })->all();
+    }
+
     public function findForUser(int $userId, ?int $addressId): ?UserAddress
     {
         if (! filled($addressId)) {
@@ -95,7 +128,7 @@ class AddressService
 
     protected function syncCookieFor(int $userId): void
     {
-        $this->writeCookie($this->listForUser($userId));
+        $this->writeCookie($this->listForUserFormatted($userId));
     }
 
     protected function writeCookie(mixed $data): void

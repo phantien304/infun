@@ -1,11 +1,11 @@
 @php
-    $address = json_decode(getCookie(setting('cookie.user.address'), '[]'), true);
+    $address = app(\App\Services\Account\AddressService::class)->resolveDisplayList();
     $addressVisitor = [];
     if (filled($address)) {
         $addressVisitor = array_filter($address, function ($k) {
             return $k['is_default'] == 1;
         });
-        $addressVisitor = array_values($addressVisitor)[0];
+        $addressVisitor = array_values($addressVisitor)[0] ?? [];
     }
     $userAddressId = old('user_address_id', data_get($addressVisitor, 'id', 0));
     $zoneIdCookie = getCookie(setting('cookie.shipping_zone'), '');
@@ -198,14 +198,10 @@
                                     <div class="divider-2 mb-10"></div>
                                     <div class="list-group">
                                         @php
-                                            $addressCustomer = setting('cookie.user.address');
-                                            if (getCookie($addressCustomer)) {
-                                                $address = json_decode(getCookie($addressCustomer), true) ?: [];
-                                                foreach ($address as $item) {
-                                                    if (!empty($item['is_default'])) {
-                                                        echo $item['full_address'] ?? '';
-                                                        break;
-                                                    }
+                                            foreach ($address as $item) {
+                                                if (!empty($item['is_default'])) {
+                                                    echo $item['full_address'] ?? '';
+                                                    break;
                                                 }
                                             }
                                         @endphp

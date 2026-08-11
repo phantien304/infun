@@ -219,6 +219,12 @@ services:
       MEILI_ENV: "${MEILI_ENV:-production}"
       MEILI_MASTER_KEY: "${MEILISEARCH_KEY:?Chua set MEILISEARCH_KEY}"
       MEILI_NO_ANALYTICS: "true"
+      # EC2 t3.small = 2GB RAM tổng, KHÔNG chạy DB/Redis ở đây (RDS/ElastiCache
+      # managed) nhưng vẫn chia sẻ RAM với 6 container app khác. Không set biến
+      # này, Meilisearch mặc định tự cấp ~2/3 RAM hệ thống cho tác vụ index —
+      # một mình đã gần bằng RAM còn trống, rủi ro OOM/swap-thrash cả máy lúc
+      # `products:scout-import` 500k sản phẩm. Cap tường minh, an toàn hơn.
+      MEILI_MAX_INDEXING_MEMORY: "${MEILI_MAX_INDEXING_MEMORY:-512 MB}"
     volumes:
       - prod_meili_data:/meili_data
     healthcheck:

@@ -1,0 +1,223 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# FREE TIER POC (AWS mới, giới hạn instance size `micro`) — image BẤT BIẾN,
+# KHÔNG build, KHÔNG mount code. File RIÊNG, KHÔNG thay thế
+# docker-compose.production.yml (giữ nguyên cho production thật sau này khi
+# tài khoản gỡ giới hạn free tier).
+#
+# Khác production.yml:
+#   - CHỈ 1 pool PHP-FPM (bỏ hẳn infun-admin-php/bulkhead — 1GB RAM không đủ
+#     chỗ cho 2 pool riêng). /vcms + /rcms chạy chung pool storefront qua
+#     docker/nginx/default.freetier.conf — mất cách ly CMS/khách, chấp nhận
+#     được cho POC vài chục request đồng thời.
+#   - pm.max_children=4 (docker/php/www.freetier.conf) — www.pool.conf gốc
+#     (60 children) sẽ OOM ngay lập tức trên 1GB RAM tổng cả máy.
+#   - Vẫn giữ Meilisearch + tách 2 Redis (session/queue vs cache) — đúng kiến
+#     trúc production, chỉ scale nhỏ lại. MEILI_MAX_INDEXING_MEMORY cap thấp
+#     vì index nhỏ (20k sản phẩm ≈ 1/25 kích thước 500k thật, xem tính toán
+#     trong buổi làm việc — không cần nhiều RAM cho Meilisearch ở scale này).
+#   - Chỉ 1 queue worker lắng nghe CẢ 2 tên queue (default,admin) — không có
+#     pool admin riêng nên không cần queue admin riêng, nhưng vẫn nghe queue
+#     `admin` phòng khi code dispatch ->onQueue('admin') thì job không bị kẹt
+#     vô thời hạn không ai xử lý.
+#   - 1 scheduler (giống production, luôn luôn chỉ 1 — schedule:work không
+#     được chạy 2 instance, sẽ dispatch trùng lặp mọi task định kỳ).
+#   - DB dùng RDS `db.t4g.micro` ngoài compose này (managed, giống pattern
+#     production — KHÔNG chạy mysql container). IMAGE_DISK_DRIVER mặc định
+#     `local` (không R2) để bớt 1 bước setup cho POC — đổi lại `s3` nếu vẫn
+#     muốn dùng R2 sẵn có.
+#
+# Build + chạy:
+#   docker compose -f docker-compose.production-freetier.yml build
+#   docker compose -f docker-compose.production-freetier.yml up -d
+#   docker compose -f docker-compose.production-freetier.yml exec infun-php \
+#     php artisan migrate --force
+#   docker compose -f docker-compose.production-freetier.yml exec infun-php \
+#     sh -c "php artisan products:purge && php artisan products:seed 20000 && \
+#            php artisan variants:seed --percent=30 && \
+#            php artisan products:scout-import"
+# ═══════════════════════════════════════════════════════════════════════════
+
+x-app-env: &app-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: "${FREETIER_APP_KEY:?Chua set FREETIER_APP_KEY trong .env}"
+  APP_URL: "${FREETIER_APP_URL:?Chua set FREETIER_APP_URL trong .env}"
+  APP_LOCALE: vi
+  APP_LOCALES: vi
+  APP_FALLBACK_LOCALE: vi
+
+  THEME_ALLOW_QUERY: "${FREETIER_THEME_ALLOW_QUERY:-true}"
+
+  # ── RDS db.t4g.micro (ngoài compose này, managed) ─────────────────────────
+  DB_CONNECTION: mysql
+  DB_HOST: "${FREETIER_DB_HOST:?Chua set FREETIER_DB_HOST (RDS endpoint)}"
+  DB_PORT: "3306"
+  DB_DATABASE: "${FREETIER_DB_DATABASE:-infun}"
+  DB_USERNAME: "${FREETIER_DB_USERNAME:?Chua set FREETIER_DB_USERNAME}"
+  DB_PASSWORD: "${FREETIER_DB_PASSWORD:?Chua set FREETIER_DB_PASSWORD}"
+
+  # Chặn triệt để kiểu "query mồ côi" (sự cố production 2026-08-11) — DB tự
+  # huỷ statement của chính nó sau N giây, không phụ thuộc PHP-FPM còn sống
+  # hay không. Xem config/database.php.
+  DB_MAX_STATEMENT_TIME_SEC: "${FREETIER_DB_MAX_STATEMENT_TIME_SEC:-30}"
+
+  # ── 2 Redis riêng container (session+queue / cache) — xem service bên dưới ─
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+  CACHE_STORE: redis
+  REDIS_CACHE_CONNECTION: cache
+  REDIS_CACHE_HOST: redis-cache
+  REDIS_CACHE_PORT: "6379"
+
+  SCOUT_DRIVER: meilisearch
+  MEILISEARCH_HOST: http://meilisearch:7700
+  MEILISEARCH_KEY: "${FREETIER_MEILISEARCH_KEY:-}"
+
+  # Local disk thay R2 — bớt 1 bước setup cho POC. Đổi 's3' + set đủ
+  # FREETIER_AWS_* nếu muốn dùng R2 sẵn có (xem docker-compose.production.yml
+  # để biết đủ biến cần set).
+  IMAGE_DISK_DRIVER: "${FREETIER_IMAGE_DISK_DRIVER:-local}"
+
+  MAIL_MAILER: "${FREETIER_MAIL_MAILER:-log}"
+  LOG_CHANNEL: stderr
+
+services:
+  # ── App PHP-FPM — CHỈ 1 POOL, không bulkhead admin/storefront ────────────
+  infun-php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.staging
+      target: app
+    image: infun-app:freetier
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      FPM_POOL_PROFILE: freetier
+    volumes:
+      - freetier_logs:/var/www/html/storage/logs
+      # Đè pm.max_children=60 (www.pool.conf gốc) bằng bản 4-worker — không
+      # đụng file gốc, chỉ mount thêm vào đúng path entrypoint tự nạp khi
+      # FPM_POOL_PROFILE khớp tên file (xem docker/php/entrypoint.staging.sh).
+      - ./docker/php/www.freetier.conf:/usr/local/etc/php-fpm.d/available/www.freetier.conf:ro
+    depends_on:
+      redis: { condition: service_healthy }
+      redis-cache: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+    networks: [infun-freetier-net]
+
+  # ── Nginx — 1 upstream duy nhất, /vcms+/rcms KHÔNG tách pool riêng ────────
+  infun-web:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.staging
+      target: web
+    image: infun-web:freetier
+    container_name: infun-web-freetier
+    restart: unless-stopped
+    ports:
+      - "${FREETIER_WEB_PORT:-8100}:80"
+    volumes:
+      # Đè default.lb.conf (baked lúc build target "web") bằng bản 1-pool —
+      # không sửa Dockerfile.staging, chỉ mount đè lúc container start.
+      - ./docker/nginx/default.freetier.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - infun-php
+    networks: [infun-freetier-net]
+
+  # ── Queue worker — 1 worker nghe CẢ 2 tên queue (default + admin) ─────────
+  infun-queue:
+    image: infun-app:freetier
+    restart: unless-stopped
+    command: php artisan queue:work redis --queue=default,admin --sleep=2 --tries=3 --timeout=90 --max-time=3600
+    environment:
+      <<: *app-env
+    depends_on:
+      infun-php: { condition: service_started }
+      redis: { condition: service_healthy }
+    networks: [infun-freetier-net]
+
+  # ── Scheduler — CHỈ 1 instance (schedule:work không được chạy 2 bản) ──────
+  infun-scheduler:
+    image: infun-app:freetier
+    container_name: infun-scheduler-freetier
+    restart: unless-stopped
+    command: php artisan schedule:work
+    environment:
+      <<: *app-env
+    depends_on:
+      infun-php: { condition: service_started }
+      redis: { condition: service_healthy }
+    networks: [infun-freetier-net]
+
+  # ── Redis #1 — session + queue (noeviction, mất job/session là mất thật) ──
+  redis:
+    image: redis:7-alpine
+    container_name: infun-redis-freetier
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - "64mb"
+      - --maxmemory-policy
+      - "noeviction"
+    volumes:
+      - freetier_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks: [infun-freetier-net]
+
+  # ── Redis #2 — cache thuần (allkeys-lru, mất là tính toán lại được) ───────
+  redis-cache:
+    image: redis:7-alpine
+    container_name: infun-redis-cache-freetier
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - "64mb"
+      - --maxmemory-policy
+      - "allkeys-lru"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks: [infun-freetier-net]
+
+  # ── Meilisearch — giữ lại (không bỏ như đề xuất ban đầu), cap RAM thấp vì
+  # dữ liệu chỉ 20k sản phẩm (~1/25 kích thước 500k thật đo được trong buổi
+  # làm việc — index tương ứng cũng nhỏ theo tỷ lệ, không cần nhiều RAM).
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: infun-meili-freetier
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: "${FREETIER_MEILISEARCH_KEY:?Chua set FREETIER_MEILISEARCH_KEY}"
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MAX_INDEXING_MEMORY: "${FREETIER_MEILI_MAX_INDEXING_MEMORY:-192 MB}"
+    volumes:
+      - freetier_meili_data:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "meilisearch --version >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [infun-freetier-net]
+
+volumes:
+  freetier_logs:
+  freetier_redis_data:
+  freetier_meili_data:
+
+networks:
+  infun-freetier-net:

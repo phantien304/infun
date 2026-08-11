@@ -1,11 +1,17 @@
 @php
-    $address = json_decode(getCookie(setting('cookie.user.address'), '[]'), true);
+    // Cookie chỉ đáng tin cho khách vãng lai (chưa đăng nhập). Với user đã
+    // đăng nhập, cookie có thể trống (thiết bị mới, cookie hết hạn/bị xoá) dù
+    // họ đã có địa chỉ trong DB — đọc thẳng DB để tránh hiện popup "chưa có
+    // địa chỉ" sai (sự cố 2026-08-11).
+    $address = auth()->check()
+        ? app(\App\Services\Account\AddressService::class)->listForUserFormatted((int) auth()->id())
+        : (json_decode(getCookie(setting('cookie.user.address'), '[]'), true) ?: []);
     $addressVisitor = [];
     if (filled($address)) {
         $addressVisitor = array_filter($address, function ($k) {
             return data_get($k, 'is_default') == 1;
         });
-        $addressVisitor = array_values($addressVisitor)[0];
+        $addressVisitor = array_values($addressVisitor)[0] ?? [];
     }
     $userAddressId = old('id', data_get($addressVisitor, 'id', 0));
     $zoneIdCookie = getCookie(setting('cookie.shipping_zone'), '');

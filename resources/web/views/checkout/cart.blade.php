@@ -164,14 +164,15 @@
                                 <div class="divider-2 mb-10"></div>
                                 <div class="list-group">
                                     @php
-                                        $addressCustomer = setting('cookie.user.address');
-                                        if (getCookie($addressCustomer)) {
-                                            $address = json_decode(getCookie($addressCustomer), true) ?: [];
-                                            foreach ($address as $item) {
-                                                if (!empty($item['is_default'])) {
-                                                    echo $item['full_address'] ?? '';
-                                                    break;
-                                                }
+                                        // Đọc thẳng DB cho user đã đăng nhập — xem ghi chú trong
+                                        // _choose_address.blade.php (sự cố 2026-08-11).
+                                        $sidebarAddress = auth()->check()
+                                            ? app(\App\Services\Account\AddressService::class)->listForUserFormatted((int) auth()->id())
+                                            : (json_decode(getCookie(setting('cookie.user.address'), '[]'), true) ?: []);
+                                        foreach ($sidebarAddress as $item) {
+                                            if (!empty($item['is_default'])) {
+                                                echo $item['full_address'] ?? '';
+                                                break;
                                             }
                                         }
                                     @endphp

@@ -74,6 +74,22 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                // Chặn TRIỆT ĐỂ kiểu "query mồ côi": PHP-FPM SIGTERM worker
+                // lúc request_terminate_timeout hết hạn, nhưng process bị
+                // kill giữa chừng không đảm bảo đóng gọn kết nối MySQL —
+                // query phía server vẫn tiếp tục chạy/stream data cho một
+                // client không còn ai đọc, có thể treo hàng chục phút (sự cố
+                // production 2026-08-11: 15 query mồ côi, 1 cái tồn tại 55
+                // phút, tự nó cạn tài nguyên RDS khiến MỌI request khác cũng
+                // 502 theo — không phải lỗi từng query nữa mà là lỗi hệ
+                // thống). MAX_STATEMENT_TIME (MariaDB) bắt DB tự huỷ statement
+                // của CHÍNH NÓ sau N giây, không phụ thuộc client còn sống
+                // hay không — đóng đúng lỗ hổng này, không phải dọn dẹp sau.
+                // 60s: rộng hơn hẳn timeout FPM storefront (15s) lẫn admin
+                // (300s dùng cho export/import CMS) — coi như lưới an toàn
+                // cuối, không phải giới hạn nghiệp vụ.
+                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET SESSION MAX_STATEMENT_TIME=' .
+                    (int) env('DB_MAX_STATEMENT_TIME_SEC', 60),
             ]) : [],
         ],
 
@@ -94,6 +110,22 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                // Chặn TRIỆT ĐỂ kiểu "query mồ côi": PHP-FPM SIGTERM worker
+                // lúc request_terminate_timeout hết hạn, nhưng process bị
+                // kill giữa chừng không đảm bảo đóng gọn kết nối MySQL —
+                // query phía server vẫn tiếp tục chạy/stream data cho một
+                // client không còn ai đọc, có thể treo hàng chục phút (sự cố
+                // production 2026-08-11: 15 query mồ côi, 1 cái tồn tại 55
+                // phút, tự nó cạn tài nguyên RDS khiến MỌI request khác cũng
+                // 502 theo — không phải lỗi từng query nữa mà là lỗi hệ
+                // thống). MAX_STATEMENT_TIME (MariaDB) bắt DB tự huỷ statement
+                // của CHÍNH NÓ sau N giây, không phụ thuộc client còn sống
+                // hay không — đóng đúng lỗ hổng này, không phải dọn dẹp sau.
+                // 60s: rộng hơn hẳn timeout FPM storefront (15s) lẫn admin
+                // (300s dùng cho export/import CMS) — coi như lưới an toàn
+                // cuối, không phải giới hạn nghiệp vụ.
+                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET SESSION MAX_STATEMENT_TIME=' .
+                    (int) env('DB_MAX_STATEMENT_TIME_SEC', 60),
             ]) : [],
         ],
 

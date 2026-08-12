@@ -70,6 +70,27 @@
         </div>
     </div>
 
+    @if (count($warehouses ?? []) > 1)
+        <div class="rounded-2xl bg-white border border-gray-200 p-4">
+            <label class="block text-[13.5px] font-semibold mb-3">Chi nhánh / Kho</label>
+            <div class="space-y-1">
+                <label for="warehouseAny" class="flex items-center gap-2.5 py-1 cursor-pointer group select-none">
+                    <input class="w-4 h-4 accent-gray-900" type="radio" name="filter[warehouse_id]"
+                        id="warehouseAny" value="" checked>
+                    <span class="text-[13.5px] text-gray-600 group-hover:text-gray-900 transition">Tất cả kho</span>
+                </label>
+                @foreach ($warehouses as $item)
+                    <label for="warehouse{{ $item->id }}"
+                        class="flex items-center gap-2.5 py-1 cursor-pointer group select-none">
+                        <input class="w-4 h-4 accent-gray-900 shrink-0" type="radio" name="filter[warehouse_id]"
+                            id="warehouse{{ $item->id }}" value="{{ $item->id }}">
+                        <span class="text-[14px] group-hover:text-gray-900 transition">{{ $item->name }}</span>
+                    </label>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     @if (count($manufacturers) && !$hideManufacturer)
         <div class="rounded-2xl bg-white border border-gray-200 p-4">
             <label class="block text-[13.5px] font-semibold mb-3">Hãng sản xuất</label>

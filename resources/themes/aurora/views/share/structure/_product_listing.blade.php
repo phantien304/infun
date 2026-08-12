@@ -123,7 +123,7 @@
             @click="drawerOpen = false"></div>
         <aside class="fixed inset-y-0 left-0 z-[80] w-[86vw] max-w-sm bg-canvas p-5 overflow-y-auto -translate-x-full transition-transform duration-200
                        lg:static lg:col-span-3 lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:bg-transparent lg:p-0
-                       lg:sticky lg:top-[88px] lg:self-start lg:max-h-[calc(100vh-108px)] lg:overflow-y-auto"
+                       lg:sticky lg:top-[88px] lg:self-start"
             :class="drawerOpen && '!translate-x-0'">
             <div class="lg:hidden flex items-center justify-between mb-4">
                 <p class="text-[17px] font-bold">Bộ lọc</p>

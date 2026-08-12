@@ -17,7 +17,6 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
     Route::get('/cart/badge', 'CartBadgeController@index')->name('cart.badge')->withoutMiddleware(['cache_page']);
     Route::get('/san-pham', 'ProductController@getList')->name('product.getList');
     Route::get('/khuyen-mai', 'ProductController@special')->name('product.special');
-    Route::get('/san-pham/get-list-review', 'ProductController@getListReview')->name('product.getListReview');
     Route::get('/bai-viet', 'BlogController@getList')->name('blog.getList');
     Route::get('/khach-hang-danh-gia', 'StoreReviewController@getList')->name('storeReview.getList');
     Route::get('/thanh-phan', 'IngredientController@getList')->name('ingredient.getList');

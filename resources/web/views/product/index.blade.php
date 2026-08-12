@@ -21,7 +21,6 @@
         var urlUserWishlist = '{{ route('account.userWishlist') }}';
         var priceProduct = {{ $priceFinal }};
         var productBasePrice = {{ $basePriceForDiscount }};
-        var urlListReview = '{!! route('product.getListReview', ['product_id' => $entity->id, 'pageIndex' => 1]) !!}';
     </script>
 @stop
 @extends('web::layouts.main')
@@ -302,9 +301,6 @@
                                     <div class="comments-area">
                                         <div class="w-full">
                                             <h4 class="mb-30">Đánh giá của khách hàng</h4>
-                                            <div id="review" class="comment-list"
-                                                style="font-family: arial; font-size: 14px; line-height: 20px;">
-                                            </div>
                                         </div>
                                     </div>
                                     @includeIf('web::product.structure.comment')

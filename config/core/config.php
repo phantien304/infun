@@ -49,10 +49,8 @@ return [
         'url_public_order_detail' => 'https://fe-online-gateway.ghn.vn/order-tracking/public-api/client/tracking-logs',
         'token' => 'f8df7cd5-2263-11eb-9f0c-5af6fb9de075',
         'shop_id' => 75946,
-        //        'url_ward' => 'https://online-gateway.ghn.vn/shiip/public-api/master-data/ward',
-        //        'token' => '537028d3-281d-11eb-b36a-0e2790f48b9c',
-        //        'shop_id' => 431818,
-        'from_district_id' => 1490,
+        'from_district_id' => 1488,
+        'from_ward_code' => '1A0320',
         'service_type_id' => [
             'fly' => 1,
             'walk' => 2
@@ -62,7 +60,7 @@ return [
         'url_fee' => 'https://services.giaohangtietkiem.vn/services/shipment/fee?',
         'token' => '4f0444d3BFeD0e45EE2bA3C4edfDA05ccBb515f3',
         'from_province_name' => 'Hà Nội',
-        'from_district_name' => 'Quận Hoàng Mai',
+        'from_district_name' => 'Quận Hai Bà Trưng',
         'deliver_option' => ['xteam', 'none'],
     ],
     'vtp' => [

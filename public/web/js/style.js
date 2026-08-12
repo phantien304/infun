@@ -439,16 +439,6 @@ $(document).ready(function () {
     $(document).on('click', '.ui-widget-overlay', function () {
         $("div:ui-dialog:visible").dialog("close");
     });
-    $(document).on('click', '#review ul.pagination a.page-link', function () {
-        let review = $('#review');
-        review.fadeOut('slow');
-        review.load($(this).attr('data-action'));
-        review.fadeIn('slow');
-        $('html, body').animate({
-            scrollTop: review.offset().top - 100
-        }, 0);
-        return false;
-    });
     (function () {
         if (typeof variantMatrix === 'undefined') { window.variantMatrix = []; }
         if (typeof defaultVariant === 'undefined') { window.defaultVariant = null; }
@@ -1006,45 +996,6 @@ $(document).ready(function () {
             }
         }, 500);
     });
-    $(document).on('click', "#ratingForm button[type='submit']", function (e) {
-        e.preventDefault();
-        let ratingForm = $('#ratingForm');
-        ratingForm.find('.alert').remove();
-        $(this).prop('disabled', true);
-        $.ajax({
-            type: 'POST',
-            headers: {
-                'X-CSRF-Token': $("input[name='_token']").val()
-            },
-            url: ratingForm.attr('action'),
-            data: {
-                'author': $("input[name='author']").val(),
-                'product_id': $("input[name='product_id']").val(),
-                'email': $("input[name='email']").val(),
-                'text': $("textarea[name='text']").val(),
-                'rating': $('input:radio[name=rating]:checked').val(),
-            },
-            dataType: 'json',
-        }).done(function (data) {
-            $("#ratingForm button[type='submit']").removeAttr('disabled');
-            ratingForm.find("input").val('');
-            ratingForm.find("textarea").val('');
-            ratingForm.append('<div class="alert alert-success">' + ((data && data.message) || '') + '</div>');
-            $('#review').load(urlListReview);
-        }).fail(function (xhr) {
-            $("#ratingForm button[type='submit']").removeAttr('disabled');
-            var json = (xhr && xhr.responseJSON) || {};
-            if (xhr && xhr.status === 422 && json.errors) {
-                for (var k in json.errors) {
-                    if (!Object.prototype.hasOwnProperty.call(json.errors, k)) continue;
-                    var msg = Array.isArray(json.errors[k]) ? json.errors[k][0] : json.errors[k];
-                    ratingForm.append('<div class="alert alert-danger">' + msg + '</div>');
-                }
-            } else {
-                ratingForm.append('<div class="alert alert-danger">' + (json.message || 'Có lỗi xảy ra. Vui lòng thử lại.') + '</div>');
-            }
-        });
-    });
     $(document).on('click', "#voucherForm button[type='submit']", function (e) {
         e.preventDefault();
         let voucherForm = $('#voucherForm');
@@ -1362,10 +1313,6 @@ function userWishlist($productId) {
 window.onscroll = function () {
     scrollFunction()
 };
-
-if (typeof urlListReview !== 'undefined') {
-    $('#review').load(urlListReview);
-}
 
 function isNaN(x) {
     x = Number(x);

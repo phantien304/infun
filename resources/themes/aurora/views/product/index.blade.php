@@ -13,7 +13,6 @@
         var urlUserWishlist = '{{ route('account.userWishlist') }}';
         var priceProduct = {{ $priceFinal }};
         var productBasePrice = {{ $basePriceForDiscount }};
-        var urlListReview = '{!! route('product.getListReview', ['product_id' => $entity->id, 'pageIndex' => 1]) !!}';
     </script>
 @stop
 @extends('web::layouts.main')
@@ -296,8 +295,6 @@
             @if ($entity->isReview)
                 <div x-show="tab === 'reviews'" x-cloak>
                     <h4 class="text-[18px] font-bold mb-5">Đánh giá của khách hàng</h4>
-                    <div id="review" class="comment-list" style="font-family: arial; font-size: 14px; line-height: 20px;">
-                    </div>
                     @includeIf('web::product.structure.comment')
                 </div>
             @endif

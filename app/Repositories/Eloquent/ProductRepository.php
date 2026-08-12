@@ -46,6 +46,21 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             AllowedFilter::callback('price_min', fn () => null),
             AllowedFilter::callback('price_max', fn () => null),
 
+            AllowedFilter::callback('warehouse_id', function (Builder $q, $value) {
+                $warehouseId = (int) (is_array($value) ? reset($value) : $value);
+                if ($warehouseId <= 0) {
+                    return;
+                }
+                $q->whereExists(function ($qq) use ($warehouseId) {
+                    $qq->select(DB::raw(1))
+                        ->from('product_variant as pv')
+                        ->join('product_stock as ps', 'ps.product_variant_id', '=', 'pv.id')
+                        ->whereColumn('pv.product_id', 'product.id')
+                        ->whereNull('pv.deleted_at')
+                        ->where('ps.warehouse_id', $warehouseId);
+                });
+            }),
+
             AllowedFilter::callback('in_stock', function (Builder $q, $value) {
                 $values = collect((array) $value)
                     ->map(fn ($v) => (string) $v)
@@ -102,10 +117,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 'menu'  => true,
             ],
             'price' => [
-                // Fast() dùng cột denormalized — xem docblock ở
-                // Product::scopeOrderByEffectivePriceFast() để biết lý do và
-                // cách đổi lại bản chính xác 100% theo user group sau khi
-                // nâng cấp cấu hình server (sự cố production 2026-08-11).
                 'db'    => AllowedSort::callback(
                     'price',
                     fn (Builder $q, bool $descending) => $q->orderByEffectivePriceFast($descending ? 'desc' : 'asc')
@@ -178,13 +189,9 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         $min = self::normalizePrice(request()->input('filter.price_min'));
         $max = self::normalizePrice(request()->input('filter.price_max'));
         if ($min !== null || $max !== null) {
-            // Fast() — xem Product::scopeEffectivePriceBetweenFast() docblock.
             $query->effectivePriceBetweenFast($min, $max);
         }
 
-        // Lọc theo đánh giá — nhánh DB. `product.rating_avg` là cột tổng hợp
-        // sẵn (cùng rating_sum/review_count, do ReviewObserver cập nhật) nên
-        // không phải join sang bảng review hay tính AVG lúc chạy.
         $ratingMin = self::normalizeRating(request()->input('filter.rating_min'));
         if ($ratingMin !== null) {
             $query->where('product.rating_avg', '>=', $ratingMin);
@@ -316,11 +323,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             $builder->where('min_variant_price', '<=', $max);
         }
 
-        // Lọc theo đánh giá — nhánh Meilisearch. `rating_avg` đã có sẵn trong
-        // filterableAttributes (config/scout.php) nên KHÔNG cần reindex, chỉ
-        // cần `scout:sync-index-settings` nếu index dựng trước khi khai báo.
-        // Scout Builder::where nhận 3 tham số → MeilisearchEngine dựng chuỗi
-        // "rating_avg >= 4"; đây là lý do dùng được toán tử ở đây.
         $ratingMin = self::normalizeRating($request->input('filter.rating_min'));
         if ($ratingMin !== null) {
             $builder->where('rating_avg', '>=', $ratingMin);
@@ -342,11 +344,14 @@ class ProductRepository extends QueryableRepository implements ProductRepository
             ->filter(fn ($v) => $v === '0' || $v === '1')
             ->unique()
             ->values();
+        $warehouseIdRaw = $request->input('filter.warehouse_id');
+        $warehouseId = (int) (is_array($warehouseIdRaw) ? reset($warehouseIdRaw) : $warehouseIdRaw);
 
         $builder->query(function (Builder $qb) use (
             $cardRelations,
             $selectedFilters,
             $inStockRaw,
+            $warehouseId,
             $modifyBase,
         ) {
             $qb->select('product.*')
@@ -376,6 +381,17 @@ class ProductRepository extends QueryableRepository implements ProductRepository
                 $inStockRaw->first() === '1'
                     ? $qb->whereExists($inStockExists)
                     : $qb->whereNotExists($inStockExists);
+            }
+
+            if ($warehouseId > 0) {
+                $qb->whereExists(function ($qq) use ($warehouseId) {
+                    $qq->select(DB::raw(1))
+                        ->from('product_variant as pv')
+                        ->join('product_stock as ps', 'ps.product_variant_id', '=', 'pv.id')
+                        ->whereColumn('pv.product_id', 'product.id')
+                        ->whereNull('pv.deleted_at')
+                        ->where('ps.warehouse_id', $warehouseId);
+                });
             }
 
             if ($modifyBase !== null) {
@@ -608,14 +624,6 @@ class ProductRepository extends QueryableRepository implements ProductRepository
         return $digits === '' ? null : (int) $digits;
     }
 
-    /**
-     * filter[rating_min] → 3|4|5, ngoài khoảng đó coi như không lọc.
-     *
-     * Chỉ nhận 3-5 chứ không nhận số bất kỳ: dưới 3 sao thì bộ lọc gần như
-     * không loại được gì (đa số sản phẩm >= 3), mà mỗi giá trị lạ lại là một
-     * biến thể URL mới — vừa loãng cache đếm (countSignature gồm cả filter)
-     * vừa mở đường cho crawler sinh vô hạn trang.
-     */
     private static function normalizeRating(mixed $value): ?int
     {
         if ($value === null || $value === '') {

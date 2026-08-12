@@ -19,7 +19,6 @@ Route::middleware(['maintenance', 'cache_page', 'limit_access'])->group(function
     Route::get('/khuyen-mai', 'ProductController@special')->name('product.special');
     Route::get('/bai-viet', 'BlogController@getList')->name('blog.getList');
     Route::get('/khach-hang-danh-gia', 'StoreReviewController@getList')->name('storeReview.getList');
-    Route::get('/thanh-phan', 'IngredientController@getList')->name('ingredient.getList');
     Route::get('/tags', 'TagController@getList')->name('tags.getList');
     Route::prefix('review')->group(function () {
         Route::post('/', 'ReviewController@saveReview')->name('review.saveReview');

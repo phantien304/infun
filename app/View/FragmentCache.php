@@ -5,11 +5,13 @@ namespace App\View;
 use App\Data\Output\CategoryDTO;
 use App\Data\Output\FilterDTO;
 use App\Data\Output\ManufacturerDTO;
+use App\Data\Output\WarehouseDTO;
 use App\Helpers\CacheGate;
 use App\Helpers\ThemeManager;
 use App\Repositories\Interfaces\CategoryRepositoryInterface;
 use App\Repositories\Interfaces\FilterRepositoryInterface;
 use App\Repositories\Interfaces\ManufacturerRepositoryInterface;
+use App\Repositories\Interfaces\WarehouseRepositoryInterface;
 use Illuminate\Container\Container;
 use Illuminate\Support\Facades\View;
 
@@ -93,10 +95,16 @@ class FragmentCache
         $filters = FilterDTO::collect(
             $container->make(FilterRepositoryInterface::class)->listAllCached()
         );
+        $warehouses = WarehouseDTO::collect(
+            $container->make(WarehouseRepositoryInterface::class)->listAllCached()
+                ->filter(fn ($w) => $w->is_active && $w->is_sellable)
+                ->values()
+        );
 
         return View::make('web::category.structure._side_bar_facets_static', [
             'manufacturers'    => $manufacturers,
             'filters'          => $filters,
+            'warehouses'       => $warehouses,
             'hideManufacturer' => $hideManufacturer,
         ])->render();
     }

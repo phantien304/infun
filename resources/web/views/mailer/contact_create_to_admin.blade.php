@@ -10,19 +10,19 @@
         {!! getConfigDb('config_name') !!} - Bạn nhận được liên hệ mới.
     </p>
     <p style="margin-top: 0px; margin-bottom: 20px;">
-        Họ và Tên: {{ array_get($data, 'name') }}
+        Họ và Tên: {{ data_get($data, 'name') }}
     </p>
     <p style="margin-top: 0px; margin-bottom: 20px;">
-        Email: {{ array_get($data, 'email') }}
+        Email: {{ data_get($data, 'email') }}
     </p>
     <p style="margin-top: 0px; margin-bottom: 20px;">
-        Phone: {{ array_get($data, 'phone') }}
+        Phone: {{ data_get($data, 'phone') }}
     </p>
     <p style="margin-top: 0px; margin-bottom: 20px;">
-        Dịch vụ: {{ array_get($data, 'service') }}
+        Dịch vụ: {{ data_get($data, 'service') }}
     </p>
     <p style="margin-top: 0px; margin-bottom: 20px;">
-        Nội dung: {{ array_get($data, 'content') }}
+        Nội dung: {{ data_get($data, 'content') }}
     </p>
 </div>
 </body>

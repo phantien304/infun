@@ -66,6 +66,30 @@
         </div>
     </div>
 
+    @if (count($warehouses ?? []) > 1)
+        <div class="list-group warehouse-filter">
+            <div class="list-group-item mb-10 mt-10">
+                <label class="font-black">Chi nhánh / Kho</label>
+                <div class="custome-radio space-y-1 mt-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="filter[warehouse_id]" id="warehouseAny"
+                            value="" checked>
+                        <label class="form-check-label" for="warehouseAny"><span>Tất cả kho</span></label>
+                    </div>
+                    @foreach ($warehouses as $item)
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="filter[warehouse_id]"
+                                id="warehouse{{ $item->id }}" value="{{ $item->id }}">
+                            <label class="form-check-label" for="warehouse{{ $item->id }}">
+                                <span>{{ $item->name }}</span>
+                            </label>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
+
     @if (count($manufacturers) && !$hideManufacturer)
         <div class="list-group manufacturer">
             <div class="list-group-item mb-10 mt-10">

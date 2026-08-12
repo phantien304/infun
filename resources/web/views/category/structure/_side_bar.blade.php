@@ -78,6 +78,13 @@
                     rb.checked = (rb.value === rating);
                 });
             }
+
+            var warehouse = p.get('filter[warehouse_id]');
+            if (warehouse !== null) {
+                document.querySelectorAll('input[name="filter[warehouse_id]"]').forEach(function(rb) {
+                    rb.checked = (rb.value === warehouse);
+                });
+            }
         }
         function openNode(li) {
             var ul = li.querySelector(':scope > .cat-tree-children');

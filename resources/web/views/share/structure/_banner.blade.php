@@ -1,19 +1,19 @@
 @section('banner')
-    @foreach($banners as $banner)
+    @foreach ($banners as $banner)
         <section class="home-slider relative mb-30">
             <div class="container mx-auto max-w-7xl px-4">
                 <div class="home-slide-cover mt-30">
                     <div class="hero-slider-1 style-4 dot-style-1 dot-style-1-position-1">
-                        @foreach($banner->bannerValues as $index => $item)
+                        @foreach ($banner->bannerValues as $index => $item)
                             <div class="single-hero-slider single-animation-wrap"
-                                 style="background-image: url({{ asset($item->image) }});">
+                                style="background-image: url({{ asset($item->image) }});">
                                 <div class="slider-content">
-                                    @if(isset($item->bannerValueDescription))
+                                    @if ($item->description)
                                         <h1 class="display-2 mb-40">
-                                            {!! $item->bannerValueDescription->title !!}
+                                            {!! $item->description?->title !!}
                                         </h1>
                                         <p class="mb-65">
-                                            {!! $item->bannerValueDescription->content !!}
+                                            {!! $item->description?->content !!}
                                         </p>
                                     @endif
                                     <form class="form-subcriber flex gap-2">

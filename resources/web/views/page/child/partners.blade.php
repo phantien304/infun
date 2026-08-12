@@ -1,4 +1,4 @@
-@if(count($partners))
+@if (count($partners))
     <div class="row wrap-partners">
         <div class="col-xl-12 mt-5">
             <div class="content-infunstudio-package">
@@ -16,13 +16,13 @@
             <div class="panel-body-product-package">
                 <div class="row main-blogs swiper-container">
                     <ul class="swiper-wrapper pb-1">
-                        @foreach($partners as $partner)
-                            @foreach($partner->bannerValues as $item)
-                                @php $title = isset($item->bannerValueDescription) ? $item->bannerValueDescription->title : '';@endphp
+                        @foreach ($partners as $partner)
+                            @foreach ($partner->bannerValues as $item)
+                                @php $title = $item?->description->title ?? '';@endphp
                                 <li class="swiper-slide col-xl-2 rounded">
-                                    @if(filled($item->link))
+                                    @if (filled($item->link))
                                         <a href="{!! $item->link !!}" target="_blank" rel="nofollow"
-                                           title="{!! $title !!}">
+                                            title="{!! $title !!}">
                                             <img src="{!! $item->image !!}" alt="{!! $title !!}">
                                         </a>
                                     @else

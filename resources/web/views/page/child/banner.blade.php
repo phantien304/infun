@@ -126,9 +126,9 @@
                         <div class="infun-hero-text-wrap">
                             <div class="infun-hero-text-container">
                                 <div class="infun-hero-text-inner">
-                                    @if (isset($item->valueDescription))
-                                        <h1>{!! $item->valueDescription->title !!}</h1>
-                                        <p>{!! $item->valueDescription->content !!}</p>
+                                    @if ($item?->description)
+                                        <h1>{!! $item->description?->title !!}</h1>
+                                        <p>{!! $item->description?->content !!}</p>
                                     @else
                                         <h1>{{ getConfigDb('config_name') ?: 'In&Fun Studio' }}</h1>
                                         <p>Gia công dấu khắc, in ấn và thiết kế bao bì theo yêu cầu.</p>

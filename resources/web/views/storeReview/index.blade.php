@@ -1,13 +1,4 @@
 @php
-    $urlStoreReviewCategory = $titleStoreReviewCategory = $urlStoreReview = $title = $descriptionStoreReview = $contentStoreReview =
-        '';
-    if (isset($entity->storeReviewCategory->storeReviewCategoryDescription)) {
-        $storeReviewCategoryDescription = $entity->storeReviewCategory->storeReviewCategoryDescription;
-        if ($storeReviewCategoryDescription) {
-            $urlStoreReviewCategory = $storeReviewCategoryDescription->getUrlClient();
-            $titleStoreReviewCategory = $storeReviewCategoryDescription->title;
-        }
-    }
     $title = $entity->title;
     $urlStoreReview = $entity->url;
     $fullName = $entity?->user->full_name ?? getConfigDb('config_name');
@@ -43,7 +34,7 @@
         {"@@context":"http://schema.org","@@type":"BreadcrumbList","itemListElement": {!! json_encode($breadcrumbSchema, JSON_UNESCAPED_UNICODE) !!}}
     </script>
     <script type="application/ld+json">
-        {"@@context":"http://schema.org","@@type":"NewsArticle","mainEntityOfPage":{"@@type":"WebPage","@@id":"{!! $urlStoreReview !!}"},"headline":"{!! $titleSeo !!}","description":"{!! $descriptionSeo !!}","image":{"@@type":"ImageObject","url":"{!! $entity->thumbnail(900, 540) !!}","width":900,"height":540},"datePublished":"{!! $entity->publishedDate !!}","dateModified":"{!! $entity->modifiedDate !!}","author":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}"},"publisher":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}","logo":{"@@type":"ImageObject","url":"{!! thumbnail(getConfigDb('config_logo')) !!}","width":180,"height":55 }},"about":"{!! $titleStoreReviewCategory !!}"}
+        {"@@context":"http://schema.org","@@type":"NewsArticle","mainEntityOfPage":{"@@type":"WebPage","@@id":"{!! $urlStoreReview !!}"},"headline":"{!! $titleSeo !!}","description":"{!! $descriptionSeo !!}","image":{"@@type":"ImageObject","url":"{!! $entity->thumbnail(900, 540) !!}","width":900,"height":540},"datePublished":"{!! $entity->publishedDate !!}","dateModified":"{!! $entity->modifiedDate !!}","author":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}"},"publisher":{"@@type":"Organization","name":"{!! getConfigDb('config_name') !!}","logo":{"@@type":"ImageObject","url":"{!! thumbnail(getConfigDb('config_logo')) !!}","width":180,"height":55 }}}
     </script>
     <script type="application/ld+json">
         {"@@context":"http://schema.org","@@type":"WebSite","name":"{!! getConfigDb('config_name') !!}","url":"{!! getConfigDb('config_domain') !!}"}
@@ -59,11 +50,6 @@
                         <div class="single-header style-2">
                             <div class="row">
                                 <div class="col-xl-10 col-lg-12 m-auto">
-                                    <h6 class="mb-10">
-                                        <a href="{!! $urlStoreReviewCategory !!}" title="{!! $titleStoreReviewCategory !!}">
-                                            {!! $titleStoreReviewCategory !!}
-                                        </a>
-                                    </h6>
                                     <h1 class="display-5 fw-600 mb-10">{!! $title !!}</h1>
                                     <div class="single-header-meta">
                                         <div class="entry-meta meta-1 font-xs mt-15 mb-15">

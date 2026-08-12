@@ -31,6 +31,7 @@ class WarehouseRepository extends QueryableRepository implements WarehouseReposi
     public function flushCache(): void
     {
         $this->forgetCache(setting('cache.warehouses'), perLocale: false);
+        \App\View\FragmentCache::forgetFacets();
     }
 
     // ===================== CMS (admin) =====================

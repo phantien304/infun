@@ -112,7 +112,10 @@
                                                                     @foreach ($product->ordersProductOptions as $opt)
                                                                         @php
                                                                             $child = [];
-                                                                            if ((int) $opt->variation === 1 && filled($opt->children)) {
+                                                                            if (
+                                                                                (int) $opt->variation === 1 &&
+                                                                                filled($opt->children)
+                                                                            ) {
                                                                                 try {
                                                                                     $unserialized = @unserialize((string) $opt->children, ['allowed_classes' => false]);
                                                                                     if (is_array($unserialized)) {
@@ -132,8 +135,11 @@
                                                                                 @endphp
                                                                                 @foreach ($child as $chd)
                                                                                     @php
-                                                                                        $optChildName = $chd['name'] ?? $optChildName;
-                                                                                        $optChildValue[] = $chd['value'] ?? '';
+                                                                                        $optChildName =
+                                                                                            $chd['name'] ??
+                                                                                            $optChildName;
+                                                                                        $optChildValue[] =
+                                                                                            $chd['value'] ?? '';
                                                                                     @endphp
                                                                                 @endforeach
                                                                                 - {!! $optChildName . ': ' . implode(', ', array_filter($optChildValue)) !!}
@@ -221,14 +227,14 @@
                                     <span class=""><b>Phương thức thanh toán</b></span>
                                 </div>
                                 @foreach ($payments as $payment)
-                                    @if (isset($payment->paymentDescription))
+                                    @if ($payment?->description)
                                         <div
                                             class="custom-control custome-radio mt-3 pt-3 border-top @if ($errors->has('payment_code')) is-invalid @endif">
                                             <input type="radio" name="payment_code" value="{{ $payment->code }}"
                                                 id="input{{ $payment->code }}" class="form-check-input"
                                                 @if ($paymentCode == $payment->code) checked @endif>
                                             <label class="form-check-label" for="input{{ $payment->code }}">
-                                                {{ $payment->paymentDescription->name }}
+                                                {{ $payment->description?->name }}
                                             </label>
                                         </div>
                                     @endif

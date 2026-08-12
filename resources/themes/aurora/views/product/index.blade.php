@@ -2,6 +2,7 @@
     $special = $entity->productVariantSpecial;
     $priceFinal = $defaultVariant['price'] ?? ($special?->pricePromotion ?: $entity->price);
     $basePriceForDiscount = (float) $entity->price;
+    $currentCurrency = app(\App\Services\Currency\CurrencyService::class)->currentCurrency();
 @endphp
 @section('script_header')
     <script type="text/javascript">
@@ -13,6 +14,18 @@
         var urlUserWishlist = '{{ route('account.userWishlist') }}';
         var priceProduct = {{ $priceFinal }};
         var productBasePrice = {{ $basePriceForDiscount }};
+        // Giá biến thể (priceProduct) luôn là số ở đơn vị tiền tệ gốc (base_code) —
+        // style.js#formatPriceLabel() cần quy đổi + format theo tiền tệ khách đang chọn
+        // thay vì hardcode "đ", nếu không giá trên trang chi tiết sẽ không đổi theo
+        // currency switcher dù trang danh sách đã đổi đúng (server-render qua money()).
+        var currentCurrency = {
+            value: {{ (float) ($currentCurrency->value ?: 1) }},
+            decimalPlace: {{ (int) ($currentCurrency->decimal_place ?? 0) }},
+            decimalSeparator: {!! json_encode((string) getCoreConfig('currency.decimal_separator', '.')) !!},
+            thousandSeparator: {!! json_encode((string) getCoreConfig('currency.thousand_separator', ',')) !!},
+            symbolLeft: {!! json_encode(trim((string) ($currentCurrency->symbol_left ?? ''))) !!},
+            symbolRight: {!! json_encode(trim((string) ($currentCurrency->symbol_right ?? ''))) !!}
+        };
     </script>
 @stop
 @extends('web::layouts.main')

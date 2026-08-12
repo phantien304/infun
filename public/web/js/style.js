@@ -506,7 +506,13 @@ $(document).ready(function () {
 
         function formatPriceLabel(price) {
             if (!price || price <= 0) return 'Liên hệ';
-            return number_format(price) + 'đ';
+            var cur = (typeof currentCurrency === 'object' && currentCurrency) ? currentCurrency : null;
+            if (!cur) return number_format(price) + 'đ';
+            var amount = price * (cur.value || 1);
+            var left = cur.symbolLeft || '';
+            var right = cur.symbolRight || '';
+            if (left && left === right) left = '';
+            return left + number_format(amount, cur.decimalPlace, cur.decimalSeparator, cur.thousandSeparator) + right;
         }
 
         function customFieldSurcharge() {

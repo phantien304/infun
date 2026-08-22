@@ -11,7 +11,13 @@ class Ingredient extends Base
     protected $table = 'ingredient';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
-    protected static $destroyRelations = ['ingredientEffects', 'ingredientSafeties', 'ingredientSkincares', 'productIngredients'];
+    protected static array $destroyRelations = ['ingredientEffects', 'ingredientSafeties', 'ingredientSkincares', 'productIngredients'];
+    protected $fillable = [
+        'name',
+        'description',
+        'warning',
+        'warning_text',
+    ];
 
     public function ingredientEffects()
     {

@@ -36,14 +36,6 @@ class MenuRepository extends QueryableRepository implements MenuRepositoryInterf
             ->get();
     }
 
-    /**
-     * KHÔNG dùng forgetSystem() ở đây — key thật (xem MenusClient::getMenus/
-     * getMenuTree) là `{base}{locale}_{theme|'default'}`, có thêm chiều
-     * "theme" mà forgetSystem() (chỉ lặp qua locale) không biết enumerate.
-     * Tự lặp locale × (theme hiện có + 'default') để khớp CHÍNH XÁC key đã
-     * build lúc set — quên sai key thì cache menu admin vừa sửa vẫn đứng
-     * yên tới hết TTL.
-     */
     public function flushCache(): void
     {
         $store    = \App\Helpers\CacheGate::systemStore();
@@ -65,7 +57,7 @@ class MenuRepository extends QueryableRepository implements MenuRepositoryInterf
     {
         $sort    = $request->input('sort') === 'title' ? 'title' : 'id';
         $order   = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
-        $deleted = (int) $request->input('deleted_at', -1); // -1 tất cả, 1 hiển thị, 0 đã xoá
+        $deleted = (int) $request->input('deleted_at', -1);
         $keyword = trim((string) $request->input('keyword', ''));
         $perPage = max(1, (int) $request->input('per_page', 50));
 
@@ -89,10 +81,6 @@ class MenuRepository extends QueryableRepository implements MenuRepositoryInterf
         return $this->resetModel()->withTrashed()->find($id);
     }
 
-    /**
-     * Menu KHÔNG có bảng dịch (`menu` chỉ 1 bản ghi/menu, không đa ngôn
-     * ngữ) — khác Category/Blog, không có vòng lặp sync *_descriptions.
-     */
     public function saveFromCms(?Menu $menu, array $data): Menu
     {
         return DB::transaction(function () use ($menu, $data) {

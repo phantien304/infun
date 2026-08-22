@@ -10,4 +10,9 @@ class FilterDescription extends Base
     protected $primaryKey = ['filter_id', 'language_code'];
     public $incrementing = false;
     public $timestamps = true;
+    protected $fillable = [
+        'filter_id',
+        'language_code',
+        'name',
+    ];
 }

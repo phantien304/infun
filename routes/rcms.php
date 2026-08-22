@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Cms\BannerController;
 use App\Http\Controllers\Api\Cms\BlogCategoryController;
 use App\Http\Controllers\Api\Cms\BlogController;
 use App\Http\Controllers\Api\Cms\CarrierController;
+use App\Http\Controllers\Api\Cms\Catalog\FilterController;
 use App\Http\Controllers\Api\Cms\CategoryController;
 use App\Http\Controllers\Api\Cms\CustomerController;
 use App\Http\Controllers\Api\Cms\DistrictController;
@@ -39,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('file/upload-video', [FileController::class, 'uploadVideo']);
     Route::middleware('cms.permission')->group(function () {
         Route::cmsApiResource('category', CategoryController::class);
+        Route::cmsApiResource('filter', FilterController::class);
         Route::cmsApiResource('banner', BannerController::class);
         Route::cmsApiResource('store-review', StoreReviewController::class);
         Route::post('product/bulk-update', [ProductController::class, 'bulkUpdate']);

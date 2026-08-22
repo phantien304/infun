@@ -12,6 +12,9 @@ class Filter extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['filterValues'];
+    protected $fillable = [
+        'sort_order',
+    ];
 
     public function filterValues()
     {

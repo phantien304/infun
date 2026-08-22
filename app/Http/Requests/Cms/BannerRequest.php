@@ -27,6 +27,7 @@ class BannerRequest extends FormRequest
             'banner_descriptions.*.language_code' => 'required|string|max:11',
 
             'banner_values'                              => 'array',
+            'banner_values.*.id'                          => 'nullable|integer',
             'banner_values.*.link'                        => 'nullable|string|max:255',
             'banner_values.*.sort_order'                   => 'nullable|numeric',
             'banner_values.*.media_type'                   => 'nullable|in:image,video',

@@ -10,6 +10,10 @@ class FilterValue extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['productFilters'];
+    protected $fillable = [
+        'filter_id',
+        'sort_order',
+    ];
 
     public function descriptions()
     {

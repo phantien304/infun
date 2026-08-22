@@ -7,10 +7,6 @@
 */
 
 return [
-
-    // rcms/* = API CMS admin; api/v1/* = API app khách hàng; vcms/* = upload web.
-    // App mobile NATIVE không cần CORS (chỉ trình duyệt mới áp dụng) — để api/v1/*
-    // ở đây là cho trường hợp sau này có web/PWA khách hàng gọi API.
     'paths' => ['rcms/*', 'api/v1/*', 'vcms/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],

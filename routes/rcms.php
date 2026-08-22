@@ -122,7 +122,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('menu/{menuId}/values/categories', [MenuValueController::class, 'deleteCategories']);
         Route::cmsApiResource('information', InformationController::class);
         Route::post('order/preview-total', [OrderController::class, 'previewTotal']);
-        Route::get('order-status', [OrderStatusController::class, 'index']);
+        Route::cmsApiResource('order-status', OrderStatusController::class);
         Route::get('carrier', [CarrierController::class, 'index']);
         Route::get('payment', [PaymentController::class, 'index']);
         Route::get('zone', [ZoneController::class, 'index']);

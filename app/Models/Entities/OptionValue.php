@@ -12,6 +12,11 @@ class OptionValue extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['productOptionValues'];
+    protected $fillable = [
+        'option_id',
+        'image',
+        'sort_order',
+    ];
 
     public function descriptions()
     {

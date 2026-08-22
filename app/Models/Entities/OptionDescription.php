@@ -10,4 +10,10 @@ class OptionDescription extends Base
     protected $primaryKey = ['option_id', 'language_code'];
     public $incrementing = false;
     public $timestamps = true;
+    protected $fillable = [
+        'option_id',
+        'language_code',
+        'name',
+        'name_display',
+    ];
 }

@@ -15,6 +15,11 @@ class Option extends Base
     public $timestamps = true;
     protected $casts = ['role' => OptionRole::class];
     protected static array $destroyRelations = ['optionValues', 'productOptions'];
+    protected $fillable = [
+        'type',
+        'role',
+        'sort_order',
+    ];
 
     public function isVariant(): bool
     {

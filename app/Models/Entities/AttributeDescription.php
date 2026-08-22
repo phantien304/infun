@@ -10,4 +10,9 @@ class AttributeDescription extends Base
     public $incrementing = false;
     public $timestamps = true;
     public $primaryKey = ['attribute_id', 'language_code'];
+    protected $fillable = [
+        'attribute_id',
+        'language_code',
+        'name',
+    ];
 }

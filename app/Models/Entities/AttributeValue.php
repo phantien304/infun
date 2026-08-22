@@ -10,6 +10,10 @@ class AttributeValue extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['productAttributes'];
+    protected $fillable = [
+        'attribute_id',
+        'sort_order',
+    ];
 
     public function descriptions()
     {

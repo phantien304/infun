@@ -12,6 +12,9 @@ class Attribute extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['attributeValues'];
+    protected $fillable = [
+        'sort_order',
+    ];
 
     public function attributeValues()
     {

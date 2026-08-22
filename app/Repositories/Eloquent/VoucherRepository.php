@@ -7,6 +7,8 @@ use App\Models\Entities\Voucher;
 use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\VoucherRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -193,5 +195,123 @@ class VoucherRepository extends QueryableRepository implements VoucherRepository
             'amount'           => $remaining,
             'created_at'       => $voucher->created_at,
         ];
+    }
+
+    // ===================== CMS (admin) =====================
+
+    /**
+     * Danh sách voucher cho CMS. Lọc thêm theo `status` (1 active / 2 expired
+     * / 3 fully_used / 4 revoked) và `to_email` — 2 câu hỏi hay gặp nhất khi
+     * CSKH tra thẻ quà tặng của một khách.
+     */
+    public function listForCms(Request $request): LengthAwarePaginator
+    {
+        $sortable = ['id', 'code', 'amount', 'status', 'date_expire', 'created_at'];
+        $sort     = in_array($request->input('sort'), $sortable, true) ? $request->input('sort') : 'id';
+        $order    = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $deleted  = (int) $request->input('deleted_at', -1);
+        $keyword  = trim((string) $request->input('keyword', ''));
+        $perPage  = max(1, (int) $request->input('per_page', 50));
+
+        $query = $this->resetModel()->newQuery()->with(['voucherTheme.voucherThemeDescriptions']);
+
+        if ($deleted === 0) {
+            $query->onlyTrashed();
+        } elseif ($deleted === -1) {
+            $query->withTrashed();
+        }
+
+        if ($keyword !== '') {
+            $query->where(function ($q) use ($keyword) {
+                $q->where('code', 'like', '%' . $keyword . '%')
+                    ->orWhere('to_email', 'like', '%' . $keyword . '%')
+                    ->orWhere('to_name', 'like', '%' . $keyword . '%')
+                    ->orWhere('from_email', 'like', '%' . $keyword . '%');
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', (int) $request->input('status'));
+        }
+
+        if ($request->filled('to_email')) {
+            $query->where('to_email', trim((string) $request->input('to_email')));
+        }
+
+        return $query->orderBy($sort, $order)->orderBy('id', 'desc')->paginate($perPage);
+    }
+
+    public function getForCms(int $id): ?Voucher
+    {
+        return $this->resetModel()
+            ->withTrashed()
+            ->with([
+                'voucherTheme.voucherThemeDescriptions',
+                'voucherHistories' => fn ($q) => $q->orderByDesc('id')->limit(200),
+            ])
+            ->find($id);
+    }
+
+    /**
+     * `redeemed_balance` và `sent_at` KHÔNG lấy từ $data: một cái là sổ tiền
+     * đã tiêu (incrementRedeemed/decrementRedeemed ghi theo giao dịch), một
+     * cái do job gửi mail đóng dấu. Sửa tay ở CMS = số dư sai với
+     * voucher_history.
+     */
+    public function saveFromCms(?Voucher $voucher, array $data): Voucher
+    {
+        unset($data['redeemed_balance'], $data['sent_at']);
+
+        $voucher ??= new Voucher();
+        $voucher->fill($data);
+        $voucher->save();
+        $this->flushCache();
+
+        return $voucher->load(['voucherTheme.voucherThemeDescriptions']);
+    }
+
+    /**
+     * Xoá dấu đã gửi để GỬI LẠI mail voucher.
+     *
+     * VoucherRewardSendEmailJob tự "claim" bằng
+     * `whereNull('sent_at')->update(...)` — chống gửi trùng khi job retry.
+     * Nên muốn CMS gửi lại thật thì phải trả `sent_at` về NULL trước, chứ
+     * không phải dispatch thêm một lần nữa (job sẽ lặng lẽ return).
+     */
+    public function clearSent(array $voucherIds): int
+    {
+        if (empty($voucherIds)) {
+            return 0;
+        }
+
+        return DB::table('voucher')
+            ->whereIn('id', $voucherIds)
+            ->whereNull('deleted_at')
+            ->update(['sent_at' => null]);
+    }
+
+    public function deleteByIds(array $ids): int
+    {
+        $affected = $this->resetModel()->whereIn('id', $ids)->delete();
+        $this->flushCache();
+
+        return $affected;
+    }
+
+    public function restoreByIds(array $ids): int
+    {
+        $affected = $this->resetModel()->withTrashed()->whereIn('id', $ids)->restore();
+        $this->flushCache();
+
+        return $affected;
+    }
+
+    public function restoreById(int $id): ?Voucher
+    {
+        $voucher = $this->resetModel()->withTrashed()->find($id);
+        $voucher?->restore();
+        $this->flushCache();
+
+        return $voucher?->load(['voucherTheme.voucherThemeDescriptions']);
     }
 }

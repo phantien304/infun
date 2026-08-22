@@ -38,6 +38,12 @@ enum CmsPermissionEntity: string
     case Role = 'role';
     case UserGroup = 'user-group';
     case Customer = 'customer';
+    // Marketing (2026-08) — convert từ mt219 + 2 màn mới của infun.
+    case Coupon = 'coupon';
+    case Voucher = 'voucher';
+    case VoucherTheme = 'voucher-theme';
+    case Gift = 'gift';
+    case VoucherRewardRule = 'voucher-reward-rule';
 
     public const ACTIONS = ['list', 'detail', 'create', 'edit', 'del'];
 

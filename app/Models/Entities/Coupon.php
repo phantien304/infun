@@ -50,6 +50,37 @@ class Coupon extends Base
         return $this->hasMany(CouponCategory::class, 'coupon_id', 'id');
     }
 
+    /**
+     * Sản phẩm được áp mã (apply_scope = 1).
+     *
+     * couponProducts() chỉ trả DÒNG PIVOT (coupon_id, product_id) — muốn tên
+     * SP thì phải join tay như CouponController của mt219 vẫn làm. Quan hệ
+     * many-to-many này để CMS eager load thẳng `products.description`, không
+     * phải nhặt id rồi query vòng hai.
+     */
+    public function products(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Product::class,
+            'coupon_product',
+            'coupon_id',
+            'product_id',
+        );
+    }
+
+    /**
+     * Danh mục được áp mã (apply_scope = 2). Đối xứng products().
+     */
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Category::class,
+            'coupon_category',
+            'coupon_id',
+            'category_id',
+        );
+    }
+
     public function couponHistories(): HasMany
     {
         return $this->hasMany(CouponHistory::class, 'coupon_id', 'id');

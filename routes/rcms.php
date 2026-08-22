@@ -19,6 +19,11 @@ use App\Http\Controllers\Api\Cms\CustomerController;
 use App\Http\Controllers\Api\Cms\DistrictController;
 use App\Http\Controllers\Api\Cms\FileController;
 use App\Http\Controllers\Api\Cms\InformationController;
+use App\Http\Controllers\Api\Cms\Marketing\CouponController;
+use App\Http\Controllers\Api\Cms\Marketing\GiftController;
+use App\Http\Controllers\Api\Cms\Marketing\VoucherController;
+use App\Http\Controllers\Api\Cms\Marketing\VoucherRewardRuleController;
+use App\Http\Controllers\Api\Cms\Marketing\VoucherThemeController;
 use App\Http\Controllers\Api\Cms\MenuController;
 use App\Http\Controllers\Api\Cms\MenuValueController;
 use App\Http\Controllers\Api\Cms\Order\OrderController;
@@ -65,6 +70,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('contact/{id}/restore', [ContactController::class, 'restore']);
         Route::post('contact/bulk', [ContactController::class, 'bulk']);
         Route::cmsApiResource('banner', BannerController::class);
+
+        // --- Marketing: coupon / voucher / quà tặng / thưởng voucher ---
+        // `voucher/send` khai TRƯỚC apiResource cho dễ đọc (không xung đột
+        // path, nhưng để sau thì trông như nằm ngoài nhóm). Quyền đã do
+        // middleware 'cms.permission' của group này gác — CmsPermission::MAP
+        // ánh xạ action 'send' → 'edit-voucher'.
+        Route::post('voucher/send', [VoucherController::class, 'send']);
+        Route::cmsApiResource('coupon', CouponController::class);
+        Route::cmsApiResource('voucher', VoucherController::class);
+        Route::cmsApiResource('voucher-theme', VoucherThemeController::class);
+        Route::cmsApiResource('gift', GiftController::class);
+        Route::cmsApiResource('voucher-reward-rule', VoucherRewardRuleController::class);
         Route::cmsApiResource('store-review', StoreReviewController::class);
         Route::cmsApiResource('review-criteria', ReviewCriteriaController::class);
         Route::cmsApiResource('review-tag', ReviewTagController::class);

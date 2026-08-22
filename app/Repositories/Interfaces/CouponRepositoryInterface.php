@@ -4,6 +4,8 @@ namespace App\Repositories\Interfaces;
 
 use App\Models\Entities\Coupon;
 use App\Repositories\Base\BaseRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 interface CouponRepositoryInterface extends BaseRepositoryInterface
@@ -25,4 +27,17 @@ interface CouponRepositoryInterface extends BaseRepositoryInterface
     public function decrementUsedCount(int $couponId, int $by): void;
 
     public function flushCache(): void;
+
+    // ----- CMS (admin) -----
+    public function listForCms(Request $request): LengthAwarePaginator;
+
+    public function getForCms(int $id): ?Coupon;
+
+    public function saveFromCms(?Coupon $coupon, array $data): Coupon;
+
+    public function deleteByIds(array $ids): int;
+
+    public function restoreByIds(array $ids): int;
+
+    public function restoreById(int $id): ?Coupon;
 }

@@ -24,6 +24,9 @@ class CmsPermission
         'permissionsRegistry' => 'list',
         'reply'            => 'edit',
         'resolveReport'    => 'edit',
+        // Gửi/gửi lại mail voucher — coi như sửa dữ liệu voucher
+        // (job đóng dấu `sent_at`), không phải hành động chỉ-đọc.
+        'send'             => 'edit',
     ];
 
     public function handle(Request $request, Closure $next)

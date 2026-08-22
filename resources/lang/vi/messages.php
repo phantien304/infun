@@ -78,6 +78,13 @@ return [
     'TextOrderId' => 'Mã đơn hàng ID',
     'TextSubTotal' => 'Tạm tính',
     'TextFeeShipping' => 'Phí vận chuyển',
+    'cms' => [
+        'gift' => [
+            // gift_item bị order_gift tham chiếu (FK RESTRICT) — audit trail
+            // đơn đã nhận quà, không cho xoá cứng.
+            'item_in_use' => 'Không xoá được món quà đã có đơn hàng nhận. Hãy tắt chương trình thay vì xoá món quà này.',
+        ],
+    ],
     'checkout' => [
         'gift_count'       => '%s quà',
         'gift_card'        => 'Thẻ quà tặng %s',

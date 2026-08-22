@@ -8,6 +8,8 @@ use App\Repositories\Base\QueryableRepository;
 use App\Repositories\Concerns\CacheableRepository;
 use App\Repositories\Interfaces\CouponRepositoryInterface;
 use Carbon\Carbon;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -183,5 +185,120 @@ class CouponRepository extends QueryableRepository implements CouponRepositoryIn
         return ProductCategory::where('product_id', $productId)
             ->whereIn('category_id', $categoryIds)
             ->exists();
+    }
+
+    // ===================== CMS (admin) =====================
+
+    /**
+     * Danh sách coupon cho CMS. `deleted_at`: 1 = chưa xoá, 0 = chỉ thùng
+     * rác, -1 = tất cả (đồng bộ với FormSearch của infuncms).
+     */
+    public function listForCms(Request $request): LengthAwarePaginator
+    {
+        $sortable = ['id', 'name', 'code', 'discount', 'date_start', 'date_end', 'sort_order'];
+        $sort     = in_array($request->input('sort'), $sortable, true) ? $request->input('sort') : 'id';
+        $order    = strtolower((string) $request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $deleted  = (int) $request->input('deleted_at', -1);
+        $keyword  = trim((string) $request->input('keyword', ''));
+        $perPage  = max(1, (int) $request->input('per_page', 50));
+
+        $query = $this->resetModel()->newQuery();
+
+        if ($deleted === 0) {
+            $query->onlyTrashed();
+        } elseif ($deleted === -1) {
+            $query->withTrashed();
+        }
+
+        if ($keyword !== '') {
+            $query->where(function ($q) use ($keyword) {
+                $q->where('name', 'like', '%' . $keyword . '%')
+                    ->orWhere('code', 'like', '%' . $keyword . '%');
+            });
+        }
+
+        if ($request->filled('type')) {
+            $query->where('type', (int) $request->input('type'));
+        }
+
+        if ($request->filled('is_active')) {
+            $query->where('is_active', (int) $request->input('is_active'));
+        }
+
+        return $query->orderBy($sort, $order)->orderBy('id', 'desc')->paginate($perPage);
+    }
+
+    public function getForCms(int $id): ?Coupon
+    {
+        return $this->resetModel()
+            ->withTrashed()
+            ->with([
+                'products.description',
+                'categories.description',
+                'couponHistories' => fn ($q) => $q->with('user')->orderByDesc('id')->limit(200),
+            ])
+            ->find($id);
+    }
+
+    /**
+     * `used_count` KHÔNG lấy từ $data — cột denormalize quota do
+     * incrementUsedCount()/decrementUsedCount() ghi khi đơn dùng mã. Cho CMS
+     * sửa tay là mở đường cho quota lệch với coupon_history.
+     *
+     * Pivot ghi theo apply_scope: chọn "toàn shop" thì dọn sạch cả 2 bảng
+     * pivot, tránh để rác làm scope cũ sống lại nếu sau này đổi lại scope.
+     */
+    public function saveFromCms(?Coupon $coupon, array $data): Coupon
+    {
+        return DB::transaction(function () use ($coupon, $data) {
+            $productIds  = collect($data['coupon_products'] ?? [])->pluck('id')->map('intval')->unique()->values()->all();
+            $categoryIds = collect($data['coupon_categories'] ?? [])->pluck('id')->map('intval')->unique()->values()->all();
+
+            unset($data['coupon_products'], $data['coupon_categories'], $data['used_count']);
+
+            // Cột legacy `total` (đơn tối thiểu kiểu OpenCart) vẫn được
+            // resolveCoupon() cũ đọc. Giữ nó bám theo `min_subtotal` để hai
+            // đường tính không nói hai chuyện khác nhau — CMS chỉ nhập một ô.
+            if (! array_key_exists('total', $data) || $data['total'] === null) {
+                $data['total'] = $data['min_subtotal'] ?? 0;
+            }
+
+            $coupon ??= new Coupon();
+            $coupon->fill($data);
+            $coupon->save();
+
+            $scope = (int) ($data['apply_scope'] ?? 0);
+            $coupon->products()->sync($scope === 1 ? $productIds : []);
+            $coupon->categories()->sync($scope === 2 ? $categoryIds : []);
+
+            $this->flushCache();
+
+            return $coupon->load(['products.description', 'categories.description']);
+        });
+    }
+
+    public function deleteByIds(array $ids): int
+    {
+        $affected = $this->resetModel()->whereIn('id', $ids)->delete();
+        $this->flushCache();
+
+        return $affected;
+    }
+
+    public function restoreByIds(array $ids): int
+    {
+        $affected = $this->resetModel()->withTrashed()->whereIn('id', $ids)->restore();
+        $this->flushCache();
+
+        return $affected;
+    }
+
+    public function restoreById(int $id): ?Coupon
+    {
+        $coupon = $this->resetModel()->withTrashed()->find($id);
+        $coupon?->restore();
+        $this->flushCache();
+
+        return $coupon?->load(['products.description', 'categories.description']);
     }
 }

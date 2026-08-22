@@ -66,7 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('menu/{menuId}/values/reorder', [MenuValueController::class, 'reorder']);
         Route::post('menu/{menuId}/values/import-category', [MenuValueController::class, 'importCategory']);
         Route::delete('menu/{menuId}/values/categories', [MenuValueController::class, 'deleteCategories']);
-        Route::get('information', [InformationController::class, 'index']);
+        Route::cmsApiResource('information', InformationController::class);
         Route::post('order/preview-total', [OrderController::class, 'previewTotal']);
         Route::get('order-status', [OrderStatusController::class, 'index']);
         Route::get('carrier', [CarrierController::class, 'index']);

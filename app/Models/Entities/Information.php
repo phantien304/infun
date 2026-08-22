@@ -11,6 +11,10 @@ class Information extends Base
     protected $table = 'information';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'banner_id',
+        'sort_order',
+    ];
 
     public function descriptions()
     {

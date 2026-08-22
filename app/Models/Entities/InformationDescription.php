@@ -10,4 +10,13 @@ class InformationDescription extends Base
     public $incrementing = false;
     public $timestamps = true;
     public $primaryKey = ['information_id', 'language_code'];
+    protected $fillable = [
+        'information_id',
+        'language_code',
+        'title',
+        'description',
+        'content',
+        'meta_title',
+        'meta_description',
+    ];
 }

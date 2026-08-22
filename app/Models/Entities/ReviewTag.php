@@ -14,6 +14,12 @@ class ReviewTag extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
+    protected $fillable = [
+        'code',
+        'usage_count',
+        'is_auto_generated',
+        'is_active',
+    ];
 
     protected $casts = [
         'usage_count'       => 'integer',

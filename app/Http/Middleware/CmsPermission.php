@@ -22,6 +22,8 @@ class CmsPermission
         'previewTotal'     => 'detail',
         'adminList'        => 'list',
         'permissionsRegistry' => 'list',
+        'reply'            => 'edit',
+        'resolveReport'    => 'edit',
     ];
 
     public function handle(Request $request, Closure $next)

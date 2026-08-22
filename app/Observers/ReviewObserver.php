@@ -46,18 +46,42 @@ class ReviewObserver
         }
     }
 
+    /**
+     * Đối xứng với deleted() — thiếu hook này thì khôi phục 1 review đã
+     * Approved (tính năng mới ở CMS, trước đây Review không có đường xoá
+     * nên restored() chưa từng cần) sẽ để rating trung bình sản phẩm bị
+     * thiếu vĩnh viễn (đã trừ lúc xoá, không cộng lại lúc khôi phục).
+     */
+    public function restored(Review $review): void
+    {
+        if ($review->status === ReviewStatus::Approved->value) {
+            $this->applyDelta($review->product_id, $review->rating, +1);
+            $this->invalidate($review->product_id);
+        }
+    }
+
+    /**
+     * QUAN TRỌNG: MySQL đánh giá các mệnh đề SET trong 1 câu UPDATE theo thứ
+     * tự trái→phải, mệnh đề sau đọc được giá trị CỘT ĐÃ ĐƯỢC CẬP NHẬT bởi
+     * mệnh đề trước (không phải giá trị gốc trước UPDATE) — đã verify bằng
+     * `UPDATE t SET a = a+1, b = a*2` cho b = (a+1)*2 chứ không phải a*2.
+     * Vì vậy rating_avg KHÔNG được cộng lại `sign`/`rating` một lần nữa —
+     * lúc mệnh đề rating_avg chạy thì review_count/rating_sum phía trên đã
+     * là giá trị MỚI (đã cộng đúng 1 lần), cộng thêm lần nữa sẽ tính sai
+     * gấp đôi (bug thật đã phát hiện lúc xoá review kiểm thử: review_count
+     * 12→11, rating_sum 50→45 đúng, nhưng rating_avg ra 4.00 thay vì 4.09).
+     */
     protected function applyDelta(int $productId, int $rating, int $sign): void
     {
         $rating = max(1, min(5, $rating));
-        $col = "s{$rating}";
 
         DB::statement('
             UPDATE product
             SET review_count  = GREATEST(0, review_count + ?),
                 rating_sum    = GREATEST(0, rating_sum + ? * ?),
                 rating_avg    = CASE
-                    WHEN GREATEST(0, review_count + ?) = 0 THEN 0
-                    ELSE GREATEST(0, rating_sum + ? * ?) / GREATEST(1, review_count + ?)
+                    WHEN review_count = 0 THEN 0
+                    ELSE rating_sum / review_count
                 END,
                 rating_distribution = COALESCE(
                     JSON_SET(
@@ -76,9 +100,6 @@ class ReviewObserver
         ', [
             $sign,                // review_count
             $sign, $rating,       // rating_sum (sign * rating)
-            $sign,                // review_count (CASE check)
-            $sign, $rating,       // rating_sum (CASE)
-            $sign,                // review_count (CASE)
             '$."' . $rating . '"', // JSON_SET path
             '$."' . $rating . '"', // JSON_EXTRACT path
             $sign,                // distribution delta

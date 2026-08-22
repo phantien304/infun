@@ -10,6 +10,11 @@ class ReviewTagDescription extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
+    protected $fillable = [
+        'review_tag_id',
+        'language_code',
+        'name',
+    ];
 
     public function tag()
     {

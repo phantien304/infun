@@ -15,6 +15,13 @@ class ReviewCriteria extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
+    protected $fillable = [
+        'code',
+        'icon',
+        'sort_order',
+        'is_required',
+        'is_active',
+    ];
 
     protected $casts = [
         'is_required' => 'boolean',

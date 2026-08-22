@@ -18,4 +18,22 @@ class ReviewRatingRepository extends QueryableRepository implements ReviewRating
     {
         DB::table('review_rating')->insert($rows);
     }
+
+    public function upsertForReview(int $reviewId, array $ratings): void
+    {
+        if (empty($ratings)) {
+            return;
+        }
+
+        $now  = now();
+        $rows = array_map(fn ($r) => [
+            'review_id'          => $reviewId,
+            'review_criteria_id' => (int) $r['review_criteria_id'],
+            'rating'             => max(1, min(5, (int) $r['rating'])),
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ], $ratings);
+
+        DB::table('review_rating')->upsert($rows, ['review_id', 'review_criteria_id'], ['rating', 'updated_at']);
+    }
 }

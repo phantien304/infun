@@ -10,6 +10,12 @@ class ReviewCriteriaDescription extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
+    protected $fillable = [
+        'review_criteria_id',
+        'language_code',
+        'name',
+        'hint',
+    ];
 
     public function criteria()
     {

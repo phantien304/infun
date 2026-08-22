@@ -26,6 +26,9 @@ use App\Http\Controllers\Api\Cms\OrderStatusController;
 use App\Http\Controllers\Api\Cms\PaymentController;
 use App\Http\Controllers\Api\Cms\ProductController;
 use App\Http\Controllers\Api\Cms\ResourceController;
+use App\Http\Controllers\Api\Cms\Review\ReviewController;
+use App\Http\Controllers\Api\Cms\Review\ReviewCriteriaController;
+use App\Http\Controllers\Api\Cms\Review\ReviewTagController;
 use App\Http\Controllers\Api\Cms\SettingController;
 use App\Http\Controllers\Api\Cms\StoreReviewController;
 use App\Http\Controllers\Api\Cms\System\RoleController;
@@ -63,6 +66,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('contact/bulk', [ContactController::class, 'bulk']);
         Route::cmsApiResource('banner', BannerController::class);
         Route::cmsApiResource('store-review', StoreReviewController::class);
+        Route::cmsApiResource('review-criteria', ReviewCriteriaController::class);
+        Route::cmsApiResource('review-tag', ReviewTagController::class);
+        // Review: khách gửi thì không sửa nội dung (chỉ đổi status) — nhưng
+        // admin ĐƯỢC tạo review "mồi" (seed) cho sản phẩm mới qua store().
+        Route::get('review', [ReviewController::class, 'index']);
+        Route::post('review', [ReviewController::class, 'store']);
+        Route::get('review/{id}', [ReviewController::class, 'show']);
+        Route::put('review/{review}', [ReviewController::class, 'update']);
+        Route::patch('review/{review}', [ReviewController::class, 'update']);
+        Route::delete('review/{review}', [ReviewController::class, 'destroy']);
+        Route::patch('review/{id}/restore', [ReviewController::class, 'restore']);
+        Route::post('review/bulk', [ReviewController::class, 'bulk']);
+        Route::post('review/{review}/reply', [ReviewController::class, 'reply']);
+        Route::patch('review/{id}/report/{reportId}/resolve', [ReviewController::class, 'resolveReport']);
         Route::post('product/bulk-update', [ProductController::class, 'bulkUpdate']);
         Route::post('product/{id}/approve', [ProductController::class, 'approve']);
         Route::cmsApiResource('product', ProductController::class);

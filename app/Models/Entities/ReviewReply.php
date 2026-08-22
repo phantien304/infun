@@ -17,6 +17,14 @@ class ReviewReply extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $incrementing = true;
     public $timestamps = true;
+    protected $fillable = [
+        'review_id',
+        'parent_reply_id',
+        'user_id',
+        'author_type',
+        'text',
+        'is_publish',
+    ];
 
     protected $casts = [
         'is_publish'  => 'boolean',

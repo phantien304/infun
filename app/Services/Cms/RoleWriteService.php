@@ -30,7 +30,18 @@ class RoleWriteService
             throw new RoleProtectedException();
         }
 
-        $safePermissionIds = $this->filterToOwnPermissions($currentUser, $permissionIds);
+        /**
+         * Super Admin KHÔNG filter theo getAllPermissions() — bypass của Super
+         * Admin nằm ở Gate::before() (AppServiceProvider::registerSuperAdminBypass),
+         * KHÔNG gán permission thật vào pivot, nên getAllPermissions() của Super
+         * Admin luôn rỗng. Nếu áp filterToOwnPermissions() cho cả Super Admin,
+         * array_intersect() với danh sách rỗng luôn ra [], khiến Super Admin
+         * không thể gán BẤT KỲ permission nào cho role khác (bug đã phát hiện:
+         * "không thể thêm permission cho role admin").
+         */
+        $safePermissionIds = $isSuperAdmin
+            ? array_values(array_unique(array_map('intval', $permissionIds)))
+            : $this->filterToOwnPermissions($currentUser, $permissionIds);
 
         if ($role !== null) {
             $this->assertNoSelfLockout($currentUser, $role, $safePermissionIds);

@@ -142,4 +142,59 @@ class CustomerRepository extends QueryableRepository implements CustomerReposito
 
         return $user?->load(['userPhone', 'userGroup']);
     }
+
+    /**
+     * Duyệt khách theo lô để dựng danh sách người nhận của chiến dịch mail.
+     *
+     * `chunkById` chứ KHÔNG `get()`: "gửi cho tất cả khách" trên shop thật là
+     * vài chục nghìn dòng — nạp hết vào RAM rồi mới xử lý là cách bản mt219
+     * chết khi data lớn. Callback nhận từng lô [['email'=>..,'user_id'=>..]].
+     *
+     * Chỉ lấy khách CÒN SỐNG (không lấy soft-deleted) và có email — gửi
+     * marketing cho tài khoản đã xoá là chuyện không ai muốn giải thích.
+     *
+     * @param  callable(array<int, array{email: string, user_id: int}>): void  $callback
+     */
+    public function chunkRecipients(
+        bool $newsletterOnly,
+        ?int $userGroupId,
+        ?array $userIds,
+        callable $callback,
+        int $chunkSize = 500,
+    ): void {
+        $query = $this->resetModel()->newQuery()
+            ->where('type', self::TYPE_CUSTOMER)
+            ->whereNotNull('email')
+            ->where('email', '<>', '')
+            ->select(['id', 'email']);
+
+        if ($newsletterOnly) {
+            $query->where('newsletter', 1);
+        }
+        if ($userGroupId !== null) {
+            $query->where('user_group_id', $userGroupId);
+        }
+        if ($userIds !== null) {
+            $query->whereIn('id', $userIds ?: [0]);
+        }
+
+        $query->chunkById($chunkSize, function ($users) use ($callback) {
+            $callback(
+                $users->map(fn ($u) => ['email' => (string) $u->email, 'user_id' => (int) $u->id])->all(),
+            );
+        });
+    }
+
+    /**
+     * Tắt cờ nhận tin theo email (link huỷ đăng ký trong mail marketing).
+     * Trả về số dòng đổi — 0 nghĩa là email không thuộc khách nào, vẫn coi là
+     * thành công với người bấm (không tiết lộ email đó có tài khoản hay không).
+     */
+    public function optOutNewsletterByEmail(string $email): int
+    {
+        return $this->resetModel()->newQuery()
+            ->where('type', self::TYPE_CUSTOMER)
+            ->where('email', $email)
+            ->update(['newsletter' => 0]);
+    }
 }

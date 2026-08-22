@@ -79,6 +79,11 @@ return [
     'TextSubTotal' => 'Tạm tính',
     'TextFeeShipping' => 'Phí vận chuyển',
     'cms' => [
+        'mail' => [
+            'send_to_invalid' => 'Tập người nhận không hợp lệ.',
+            'file_required'   => 'Cần chọn file danh sách email.',
+            'file_unreadable' => 'Không đọc được file danh sách email.',
+        ],
         'gift' => [
             // gift_item bị order_gift tham chiếu (FK RESTRICT) — audit trail
             // đơn đã nhận quà, không cho xoá cứng.

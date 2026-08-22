@@ -35,4 +35,10 @@ return [
     'consult_sign' => [
         'subject_to_admin' => '%s - Bạn nhận được yêu cầu tư vấn khắc dấu',
     ],
+    'marketing' => [
+        'footer' => 'Bạn nhận được email này vì đã đăng ký nhận tin từ %s.',
+        'unsubscribe' => 'Huỷ nhận email quảng cáo',
+        'unsubscribed_title' => 'Đã huỷ nhận tin',
+        'unsubscribed_body' => 'Bạn sẽ không nhận email quảng cáo từ chúng tôi nữa. Email thông báo đơn hàng vẫn được gửi bình thường.',
+    ],
 ];

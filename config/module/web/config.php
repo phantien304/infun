@@ -51,6 +51,10 @@ return [
             'from' => 'phanvantien0204@gmail.com',
             'sender' => 'In&Fun Studio',
         ],
+        'marketing' => [
+            'from' => 'phanvantien0204@gmail.com',
+            'sender' => 'In&Fun Studio',
+        ],
     ],
     'product' => [
         'text_instock' => 'Còn hàng',

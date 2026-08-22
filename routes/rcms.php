@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Cms\FileController;
 use App\Http\Controllers\Api\Cms\InformationController;
 use App\Http\Controllers\Api\Cms\Marketing\CouponController;
 use App\Http\Controllers\Api\Cms\Marketing\GiftController;
+use App\Http\Controllers\Api\Cms\Marketing\MailCampaignController;
 use App\Http\Controllers\Api\Cms\Marketing\VoucherController;
 use App\Http\Controllers\Api\Cms\Marketing\VoucherRewardRuleController;
 use App\Http\Controllers\Api\Cms\Marketing\VoucherThemeController;
@@ -82,6 +83,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::cmsApiResource('voucher-theme', VoucherThemeController::class);
         Route::cmsApiResource('gift', GiftController::class);
         Route::cmsApiResource('voucher-reward-rule', VoucherRewardRuleController::class);
+        // Mail marketing: chiến dịch đã gửi là BIÊN BẢN — chỉ xem và tạo,
+        // không sửa/xoá, nên khai tay 3 route thay vì cmsApiResource.
+        Route::get('mail-campaign', [MailCampaignController::class, 'index']);
+        Route::post('mail-campaign', [MailCampaignController::class, 'store']);
+        Route::get('mail-campaign/{id}', [MailCampaignController::class, 'show']);
         Route::cmsApiResource('store-review', StoreReviewController::class);
         Route::cmsApiResource('review-criteria', ReviewCriteriaController::class);
         Route::cmsApiResource('review-tag', ReviewTagController::class);

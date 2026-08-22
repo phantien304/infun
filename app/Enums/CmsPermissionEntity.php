@@ -44,6 +44,7 @@ enum CmsPermissionEntity: string
     case VoucherTheme = 'voucher-theme';
     case Gift = 'gift';
     case VoucherRewardRule = 'voucher-reward-rule';
+    case MailCampaign = 'mail-campaign';
 
     public const ACTIONS = ['list', 'detail', 'create', 'edit', 'del'];
 

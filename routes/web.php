@@ -9,6 +9,12 @@ Route::post('/give-me-csrf', function () {
     return redirect()->route('home');
 });
 Route::post('file/upload', 'FileController@upload')->name('file.upload');
+// Huỷ nhận tin từ link trong mail marketing. Đặt NGOÀI group 'cache_page'
+// (đây là hành động ghi) và TRƯỚC catch-all '/{slug?}' ở cuối file — để sau
+// thì HomeController nuốt mất. `signed` chống sửa ?email= của người khác.
+Route::get('newsletter/unsubscribe', 'NewsletterController@unsubscribe')
+    ->name('newsletter.unsubscribe')
+    ->middleware(['maintenance', 'signed', 'throttle:60,1']);
 Route::get('l/{slug}', 'AffiliateRedirectController@show')
     ->name('affiliate.redirect')
     ->middleware(['maintenance', 'throttle:60,1'])

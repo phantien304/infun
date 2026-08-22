@@ -40,4 +40,21 @@ interface CustomerRepositoryInterface extends BaseRepositoryInterface
     public function restoreByIds(array $ids): int;
 
     public function restoreById(int $id): ?User;
+
+    /**
+     * Duyệt khách theo lô (chunkById) để dựng danh sách người nhận chiến dịch
+     * mail — không nạp toàn bộ vào RAM.
+     *
+     * @param  callable(array<int, array{email: string, user_id: int}>): void  $callback
+     */
+    public function chunkRecipients(
+        bool $newsletterOnly,
+        ?int $userGroupId,
+        ?array $userIds,
+        callable $callback,
+        int $chunkSize = 500,
+    ): void;
+
+    /** Tắt cờ nhận tin theo email (link huỷ đăng ký trong mail marketing). */
+    public function optOutNewsletterByEmail(string $email): int;
 }

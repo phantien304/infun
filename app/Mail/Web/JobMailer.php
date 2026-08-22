@@ -85,6 +85,25 @@ class JobMailer extends Base
         return $this->sendMail($from, $sender, $voucher->to_email, $subject, $content, $cc, $contentHtml);
     }
 
+    /**
+     * Mail marketing hàng loạt (CMS soạn nội dung bằng TinyMCE).
+     *
+     * `$messageHtml` là HTML do admin tự soạn — blade in ra bằng `{!! !!}`.
+     * Đây là chủ ý, không phải sơ suất: nếu escape thì admin gõ HTML ra HTML
+     * hiển thị dạng chữ. Ranh giới tin cậy nằm ở quyền `create-mail-campaign`,
+     * không phải ở tầng render.
+     */
+    public function marketing(string $email, string $subject, string $messageHtml, string $unsubscribeUrl)
+    {
+        $from = getModuleConfig('job_mailer.marketing.from');
+        $sender = getModuleConfig('job_mailer.marketing.sender');
+        $content = '';
+        $cc = [];
+        $contentHtml = view('web::mailer.marketing', compact('messageHtml', 'unsubscribeUrl'));
+
+        return $this->sendMail($from, $sender, $email, $subject, $content, $cc, $contentHtml);
+    }
+
     public function consultSignToCustomer()
     {
 

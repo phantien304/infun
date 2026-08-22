@@ -11,4 +11,11 @@ class Manufacturer extends Base
     protected $table = 'manufacturer';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'name',
+        'image',
+        'sort_order',
+        'meta_title',
+        'meta_description',
+    ];
 }

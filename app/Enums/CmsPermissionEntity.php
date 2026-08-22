@@ -10,6 +10,7 @@ enum CmsPermissionEntity: string
     case Filter = 'filter';
     case Attribute = 'attribute';
     case Option = 'option';
+    case Manufacturer = 'manufacturer';
     case Blog = 'blog';
     case BlogCategory = 'blog-category';
     case Menu = 'menu';

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Cms\BlogController;
 use App\Http\Controllers\Api\Cms\CarrierController;
 use App\Http\Controllers\Api\Cms\Catalog\AttributeController;
 use App\Http\Controllers\Api\Cms\Catalog\FilterController;
+use App\Http\Controllers\Api\Cms\Catalog\ManufacturerController;
 use App\Http\Controllers\Api\Cms\Catalog\OptionController;
 use App\Http\Controllers\Api\Cms\CategoryController;
 use App\Http\Controllers\Api\Cms\CustomerController;
@@ -45,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::cmsApiResource('filter', FilterController::class);
         Route::cmsApiResource('attribute', AttributeController::class);
         Route::cmsApiResource('option', OptionController::class);
+        Route::cmsApiResource('manufacturer', ManufacturerController::class);
         Route::cmsApiResource('banner', BannerController::class);
         Route::cmsApiResource('store-review', StoreReviewController::class);
         Route::post('product/bulk-update', [ProductController::class, 'bulkUpdate']);

@@ -15,6 +15,7 @@ enum CmsPermissionEntity: string
     case Effect = 'effect';
     case Safety = 'safety';
     case Skincare = 'skincare';
+    case Contact = 'contact';
     case Blog = 'blog';
     case BlogCategory = 'blog-category';
     case Menu = 'menu';

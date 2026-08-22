@@ -11,4 +11,14 @@ class Contact extends Base
     protected $table = 'contact';
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
+    protected $fillable = [
+        'name',
+        'email',
+        'company',
+        'phone',
+        'address',
+        'service',
+        'content',
+        'is_read',
+    ];
 }

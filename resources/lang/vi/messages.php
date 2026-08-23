@@ -79,6 +79,9 @@ return [
     'TextSubTotal' => 'Tạm tính',
     'TextFeeShipping' => 'Phí vận chuyển',
     'cms' => [
+        'affiliate' => [
+            'payout_not_pending' => 'Chỉ huỷ được kỳ đang chờ chi trả. Kỳ đã chuyển khoản thì không huỷ ở đây — tiền đã rời tài khoản, huỷ chỉ làm sổ sách nói dối.',
+        ],
         'mail' => [
             'send_to_invalid' => 'Tập người nhận không hợp lệ.',
             'file_required'   => 'Cần chọn file danh sách email.',

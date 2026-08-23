@@ -1,5 +1,10 @@
 <?php
 
+use App\Http\Controllers\Api\Cms\Affiliate\AffiliateCommissionRuleController;
+use App\Http\Controllers\Api\Cms\Affiliate\AffiliateController;
+use App\Http\Controllers\Api\Cms\Affiliate\AffiliateConversionController;
+use App\Http\Controllers\Api\Cms\Affiliate\AffiliatePayoutController;
+use App\Http\Controllers\Api\Cms\Affiliate\AffiliateReportController;
 use App\Http\Controllers\Api\Cms\AuthController;
 use App\Http\Controllers\Api\Cms\BannerController;
 use App\Http\Controllers\Api\Cms\BlogCategoryController;
@@ -88,6 +93,33 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('mail-campaign', [MailCampaignController::class, 'index']);
         Route::post('mail-campaign', [MailCampaignController::class, 'store']);
         Route::get('mail-campaign/{id}', [MailCampaignController::class, 'show']);
+
+        // ===== Affiliate (Phase 5 — docs/AFFILIATE-PLAN.md) =====
+        // KHÔNG cmsApiResource cho `affiliate`: hồ sơ chỉ sinh khi USER tự
+        // đăng ký ở /account/affiliate (UNIQUE user_id), và xoá KOL sẽ
+        // CASCADE mất cả sổ hoa hồng — nên không có store/destroy.
+        Route::get('affiliate', [AffiliateController::class, 'index']);
+        Route::get('affiliate/{id}', [AffiliateController::class, 'show']);
+        Route::put('affiliate/{affiliate}', [AffiliateController::class, 'update']);
+        Route::post('affiliate/{affiliate}/approve', [AffiliateController::class, 'approve']);
+        Route::post('affiliate/{affiliate}/suspend', [AffiliateController::class, 'suspend']);
+        Route::put('affiliate/{affiliate}/coupons', [AffiliateController::class, 'syncCoupons']);
+
+        // Đối soát hoa hồng — CHỈ ĐỌC (vòng đời do observer + chốt kỳ lái).
+        Route::get('affiliate-conversion', [AffiliateConversionController::class, 'index']);
+
+        // `preview`/`export` phải khai TRƯỚC `{id}`: Laravel match theo thứ
+        // tự đăng ký, để sau thì `{id}` nuốt mất chuỗi "preview".
+        Route::get('affiliate-payout/preview', [AffiliatePayoutController::class, 'preview']);
+        Route::get('affiliate-payout/export', [AffiliatePayoutController::class, 'export']);
+        Route::post('affiliate-payout/close-period', [AffiliatePayoutController::class, 'closePeriod']);
+        Route::get('affiliate-payout', [AffiliatePayoutController::class, 'index']);
+        Route::get('affiliate-payout/{id}', [AffiliatePayoutController::class, 'show']);
+        Route::post('affiliate-payout/{affiliatePayout}/paid', [AffiliatePayoutController::class, 'markPaid']);
+        Route::post('affiliate-payout/{affiliatePayout}/cancel', [AffiliatePayoutController::class, 'cancel']);
+
+        Route::apiResource('affiliate-commission-rule', AffiliateCommissionRuleController::class);
+        Route::get('affiliate-report/overview', [AffiliateReportController::class, 'overview']);
         Route::cmsApiResource('store-review', StoreReviewController::class);
         Route::cmsApiResource('review-criteria', ReviewCriteriaController::class);
         Route::cmsApiResource('review-tag', ReviewTagController::class);

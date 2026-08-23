@@ -27,6 +27,19 @@ class CmsPermission
         // Gửi/gửi lại mail voucher — coi như sửa dữ liệu voucher
         // (job đóng dấu `sent_at`), không phải hành động chỉ-đọc.
         'send'             => 'edit',
+        // Affiliate (Phase 5). Lưu ý: 'approve' áp cho MỌI controller có
+        // method tên đó — kể cả ProductController@approve, vốn trước đây
+        // KHÔNG được gate (thiếu entry trong MAP này). Đó là siết đúng chỗ:
+        // duyệt sản phẩm vẫn luôn là hành vi sửa dữ liệu.
+        'approve'          => 'edit',
+        'suspend'          => 'edit',
+        'syncCoupons'      => 'edit',
+        'preview'          => 'list',
+        'closePeriod'      => 'create',
+        'markPaid'         => 'edit',
+        'cancel'           => 'edit',
+        'export'           => 'list',
+        'overview'         => 'list',
     ];
 
     public function handle(Request $request, Closure $next)

@@ -45,6 +45,12 @@ enum CmsPermissionEntity: string
     case Gift = 'gift';
     case VoucherRewardRule = 'voucher-reward-rule';
     case MailCampaign = 'mail-campaign';
+    // Affiliate (Phase 5 — docs/AFFILIATE-PLAN.md)
+    case Affiliate = 'affiliate';
+    case AffiliateConversion = 'affiliate-conversion';
+    case AffiliatePayout = 'affiliate-payout';
+    case AffiliateCommissionRule = 'affiliate-commission-rule';
+    case AffiliateReport = 'affiliate-report';
 
     public const ACTIONS = ['list', 'detail', 'create', 'edit', 'del'];
 

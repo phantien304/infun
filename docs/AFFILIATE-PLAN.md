@@ -349,22 +349,71 @@ Migration `2026_07_10_000001_create_affiliate_tables.php`:
 - **i18n**: messages.affiliate.*, breadcrumbs.account_affiliate,
   seo.account.affiliate (+ bổ sung seo.account.rewards còn thiếu từ trước).
 
-### Phase 5 — SKIPPED (TODO, quyết định 2026-07-11)
+### Phase 5 — DONE 2026-08-22 (Admin CMS)
 
-Bỏ qua đợt này vì CMS React (infun_cms) chưa có order management. Việc cần
-làm khi quay lại:
+Bỏ dở từ 2026-07-11 vì CMS React chưa có order management; nay CMS đã đủ nền
+(REST /rcms + DTO + gate quyền) nên làm nốt.
 
-- [ ] CMS: duyệt/suspend affiliate, chỉnh commission_rate riêng, gán coupon
-      cho KOL (bảng affiliate_coupon), CRUD affiliate_commission_rule.
-- [ ] CMS: báo cáo top affiliate, conversion theo kỳ, đối soát click→order.
-- [ ] Payout: nút "chốt kỳ" — gom conversion APPROVED đã qua
-      `config_affiliate_hold_days` (tính từ approved_at), đạt
-      `config_affiliate_min_payout` → tạo affiliate_payout + set conversion
-      PAID (payout_id). Export CSV chuyển khoản.
-- [ ] Tạm thời có thể chạy artisan command chốt kỳ (chưa viết — cân nhắc
-      `affiliate:close-period {period?}` khi cần).
-- [ ] Admin hiện vẫn thao tác tay được qua DB: duyệt = set
-      affiliate.status=1 + approved_at.
+**Backend** (`app/Http/Controllers/Api/Cms/Affiliate/`):
+- `AffiliateController` — list (lọc keyword theo tên/email/code + status),
+  detail (kèm coupon + 100 link nhiều click nhất), update (CHỈ status /
+  commission_rate / payment_info), `approve` / `suspend`, `syncCoupons`.
+  KHÔNG store (hồ sơ chỉ sinh khi user tự đăng ký, UNIQUE user_id) và KHÔNG
+  destroy (CASCADE sẽ xoá cả sổ hoa hồng đã trả).
+- `AffiliateConversionController` — CHỈ ĐỌC. Lọc theo KOL/status/payout/
+  khoảng ngày, keyword tra theo order_id hoặc coupon_code.
+- `AffiliatePayoutController` — `preview` (xem trước, không ghi), `closePeriod`,
+  `markPaid`, `cancel`, `export` (CSV có BOM UTF-8 + tiền tố `'` cho số tài
+  khoản để Excel không đổi sang ký hiệu khoa học).
+- `AffiliateCommissionRuleController` — CRUD rate theo ngành hàng.
+- `AffiliateReportController@overview` — số KOL theo trạng thái, hoa hồng theo
+  trạng thái trong kỳ, top KOL (mặc định 30 ngày, cùng cửa sổ dashboard KOL).
+
+**Service** `AffiliatePayoutService`:
+- `preview()` / `closePeriod()` — gom conversion Approved, chưa có payout,
+  `approved_at <= now() - config_affiliate_hold_days`; KOL đạt
+  `config_affiliate_min_payout` mới tạo kỳ. Mỗi KOL một transaction riêng.
+- `payout.amount` đọc lại từ `sumCommissionForPayout()` SAU khi gắn, không
+  cộng dồn số ước lượng — giữa lúc chọn id và lúc UPDATE có thể có observer
+  reject đơn.
+- `attachPayout()` lặp lại điều kiện `status = Approved AND payout_id IS NULL`
+  trong câu UPDATE: chốt chặn ở DB, không phải ở PHP.
+- Kỳ đã Paid/Cancelled thì KHÔNG nhét thêm tiền (`period_locked`) — phần hoa
+  hồng đó để dành kỳ sau.
+- `cancelPayout()` chỉ huỷ được kỳ Pending; conversion quay lại Approved.
+
+**Repository mới**: `AffiliatePayoutRepository`, `AffiliateCommissionRuleRepository`.
+**Mở rộng**: `AffiliateRepository` (listForCms/getForCms/updateFromCms/
+syncCoupons/setStatus/findManyWithUser/countByStatus),
+`AffiliateConversionRepository` (listForCms/payableGroupedByAffiliate/
+payableIdsForAffiliate/attachPayout/revertPayout/sumCommissionForPayout/
+listForPayout/topAffiliates/summaryByStatus).
+
+**Command** `affiliate:close-period {period?} {--dry}` — cùng service với nút
+trong CMS (không viết lại logic ghi tiền lần hai). CỐ Ý không đưa vào
+Schedule: chốt kỳ là quyết định tài chính, phải có người xem trước rồi bấm.
+
+**Quyền**: 5 entity mới trong `CmsPermissionEntity` (affiliate,
+affiliate-conversion, affiliate-payout, affiliate-commission-rule,
+affiliate-report) + map action trong `CmsPermission::MAP` (approve/suspend/
+syncCoupons/preview/closePeriod/markPaid/cancel/export/overview).
+⚠️ `'approve' => 'edit'` áp cho MỌI controller có method tên đó — kể cả
+`ProductController@approve`, vốn trước đây KHÔNG được gate vì thiếu entry.
+Đó là siết đúng chỗ, nhưng role nào chỉ có `list-product` sẽ mất nút duyệt SP.
+
+**CMS React** (infuncms) — nhóm menu `affiliate` RIÊNG, ngang cấp Marketing:
+`pages/affiliate` (list + detail), `pages/affiliateConversion`,
+`pages/affiliatePayout` (list có modal xem trước + detail), 
+`pages/affiliateCommissionRule` (list + form), `pages/affiliateReport`.
+CSV tải bằng axios `responseType: 'blob'` chứ không `window.open` — endpoint
+nằm sau cookie phiên Sanctum cross-subdomain.
+
+Settings 6 key `config_affiliate_*` đã có sẵn tab "Reward & Affiliate" trong
+`pages/setting/detail.jsx` từ trước, không phải làm lại.
+
+Còn để ngỏ (chưa cần cho vận hành đợt đầu):
+- [ ] Đối soát click→order ở mức từng click (hiện chỉ có tổng click/KOL).
+- [ ] Tích hợp chi hộ ZaloPay (payment_info đã chứa sẵn zalopay_phone).
 
 ### Phase 6 — DONE 2026-07-11 (anti-fraud + tests; làm trước Phase 5)
 
@@ -466,4 +515,4 @@ Test bổ sung:
    SoftDeletes (global scope) và update qua model query tự touch
    updated_at. Đã bổ sung + assertion round-trip DB cho payment_info.
 
-### Còn lại: Phase 5 (TODO ở trên).
+### Trạng thái: Phase 1-6 DONE. Xem mục "còn để ngỏ" ở Phase 5.

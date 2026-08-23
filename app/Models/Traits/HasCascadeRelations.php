@@ -146,9 +146,26 @@ trait HasCascadeRelations
         foreach ($fkMap as $col => $values) {
             $query->whereIn($col, (array) $values);
         }
+        /**
+         * BUG đã fix (2026-08): `array_merge_recursive($result, (array)$row->
+         * getAttributes())` chỉ "gói" giá trị trùng cột thành mảng khi CÓ va
+         * chạm key giữa 2 lần merge — với ĐÚNG 1 dòng con khớp (vd carrier
+         * chỉ có 1 CarrierOrderStatus, mà CarrierOrderStatus lại có tiếp
+         * $destroyRelations riêng nên đi vào nhánh resolveChildIds() này),
+         * $result nhận nguyên giá trị SCALAR (vd ['id' => 30]) thay vì mảng
+         * (['id' => [30]]) → array_map('array_unique', $result) ném
+         * TypeError "must be of type array, int given" ngay khi soft-delete
+         * — chặn đứng việc xoá Carrier có con (đã tái hiện thật lúc build
+         * tính năng Carrier CRUD). Sửa bằng cách gom giá trị từng cột vào
+         * mảng TƯỜNG MINH thay vì dựa vào hành vi ẩn của array_merge_recursive
+         * — cùng shape trả về [col => [values...]] như code cũ ở trường hợp
+         * ≥2 dòng (không đổi hành vi cho các model khác đang dùng trait này).
+         */
         $result = [];
-        $query->select($selectCols)->get()->map(function ($row) use (&$result) {
-            $result = array_merge_recursive($result, (array)$row->getAttributes());
+        $query->select($selectCols)->get()->each(function ($row) use (&$result) {
+            foreach ($row->getAttributes() as $col => $value) {
+                $result[$col][] = $value;
+            }
         });
 
         return array_map('array_unique', $result);

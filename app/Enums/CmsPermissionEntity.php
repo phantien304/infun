@@ -26,6 +26,7 @@ enum CmsPermissionEntity: string
     case Order = 'order';
     case OrderStatus = 'order-status';
     case Carrier = 'carrier';
+    case CarrierOrderStatus = 'carrier-order-status';
     case Payment = 'payment';
     case Zone = 'zone';
     case District = 'district';

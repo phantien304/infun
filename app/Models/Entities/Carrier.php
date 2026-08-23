@@ -14,6 +14,12 @@ class Carrier extends Base
     public $incrementing = true;
     public $timestamps = true;
     protected static array $destroyRelations = ['carrierOrderStatus'];
+    protected $fillable = [
+        'code',
+        'name',
+        'image',
+        'sort_order',
+    ];
 
     public function carrierOrderStatus()
     {

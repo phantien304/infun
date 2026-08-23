@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Cms\BannerController;
 use App\Http\Controllers\Api\Cms\BlogCategoryController;
 use App\Http\Controllers\Api\Cms\BlogController;
 use App\Http\Controllers\Api\Cms\CarrierController;
+use App\Http\Controllers\Api\Cms\CarrierOrderStatusController;
 use App\Http\Controllers\Api\Cms\Catalog\AttributeController;
 use App\Http\Controllers\Api\Cms\Catalog\EffectController;
 use App\Http\Controllers\Api\Cms\Catalog\FilterController;
@@ -155,7 +156,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::cmsApiResource('information', InformationController::class);
         Route::post('order/preview-total', [OrderController::class, 'previewTotal']);
         Route::cmsApiResource('order-status', OrderStatusController::class);
-        Route::get('carrier', [CarrierController::class, 'index']);
+        Route::cmsApiResource('carrier', CarrierController::class);
+        Route::cmsApiResource('carrier-order-status', CarrierOrderStatusController::class);
         Route::get('payment', [PaymentController::class, 'index']);
         Route::get('zone', [ZoneController::class, 'index']);
         Route::get('district', [DistrictController::class, 'index']);

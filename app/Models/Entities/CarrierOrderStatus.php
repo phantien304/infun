@@ -12,6 +12,11 @@ class CarrierOrderStatus extends Base
     protected $primaryKeyAutoIncrement = 'id';
     public $timestamps = true;
     protected static array $destroyRelations = ['ordersStatusCarrierOrders'];
+    protected $fillable = [
+        'carrier_id',
+        'code',
+        'name',
+    ];
 
     public function description()
     {

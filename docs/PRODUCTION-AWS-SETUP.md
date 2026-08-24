@@ -33,13 +33,13 @@ Dev  ──push──►  GitHub (economer)  ──CI──►  build image  ─
 
 | Thành phần | Giá trị |
 |---|---|
-| EC2 Public IP | `13.229.118.236` (đổi khi stop/start — nên gán Elastic IP nếu cần cố định) |
-| EC2 Tailscale IP | `100.84.143.32` (dùng cho CI SSH — **không** đổi) |
-| EC2 OS / type | Ubuntu 24.04 LTS / t3.small / 30GB gp3 |
+| EC2 Public IP | đổi khi stop/start hoặc rebuild — nên gán Elastic IP nếu cần cố định |
+| EC2 Tailscale IP | xem `tailscale ip -4` trên máy, hoặc secret `PROD_HOST` — **đổi mỗi lần rebuild EC2**, xem §9 |
+| EC2 OS / type | Ubuntu 24.04+ LTS / t3.small / 30GB gp3 |
 | EC2 user / app dir | `ubuntu` / `/srv/infun` |
-| RDS (MariaDB 10.11) | `infun-prod-mariadb.c1emwwgs467b.ap-southeast-1.rds.amazonaws.com:3306` |
+| RDS (MariaDB 10.11) | xem `.env` trên EC2 (`DB_HOST`) — đổi mỗi lần tạo lại RDS |
 | RDS db / user | `infun` / `admin` |
-| ElastiCache Valkey | `infun-prod-redis.carsnc.ng.0001.apse1.cache.amazonaws.com:6379` |
+| ElastiCache Valkey | xem `.env` trên EC2 (`REDIS_HOST`) — đổi mỗi lần tạo lại cache. **Phải là node-based, xem §4** |
 | Domain | `tienpv.shop` (Cloudflare Tunnel, HTTPS) |
 | Registry | `ghcr.io/phantien304/infun-app`, `ghcr.io/phantien304/infun-web` |
 | Staging (nguồn data) | Tailscale `100.99.170.2`, user `an-my`, container `infun-mysql-staging` |
@@ -109,15 +109,33 @@ tailscale ip -4            # -> 100.84.143.32 (dùng làm PROD_HOST cho CI)
 
 ## 4. ElastiCache Valkey (Redis-compatible)
 
+> ⚠️ **BẮT BUỘC chọn đúng loại — bài học từ lần rebuild 2026-08-24/25.**
+> `docker-compose.production.yml` chỉ khai báo `REDIS_HOST`/`REDIS_PORT` trần,
+> **không** có chỗ cho TLS hay tách nhiều DB. Nó chỉ tương thích với
+> **ElastiCache node-based, Cluster mode Disabled, Encryption in transit tắt**.
+>
+> **KHÔNG chọn "Serverless"** dù Console hay đưa lên làm lựa chọn nổi bật/mặc
+> định — Serverless **bắt buộc TLS** (không tắt được) và **chỉ có 1 database**
+> (không `SELECT` được), trong khi app tách connection `cache` (DB 1) khỏi
+> `default`/session/queue (DB 0). Dùng nhầm Serverless sẽ khiến
+> `php artisan optimize:clear` treo vô thời hạn ở bước `cache` lúc container
+> boot — không lỗi, không log, rất khó đoán ra nguyên nhân nếu không biết
+> trước điều này. Xem thêm Phụ lục.
+
 1. EC2 → Security Groups → Create `infun-redis-sg`, inbound **Custom TCP 6379** source = SG của EC2 (`infun-prod-sg`).
-2. ElastiCache → **Create Valkey cache** → Design your own cache, **Cluster mode: Disabled**.
-3. Name `infun-prod-redis`, node `cache.t3.micro`, **replicas 0**, Multi-AZ off.
-4. Subnet group thuộc Default VPC; Security group **`infun-redis-sg`**; **Encryption in transit: Disabled** (nối gọn trong VPC).
-5. Lấy **Primary endpoint** (bỏ `:6379`) → `REDIS_HOST`. Test:
-   ```bash
-   sudo apt-get install -y redis-tools
-   redis-cli -h infun-prod-redis.carsnc.ng.0001.apse1.cache.amazonaws.com -p 6379 ping   # PONG
-   ```
+2. ElastiCache → **Create cache** → Engine **Valkey** → Deployment option **Node-based cluster** → Creation method **Cluster cache** (KHÔNG chọn "Easy create" — nó có thể tự ép bật Encryption in transit, không cho tắt).
+3. Configuration preset: **Demo** (`cache.t4g.micro`) hoặc tương đương nhỏ — **không** để mặc định "Production" (`cache.r8g.xlarge`, quá lớn/tốn kém cho quy mô này).
+4. **Cluster mode: Disabled.**
+5. Parameter group: chọn bản **không có hậu tố `.cluster.on`** — Console đôi khi giữ nguyên parameter group của Cluster mode Enabled dù đã đổi lựa chọn ở bước trên, phải tự kiểm tra lại.
+6. Name `infun-prod-redis`, node nhỏ (`cache.t3.micro`/`cache.t4g.micro`), **replicas 0**, **Multi-AZ tắt**.
+7. VPC ID: phải khớp đúng VPC của EC2.
+8. Advanced settings → Security → **Encryption in transit: bỏ tick Enable** (đây là bước hay bị bỏ sót nhất).
+9. Selected security groups: gán `infun-redis-sg` — **kiểm tra Inbound rules của chính SG đó có ít nhất 1 rule thật** (Custom TCP 6379, Source = SG của EC2) trước khi tin. SG do tính năng "Set up compute connection" tự tạo cho một resource khác **có thể có 0 Permission entries**, gán nhầm sẽ không có tác dụng gì dù trông như đã cấu hình xong.
+10. Lấy **Primary endpoint** (bỏ `:6379`) → `REDIS_HOST`. Test:
+    ```bash
+    sudo apt-get install -y redis-tools
+    redis-cli -h <primary-endpoint> -p 6379 ping   # PONG
+    ```
 
 ---
 
@@ -252,14 +270,20 @@ Lấy IP: `curl -s ifconfig.me`. Đổi xong: `docker compose -f docker-compose.
 **Thiết lập một lần:**
 
 1. **Environment `production` (cổng duyệt):** repo → Settings → Environments → New `production` → bật **Required reviewers** (thêm bạn). Cả 2 job trong `deploy-production.yml` gắn `environment: production` nên sẽ **treo chờ Approve**.
-2. **Key SSH cho CI** (trên EC2):
-   ```bash
-   ssh-keygen -t ed25519 -f ~/ci_deploy_key -N "" -C "gh-actions-prod"
-   cat ~/ci_deploy_key.pub >> ~/.ssh/authorized_keys
-   cat ~/ci_deploy_key     # -> secret PROD_SSH_KEY
-   ```
-3. **Secrets** (Settings → Secrets and variables → Actions): `PROD_HOST=100.84.143.32`, `PROD_SSH_USER=ubuntu`, `PROD_SSH_KEY=<private key>`. (`TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` dùng lại từ staging.)
+
+2. **Xác thực SSH của CI qua Tailscale ACL (không dùng SSH key riêng).** Workflow kết nối tailnet với `tags: tag:ci` (bước "Connect to Tailscale"), sau đó SSH thẳng vào EC2 — **không** có bước tạo/dùng key `.pem` nào nữa. Cần cấu hình **1 lần trên Tailscale admin console** (`https://login.tailscale.com/admin`):
+
+   a. **Settings → Tags** → Create tag → tên `tag:prod-ec2`, owner `autogroup:admin`.
+
+   b. Gán tag này cho EC2 production: **Machines** → chọn máy → **Machine settings → Tags** → thêm `tag:prod-ec2`.
+
+   c. **Policies → Tailscale SSH → Add rule**: Sources `tag:ci`, destinations `tag:prod-ec2`, as user `ubuntu`. Giữ nguyên rule mặc định `autogroup:member → autogroup:self` (vẫn cần để tự SSH vào máy của mình bình thường), chỉ thêm rule mới song song.
+
+   > ⚠️ **Tag không tự mang sang khi rebuild EC2.** Mỗi lần tạo lại EC2 (máy mới, node mới trong tailnet), phải lặp lại bước (b) — gán lại `tag:prod-ec2` cho máy mới. Thiếu bước này, CI sẽ báo lỗi `tailscale: tailnet policy does not permit you to SSH to this node` dù mọi thứ khác đều đúng — xem Phụ lục.
+
+3. **Secrets** (Settings → Secrets and variables → Actions): `PROD_HOST` = Tailscale IP của EC2 (`tailscale ip -4`), `PROD_SSH_USER=ubuntu`. **Không cần `PROD_SSH_KEY`** nữa. (`TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` dùng lại từ staging.)
 4. `deploy-production.yml` phải nằm ở **nhánh mặc định** của repo (workflow release/manual chạy theo default branch).
+5. Khi EC2 đổi Tailscale IP (rebuild máy), nhớ cập nhật secret `PROD_HOST` — cả `infun` **và** `infuncms` nếu 2 repo cùng deploy lên máy này, cùng cần lặp lại bước 2(b) ở trên cho tailnet (chỉ cần làm 1 lần, dùng chung cho cả 2 repo vì cùng SSH vào 1 EC2).
 
 **Quy trình phát hành:**
 
@@ -310,3 +334,9 @@ PRE_DEPLOY_HOOK="aws rds create-db-snapshot --db-instance-identifier infun-prod-
 | `tunnel route dns`: *record ... already exists* | Đã có A/CNAME cho `tienpv.shop` | Xóa record cũ ở Cloudflare DNS rồi chạy lại |
 | Cloudflare không proxy được `:8100` | CF chỉ proxy origin ở 80/443/… (không có 8100) | Dùng **Cloudflare Tunnel** (đã áp dụng) |
 | RDS create lỗi *backup retention exceeds free tier* | Free plan giới hạn retention | Đặt retention **1 day** hoặc tắt automated backup |
+| `ssh: connect ... port 22: Connection timed out` dù key đúng | Security Group chưa có rule nào (kiểm tra Inbound rules thường thấy "No rules to display") — AWS âm thầm drop gói tin, không phải lỗi key/IP | Thêm rule SSH (22) Source = My IP, tạm thời trong lúc setup |
+| `php artisan optimize:clear`/`cache:clear` treo vô thời hạn, không lỗi, không log | ElastiCache đang là **Serverless** (bắt buộc TLS) trong khi app kết nối trần | Đổi sang ElastiCache **node-based, Cluster mode Disabled, No TLS** — xem §4. Không tự vá TLS/DB trong compose, dễ lệch khỏi thiết kế gốc |
+| `RedisException: read error ... at Redis->select(1)` | ElastiCache Serverless chỉ có 1 database, không `SELECT` được, trong khi connection `cache` dùng `REDIS_CACHE_DB=1` | Cùng hướng xử lý §4 — chuyển hẳn sang node-based, không patch DB index |
+| Gán Security Group cho ElastiCache mà vẫn không kết nối được, dù trông "đã cấu hình" | SG đó do tính năng "Set up compute connection" tự tạo cho resource khác — vào thẳng SG sẽ thấy **"Inbound rules count: 0 Permission entries"** | Tạo Security Group thủ công, thêm rule thật (Custom TCP 6379, Source = SG của EC2), gán SG đó thay vì SG tự sinh |
+| CI báo `tailscale: tailnet policy does not permit you to SSH to this node`, cả `infun` lẫn `infuncms` cùng lỗi | EC2 mới (rebuild) chưa có tag mà rule ACL SSH yêu cầu | Gán lại `tag:prod-ec2` cho EC2 mới + xác nhận rule `tag:ci → tag:prod-ec2` còn tồn tại — xem §9 mục 2 |
+| Deploy xong nhưng code không phải bản mới nhất trên `main` | `infuncms` (SPA, build theo build-arg) chỉ build lại production khi có **GitHub Release** mới — push `main` không tự trigger | Vào Releases → Draft new release → tag mới → Publish, rồi Approve ở cổng duyệt |

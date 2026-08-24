@@ -75,19 +75,17 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.PROD_HOST }}" >> ~/.ssh/known_hosts
-
+      # Xác thực qua danh tính Tailscale (tag:ci), KHÔNG dùng SSH key riêng nữa —
+      # xem Policies -> Tailscale SSH: rule "tag:ci -> tag:prod-ec2 as ubuntu".
+      # StrictHostKeyChecking tắt vì lớp tin cậy đã nằm ở tailnet (WireGuard +
+      # ACL), không phải ở known_hosts của client.
       # Đẩy script qua stdin và chạy trên máy prod: `bash -s -- <ref> <tag>`.
       # <ref> = tag/commit để đồng bộ mã nguồn (compose/scripts); <tag> = tag image
       # sẽ deploy (production). Tránh nhồi logic + escape phức tạp vào chuỗi SSH.
       - name: Deploy to production EC2
         run: |
           REF="${{ github.event.release.tag_name || needs.promote.outputs.sha }}"
-          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -i ~/.ssh/id_ed25519 \
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_HOST }}" \
             'bash -s' -- "$REF" "production" < deploy/prod-deploy.sh

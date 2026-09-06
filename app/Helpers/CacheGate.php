@@ -18,7 +18,11 @@ class CacheGate
             return null;
         }
         if ((int) setting('config_redis_cache') === 1) {
-            return Cache::store('redis')->tags([self::GLOBAL_TAG]);
+            try {
+                return Cache::store('redis')->tags([self::GLOBAL_TAG]);
+            } catch (\Throwable $e) {
+                logError('CacheGate::store redis: ' . $e->getMessage());
+            }
         }
         if ((int) setting('config_cache_file') === 1) {
             return Cache::store('file');
@@ -33,7 +37,11 @@ class CacheGate
             return null;
         }
         if ((int) setting('config_redis_cache') === 1) {
-            return Cache::store('redis')->tags([self::GLOBAL_TAG, self::PAGE_TAG]);
+            try {
+                return Cache::store('redis')->tags([self::GLOBAL_TAG, self::PAGE_TAG]);
+            } catch (\Throwable $e) {
+                logError('CacheGate::pageStore redis: ' . $e->getMessage());
+            }
         }
         if ((int) setting('config_cache_file') === 1) {
             return Cache::store('file');
@@ -88,7 +96,11 @@ class CacheGate
     public static function systemStore(): Repository
     {
         if ((int) setting('config_redis_cache') === 1) {
-            return Cache::store('redis')->tags([self::GLOBAL_TAG]);
+            try {
+                return Cache::store('redis')->tags([self::GLOBAL_TAG]);
+            } catch (\Throwable $e) {
+                logError('CacheGate::systemStore redis: ' . $e->getMessage());
+            }
         }
         if ((int) setting('config_cache_file') === 1) {
             return Cache::store('file');

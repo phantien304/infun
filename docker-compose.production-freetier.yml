@@ -11,10 +11,17 @@
 #     được cho POC vài chục request đồng thời.
 #   - pm.max_children=4 (docker/php/www.freetier.conf) — www.pool.conf gốc
 #     (60 children) sẽ OOM ngay lập tức trên 1GB RAM tổng cả máy.
-#   - Vẫn giữ Meilisearch + tách 2 Redis (session/queue vs cache) — đúng kiến
-#     trúc production, chỉ scale nhỏ lại. MEILI_MAX_INDEXING_MEMORY cap thấp
-#     vì index nhỏ (20k sản phẩm ≈ 1/25 kích thước 500k thật, xem tính toán
-#     trong buổi làm việc — không cần nhiều RAM cho Meilisearch ở scale này).
+#   - KHÔNG có Redis (2026-09) — demo/POC show khách, không cần chịu tải cao,
+#     nên bỏ hẳn 2 container Redis (session+queue / cache) để tiết kiệm RAM
+#     trên máy 1GB. Cache/session/queue chuyển hết sang file/database qua
+#     app/Helpers/CacheGate.php (đã hỗ trợ sẵn, xem CMS Cấu hình > Cài đặt
+#     chung > Server: "File Cache"=Yes, "Redis Cache"=No). Vẫn giữ
+#     Meilisearch — MEILI_MAX_INDEXING_MEMORY cap thấp vì index nhỏ (20k sản
+#     phẩm ≈ 1/25 kích thước 500k thật, xem tính toán trong buổi làm việc —
+#     không cần nhiều RAM cho Meilisearch ở scale này). Muốn bật lại Redis
+#     (chịu tải cao hơn) thì thêm lại 2 service redis/redis-cache như bản cũ
+#     (xem git history) + đổi SESSION_DRIVER/QUEUE_CONNECTION/CACHE_STORE về
+#     `redis` + bật "Redis Cache"=Yes trong CMS.
 #   - Chỉ 1 queue worker lắng nghe CẢ 2 tên queue (default,admin) — không có
 #     pool admin riêng nên không cần queue admin riêng, nhưng vẫn nghe queue
 #     `admin` phòng khi code dispatch ->onQueue('admin') thì job không bị kẹt
@@ -35,6 +42,10 @@
 #     sh -c "php artisan products:purge && php artisan products:seed 20000 && \
 #            php artisan variants:seed --percent=30 && \
 #            php artisan products:scout-import"
+#   # Nếu DB restore từ dump cũ có setting config_redis_cache=1: đổi thành 0
+#   # (và config_cache_file=1) qua CMS Cấu hình > Cài đặt chung — dùng UI,
+#   # KHÔNG update thẳng bảng `setting` bằng SQL (bỏ lỡ SettingObserver tự
+#   # clear config cache + CacheGate::flushAll() khi save).
 # ═══════════════════════════════════════════════════════════════════════════
 
 x-app-env: &app-env
@@ -61,16 +72,11 @@ x-app-env: &app-env
   # hay không. Xem config/database.php.
   DB_MAX_STATEMENT_TIME_SEC: "${FREETIER_DB_MAX_STATEMENT_TIME_SEC:-30}"
 
-  # ── 2 Redis riêng container (session+queue / cache) — xem service bên dưới ─
-  REDIS_CLIENT: phpredis
-  REDIS_HOST: redis
-  REDIS_PORT: "6379"
-  SESSION_DRIVER: redis
-  QUEUE_CONNECTION: redis
-  CACHE_STORE: redis
-  REDIS_CACHE_CONNECTION: cache
-  REDIS_CACHE_HOST: redis-cache
-  REDIS_CACHE_PORT: "6379"
+  # ── Không dùng Redis (xem ghi chú đầu file) — session/queue/cache đều nằm
+  # trên RDS MySQL sẵn có + đĩa local container, khỏi cần thêm service nào.
+  SESSION_DRIVER: file
+  QUEUE_CONNECTION: database
+  CACHE_STORE: file
 
   SCOUT_DRIVER: meilisearch
   MEILISEARCH_HOST: http://meilisearch:7700
@@ -103,8 +109,6 @@ services:
       # FPM_POOL_PROFILE khớp tên file (xem docker/php/entrypoint.staging.sh).
       - ./docker/php/www.freetier.conf:/usr/local/etc/php-fpm.d/available/www.freetier.conf:ro
     depends_on:
-      redis: { condition: service_healthy }
-      redis-cache: { condition: service_healthy }
       meilisearch: { condition: service_healthy }
     networks: [infun-freetier-net]
 
@@ -131,12 +135,11 @@ services:
   infun-queue:
     image: infun-app:freetier
     restart: unless-stopped
-    command: php artisan queue:work redis --queue=default,admin --sleep=2 --tries=3 --timeout=90 --max-time=3600
+    command: php artisan queue:work database --queue=default,admin --sleep=2 --tries=3 --timeout=90 --max-time=3600
     environment:
       <<: *app-env
     depends_on:
       infun-php: { condition: service_started }
-      redis: { condition: service_healthy }
     networks: [infun-freetier-net]
 
   # ── Scheduler — CHỈ 1 instance (schedule:work không được chạy 2 bản) ──────
@@ -149,47 +152,6 @@ services:
       <<: *app-env
     depends_on:
       infun-php: { condition: service_started }
-      redis: { condition: service_healthy }
-    networks: [infun-freetier-net]
-
-  # ── Redis #1 — session + queue (noeviction, mất job/session là mất thật) ──
-  redis:
-    image: redis:7-alpine
-    container_name: infun-redis-freetier
-    restart: unless-stopped
-    command:
-      - redis-server
-      - --maxmemory
-      - "64mb"
-      - --maxmemory-policy
-      - "noeviction"
-    volumes:
-      - freetier_redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-    networks: [infun-freetier-net]
-
-  # ── Redis #2 — cache thuần (allkeys-lru, mất là tính toán lại được) ───────
-  redis-cache:
-    image: redis:7-alpine
-    container_name: infun-redis-cache-freetier
-    restart: unless-stopped
-    command:
-      - redis-server
-      - --maxmemory
-      - "64mb"
-      - --maxmemory-policy
-      - "allkeys-lru"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
     networks: [infun-freetier-net]
 
   # ── Meilisearch — giữ lại (không bỏ như đề xuất ban đầu), cap RAM thấp vì
@@ -216,7 +178,6 @@ services:
 
 volumes:
   freetier_logs:
-  freetier_redis_data:
   freetier_meili_data:
 
 networks:

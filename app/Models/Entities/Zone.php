@@ -23,6 +23,11 @@ class Zone extends Base
         return $this->hasOne(ZoneDescription::class, 'zone_id', 'id')->forLocale();
     }
 
+    public function descriptions()
+    {
+        return $this->hasMany(ZoneDescription::class, 'zone_id', 'id');
+    }
+
     public function districts()
     {
         return $this->hasMany(District::class, 'zone_id', 'id');

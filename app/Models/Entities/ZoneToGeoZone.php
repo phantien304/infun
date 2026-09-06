@@ -12,7 +12,7 @@ class ZoneToGeoZone extends Base
 
     public function geoZone()
     {
-        return $this->belongsTo(ZoneToGeoZone::class, 'geo_zone_id', 'id');
+        return $this->belongsTo(GeoZone::class, 'geo_zone_id', 'id');
     }
 
     public function country()

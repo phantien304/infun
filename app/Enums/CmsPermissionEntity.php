@@ -52,6 +52,18 @@ enum CmsPermissionEntity: string
     case AffiliatePayout = 'affiliate-payout';
     case AffiliateCommissionRule = 'affiliate-commission-rule';
     case AffiliateReport = 'affiliate-report';
+    // Tài nguyên (2026-09) — các entity bị sót khi build (không chạy
+    // `permission:sync --check` lúc đó), bổ sung lại cho khớp registry.
+    case BlogTag = 'blog-tag';
+    case Country = 'country';
+    case Currency = 'currency';
+    case Language = 'language';
+    case LengthClass = 'length-class';
+    case StockStatus = 'stock-status';
+    case WeightClass = 'weight-class';
+    case TaxClass = 'tax-class';
+    case TaxRate = 'tax-rate';
+    case GeoZone = 'geo-zone';
 
     public const ACTIONS = ['list', 'detail', 'create', 'edit', 'del'];
 

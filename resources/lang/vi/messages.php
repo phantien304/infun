@@ -484,6 +484,12 @@ return [
             'discount' => 'Tiết kiệm'
         ]
     ],
+    'language' => [
+        'cannot_delete_last' => 'Không thể xoá — hệ thống cần ít nhất 1 ngôn ngữ.',
+    ],
+    'currency' => [
+        'cannot_delete_last' => 'Không thể xoá — hệ thống cần ít nhất 1 loại tiền tệ.',
+    ],
     'auth' => [
         'common' => [
             'back_login' => 'Quay lại đăng nhập',

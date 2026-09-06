@@ -169,6 +169,7 @@ return [
         'languages' => 'languages_',
         'length_classes' => 'length_classes',
         'weight_classes' => 'weight_classes',
+        'countries' => 'countries_',
         'warehouses' => 'warehouses',
         'review' => [
             'tag_root'         => 'review_root',

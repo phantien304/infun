@@ -521,7 +521,7 @@ return [
     'AddSafety' => 'Thêm safety',
     'EditSafety' => 'Sửa safety',
     'Effect' => 'Effect',
-    'EffectList' => 'Danh sách safety',
+    'EffectList' => 'Danh sách effect',
     'AddEffect' => 'Thêm effect',
     'EditEffect' => 'Sửa effect',
     'SendTo' => 'To',
